@@ -6,7 +6,7 @@ import Image from 'next/image'
 import { createClient } from '@/utils/supabase/client'
 
 const LockIcon = () => (
-  <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+  <svg className="w-4.5 h-4.5 cursor-pointer" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
   </svg>
 )
@@ -16,6 +16,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [rememberMe, setRememberMe] = useState(false)
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const supabase = createClient()
@@ -53,7 +54,7 @@ export default function LoginPage() {
             className="object-cover"
           />
           <div className="absolute inset-0 bg-black/25" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-black/20" />
+          <div className="absolute inset-0 bg-linear-to-t from-black/75 via-black/10 to-black/20" />
 
           {/* Top-left badge */}
           <div className="absolute top-6 left-6 flex items-center gap-2 bg-white/95 rounded-full pl-1.5 pr-4 py-1.5">
@@ -76,24 +77,24 @@ export default function LoginPage() {
 
         {/* Right — form */}
         <div className="w-full lg:w-1/2 flex items-center justify-center bg-white px-8 sm:px-16">
-          <div className="w-full max-w-[360px]">
+          <div className="w-full max-w-90">
 
-            <h1 className="text-[26px] font-bold text-black tracking-tight mb-1.5">
-              Welcome back
+            <h1 className="text-[39px] font-extrabold uppercase text-black leading-tight mb-1.5 text-center">
+              Welcome Back
             </h1>
-            <p className="text-[14px] text-gray-500 mb-9">
-              Sign in to manage your branch.
+            <p className="text-[14px] text-gray-500 mb-8 text-center">
+              Please enter your details to manage your branch.
             </p>
 
             <form onSubmit={handleLogin} className="flex flex-col gap-5">
 
               <div>
-                <label className="text-[13px] font-medium text-gray-600 mb-1.5 block">
-                  Your Email
+                <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
+                  Email
                 </label>
                 <input
                   type="email"
-                  placeholder="you@risingdragon.com"
+                  placeholder="Enter your email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -102,22 +103,13 @@ export default function LoginPage() {
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-[13px] font-medium text-gray-600">
-                    Password
-                  </label>
-                  <button
-                    type="button"
-                    title="Coming soon"
-                    className="text-[12px] font-medium text-gray-400 cursor-not-allowed"
-                  >
-                    Forgot password?
-                  </button>
-                </div>
+                <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
+                  Password
+                </label>
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="••••••••••••"
+                    placeholder="Enter your password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
@@ -133,6 +125,25 @@ export default function LoginPage() {
                 </div>
               </div>
 
+              <div className="flex items-center justify-between -mt-1">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 accent-red-600 cursor-pointer"
+                  />
+                  <span className="text-[13px] text-gray-600">Remember me</span>
+                </label>
+                <button
+                  type="button"
+                  title="Coming soon"
+                  className="text-[13px] font-medium text-gray-400 cursor-not-allowed"
+                >
+                  Forgot password?
+                </button>
+              </div>
+
               {error && (
                 <p className="text-[13px] text-red-600 flex items-center gap-1.5 -mt-1">
                   <span className="w-1 h-1 rounded-full bg-red-600 shrink-0" />
@@ -143,7 +154,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="mt-2 h-11 w-full bg-black hover:bg-red-600 disabled:opacity-60 text-white text-[14px] font-semibold rounded-lg transition-colors duration-150 cursor-pointer"
+                className="mt-1 h-11 w-full bg-black hover:bg-red-600 disabled:opacity-60 text-white text-[14px] font-semibold rounded-lg transition-colors duration-150 cursor-pointer"
               >
                 {loading ? 'Signing in…' : 'Log In'}
               </button>

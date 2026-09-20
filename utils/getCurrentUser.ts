@@ -1,0 +1,21 @@
+import { createClient } from '@/utils/supabase/server'
+import { cookies } from 'next/headers'
+
+export async function getCurrentUser() {
+  const cookieStore = await cookies()
+  const supabase = await createClient(cookieStore)
+
+  const { data: { user: authUser } } = await supabase.auth.getUser()
+
+  if (!authUser) {
+    return null
+  }
+
+  const { data: profile } = await supabase
+    .from('User')
+    .select('id, name, role, home_branch_id')
+    .eq('auth_id', authUser.id)
+    .single()
+
+  return profile
+}
