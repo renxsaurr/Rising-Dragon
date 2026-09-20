@@ -83,7 +83,7 @@ export default function LoginPage() {
               Welcome Back
             </h1>
             <p className="text-[14px] text-gray-500 mb-8 text-center">
-              Please enter your details to manage your branch.
+              Please enter your details to manage your.
             </p>
 
             <form onSubmit={handleLogin} className="flex flex-col gap-5">

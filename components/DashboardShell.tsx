@@ -85,7 +85,7 @@ export default function DashboardShell({
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
-    router.push('/login')
+    router.push('/')
   }
 
   // Generate initials for the avatar
