@@ -1,17 +1,12 @@
-import { createClient } from '@/utils/supabase/server'
-import { cookies } from 'next/headers'
+import {redirect} from 'next/navigation'
+import {getCurrentUser} from '@/utils/getCurrentUser'
 
-export default async function Page() {
-  const cookieStore = await cookies()
-  const supabase = createClient(cookieStore)
+export default async function RootPage() {
+  const currentUser = await getCurrentUser()
 
-  const { data: todos } = await supabase.from('todos').select()
-
-  return (
-    <ul>
-      {todos?.map((todo) => (
-        <li key={todo.id}>{todo.name}</li>
-      ))}
-    </ul>
-  )
+  if (currentUser) {
+      redirect('/students')
+  } else {
+    redirect('/login')
+  }
 }
