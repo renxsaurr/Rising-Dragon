@@ -14,7 +14,10 @@ export default function AddStudentModal({ branches }: { branches: Branch[] }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const [name, setName] = useState('')
+  const [firstName, setFirstName] = useState('')
+  const [middleName, setMiddleName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [guardianName, setGuardianName] = useState('')
   const [guardianContact, setGuardianContact] = useState('')
   const [beltLevel, setBeltLevel] = useState('')
   const [enrollmentDate, setEnrollmentDate] = useState('')
@@ -24,7 +27,10 @@ export default function AddStudentModal({ branches }: { branches: Branch[] }) {
   const supabase = createClient()
 
   const resetForm = () => {
-    setName('')
+    setFirstName('')
+    setMiddleName('')
+    setLastName('')
+    setGuardianName('')
     setGuardianContact('')
     setBeltLevel('')
     setEnrollmentDate('')
@@ -38,7 +44,10 @@ export default function AddStudentModal({ branches }: { branches: Branch[] }) {
     setLoading(true)
 
     const { error } = await supabase.from('Student').insert({
-      name,
+      first_name: firstName,
+      middle_name: middleName,
+      last_name: lastName,
+      guardian_name: guardianName,
       guardian_contact: guardianContact,
       belt_level: beltLevel,
       enrollment_date: enrollmentDate,
@@ -86,18 +95,62 @@ export default function AddStudentModal({ branches }: { branches: Branch[] }) {
 
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
 
-              <div>
+            <div className="grid grid-cols-2 gap-4">
+                <div>
                 <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
-                  Full Name
+                  First Name
                 </label>
                 <input
                   type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
                   required
                   className="w-full h-11 px-4 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all"
                 />
               </div>
+
+              <div>
+                <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
+                  Middle Name
+                </label>
+                <input
+                  type="text"
+                  value={middleName}
+                  onChange={(e) => setMiddleName(e.target.value)}
+                  required
+                  className="w-full h-11 px-4 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all"
+                />
+              </div>
+              
+              <div>
+                <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
+                  Last Name
+                </label>
+                <input
+                  type="text"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  required
+                  className="w-full h-11 px-4 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
+                  Guardian Name
+                </label>
+                <input
+                  type="text"
+                  value={guardianName}
+                  onChange={(e) => setGuardianName(e.target.value)}
+                  required
+                  className="w-full h-11 px-4 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all"
+                />
+              </div>
+
+              
+            </div>
+              
 
               <div>
                 <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
