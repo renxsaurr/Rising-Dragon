@@ -9,6 +9,26 @@ type Branch = {
   name: string
 }
 
+const BELT_LEVELS = [
+  'Practitioner',
+  'White Belt',
+  'Low Yellow',
+  'High Yellow',
+  'Low Blue',
+  'High Blue',
+  'Low Red',
+  'High Red',
+  'Low Brown',
+  'High Brown',
+  '1st Done Black Belt',
+  '2nd Done Black Belt',
+  '3rd Done Black Belt',
+  '4th Done Black Belt',
+]
+
+const formatBeltLabel = (belt: string) =>
+  belt.split('_').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ')
+
 export default function AddStudentModal({ branches }: { branches: Branch[] }) {
   const [isOpen, setIsOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -45,7 +65,7 @@ export default function AddStudentModal({ branches }: { branches: Branch[] }) {
 
     const { error } = await supabase.from('Student').insert({
       first_name: firstName,
-      middle_name: middleName,
+      middle_name: middleName || null,
       last_name: lastName,
       guardian_name: guardianName,
       guardian_contact: guardianContact,
@@ -77,7 +97,7 @@ export default function AddStudentModal({ branches }: { branches: Branch[] }) {
 
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div className="bg-white rounded-2xl w-full max-w-md p-7 relative">
+          <div className="bg-white rounded-2xl w-full max-w-lg p-7 relative max-h-[90vh] overflow-y-auto">
 
             <button
               onClick={() => {
@@ -95,74 +115,70 @@ export default function AddStudentModal({ branches }: { branches: Branch[] }) {
 
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
 
-            <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
-                  First Name
-                </label>
-                <input
-                  type="text"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  required
-                  className="w-full h-11 px-4 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all"
-                />
+                  <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
+                    First Name
+                  </label>
+                  <input
+                    type="text"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    required
+                    className="w-full h-11 px-3 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
+                    Middle Name
+                  </label>
+                  <input
+                    type="text"
+                    value={middleName}
+                    onChange={(e) => setMiddleName(e.target.value)}
+                    placeholder="Optional"
+                    className="w-full h-11 px-3 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
+                    Last Name
+                  </label>
+                  <input
+                    type="text"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    required
+                    className="w-full h-11 px-3 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
-                  Middle Name
-                </label>
-                <input
-                  type="text"
-                  value={middleName}
-                  onChange={(e) => setMiddleName(e.target.value)}
-                  required
-                  className="w-full h-11 px-4 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all"
-                />
-              </div>
-              
-              <div>
-                <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
-                  Last Name
-                </label>
-                <input
-                  type="text"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  required
-                  className="w-full h-11 px-4 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
-                  Guardian Name
-                </label>
-                <input
-                  type="text"
-                  value={guardianName}
-                  onChange={(e) => setGuardianName(e.target.value)}
-                  required
-                  className="w-full h-11 px-4 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all"
-                />
-              </div>
-
-              
-            </div>
-              
-
-              <div>
-                <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
-                  Guardian Contact
-                </label>
-                <input
-                  type="text"
-                  value={guardianContact}
-                  onChange={(e) => setGuardianContact(e.target.value)}
-                  required
-                  className="w-full h-11 px-4 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
+                    Guardian Name
+                  </label>
+                  <input
+                    type="text"
+                    value={guardianName}
+                    onChange={(e) => setGuardianName(e.target.value)}
+                    required
+                    className="w-full h-11 px-4 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
+                    Guardian Contact
+                  </label>
+                  <input
+                    type="text"
+                    value={guardianContact}
+                    onChange={(e) => setGuardianContact(e.target.value)}
+                    required
+                    className="w-full h-11 px-4 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -170,14 +186,17 @@ export default function AddStudentModal({ branches }: { branches: Branch[] }) {
                   <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
                     Belt Level
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={beltLevel}
                     onChange={(e) => setBeltLevel(e.target.value)}
-                    placeholder="e.g. Yellow Belt"
                     required
-                    className="w-full h-11 px-4 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all"
-                  />
+                    className="w-full h-11 px-4 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all bg-white"
+                  >
+                    <option value="" disabled>Select belt</option>
+                    {BELT_LEVELS.map((belt) => (
+                      <option key={belt} value={belt}>{formatBeltLabel(belt)}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
@@ -205,9 +224,7 @@ export default function AddStudentModal({ branches }: { branches: Branch[] }) {
                 >
                   <option value="" disabled>Select a branch</option>
                   {branches.map((branch) => (
-                    <option key={branch.id} value={branch.id}>
-                      {branch.name}
-                    </option>
+                    <option key={branch.id} value={branch.id}>{branch.name}</option>
                   ))}
                 </select>
               </div>

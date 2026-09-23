@@ -101,13 +101,14 @@ export default function DashboardShell({
   return (
     <div className="min-h-screen w-full flex bg-gray-50/50">
       {/* ==================== SIDEBAR ==================== */}
-      <aside className="w-[260px] bg-white border-r border-gray-200 flex flex-col shrink-0">
-        {/* Brand */}
-        <div className="h-20 flex items-center gap-3.5 px-6 border-b border-gray-100">
-          <div className="relative w-10 h-10 shrink-0 rounded-xl border border-gray-100 bg-white p-1.5 shadow-sm">
+      <aside className="w-65 bg-[#1a1a1a] border-r border-gray-800 flex flex-col shrink-0">
+        
+        {/* Brand - Removed the bottom border here */}
+        <div className="h-20 flex items-center gap-3.5 px-6">
+          <div className="relative w-10 h-10 shrink-0 rounded-xl bg-white p-1.5 shadow-sm">
             <Image src="/logo.png" alt="Rising Dragon" fill className="object-contain" />
           </div>
-          <span className="text-[17px] font-bold text-gray-900 tracking-tight">
+          <span className="text-[17px] font-bold text-white tracking-tight">
             Rising Dragon
           </span>
         </div>
@@ -121,13 +122,18 @@ export default function DashboardShell({
               <Link
                 key={item.href}
                 href={item.href}
-                className={`group flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
+                className={`relative group flex items-center gap-3 pl-6 pr-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
                   isActive
                     ? 'bg-red-600 text-white shadow-[0_4px_14px_rgba(220,38,38,0.25)]'
-                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                    : 'text-gray-400 hover:bg-gray-800 hover:text-white'
                 }`}
               >
-                <span className={isActive ? 'text-white' : 'text-gray-400 group-hover:text-gray-600'}>
+                {/* White vertical bar inside the active button */}
+                {isActive && (
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-1 bg-white rounded-full" />
+                )}
+                
+                <span className={isActive ? 'text-white' : 'text-gray-400 group-hover:text-gray-200'}>
                   <Icon />
                 </span>
                 <span>{item.label}</span>
@@ -136,21 +142,21 @@ export default function DashboardShell({
           })}
         </nav>
 
-        {/* Logout (Moved to the very bottom since user profile is gone) */}
-        <div className="px-4 pb-6 pt-2 border-t border-gray-100">
+        {/* Logout Section - Border already removed previously */}
+        <div className="px-4 pb-6 pt-2">
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-900 transition-colors w-full"
+            className="flex items-center justify-center gap-3 px-4 py-3 rounded-xl text-sm font-medium bg-[#2a2a2a] text-white hover:bg-[#3a3a3a] transition-colors w-full"
           >
             <LogoutIcon />
-            <span>Log out</span>
+            <span>Logout</span>
           </button>
         </div>
       </aside>
 
       {/* ==================== MAIN ==================== */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Header - Now contains the User Profile on the right */}
+        {/* Header */}
         <header className="h-20 bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
           <div>
             <h1 className="text-xl font-bold text-gray-900 tracking-tight">{title}</h1>
