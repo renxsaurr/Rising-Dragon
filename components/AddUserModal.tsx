@@ -53,8 +53,7 @@ export default function AddUserModal() {
     <>
       <button
         onClick={() => setIsOpen(true)}
-        className="inline-flex items-center gap-2 bg-violet-500 hover:bg-violet-600 text-white text-[14px] font-semibold px-5 py-2.5 rounded-xl transition-colors"
-      >
+              className="inline-flex items-center gap-2 bg-black hover:bg-gray-800 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors"      >
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <circle cx="12" cy="12" r="9" strokeWidth={1.75} />
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 8v8M8 12h8" />
