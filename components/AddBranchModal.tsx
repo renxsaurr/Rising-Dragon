@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
+import { uploadBranchPhoto } from '@/utils/uploadBranchPhoto'
 
 export default function AddBranchModal() {
   const [isOpen, setIsOpen] = useState(false)
@@ -10,16 +11,45 @@ export default function AddBranchModal() {
   const [error, setError] = useState('')
   const [name, setName] = useState('')
   const [address, setAddress] = useState('')
+  const [description, setDescription] = useState('')
+
+  // -- photo upload state --
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
 
   const router = useRouter()
   const supabase = createClient()
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setPhotoFile(file)
+    setPhotoPreview(URL.createObjectURL(file))
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setLoading(true)
 
-    const { error } = await supabase.from('Branch').insert({ name, address })
+    // -- upload photo first if one was picked --
+    let photoUrl: string | null = null
+    if (photoFile) {
+      try {
+        photoUrl = await uploadBranchPhoto(photoFile)
+      } catch (uploadErr: any) {
+        setLoading(false)
+        setError('Photo upload failed: ' + uploadErr.message)
+        return
+      }
+    }
+
+    const { error } = await supabase.from('Branch').insert({
+      name,
+      address,
+      description: description || null,
+      photo_url: photoUrl,
+    })
 
     setLoading(false)
 
@@ -30,6 +60,9 @@ export default function AddBranchModal() {
 
     setName('')
     setAddress('')
+    setDescription('')
+    setPhotoFile(null)
+    setPhotoPreview(null)
     setIsOpen(false)
     router.refresh()
   }
@@ -45,7 +78,7 @@ export default function AddBranchModal() {
 
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div className="bg-white rounded-2xl w-full max-w-md p-7 relative">
+          <div className="bg-white rounded-2xl w-full max-w-md p-7 relative max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setIsOpen(false)}
               className="absolute top-5 right-5 text-gray-400 hover:text-black text-xl leading-none"
@@ -83,6 +116,42 @@ export default function AddBranchModal() {
                   className="w-full h-11 px-4 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all"
                 />
               </div>
+
+              <div>
+                <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
+                  Description <span className="text-gray-400">(optional)</span>
+                </label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={3}
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all resize-none"
+                  placeholder="A short note about this branch..."
+                />
+              </div>
+
+              {/* --- photo upload field --- */}
+              <div>
+                <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
+                  Photo <span className="text-gray-400">(optional)</span>
+                </label>
+
+                {photoPreview && (
+                  <img
+                    src={photoPreview}
+                    alt="Preview"
+                    className="w-full h-32 object-cover rounded-lg mb-2 border border-gray-200"
+                  />
+                )}
+
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoChange}
+                  className="w-full text-[13px] text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-[13px] file:font-semibold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200"
+                />
+              </div>
+              {/* --- end photo upload field --- */}
 
               {error && (
                 <p className="text-[13px] text-red-600 flex items-center gap-1.5">

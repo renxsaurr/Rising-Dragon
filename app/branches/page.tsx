@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import DashboardShell from '@/components/DashboardShell'
 import AddBranchModal from '@/components/AddBranchModal'
+import BranchesView from '@/components/BranchesView'
 import { getCurrentUser } from '@/utils/getCurrentUser'
 
 export default async function BranchesPage() {
@@ -17,6 +18,7 @@ export default async function BranchesPage() {
   const { data: branches, error } = await supabase
     .from('Branch')
     .select('*')
+    .order('name')
 
   if (error) {
     return (
@@ -25,6 +27,23 @@ export default async function BranchesPage() {
       </DashboardShell>
     )
   }
+
+  const branchesWithStats = await Promise.all(
+    (branches ?? []).map(async (branch) => {
+      const { count: studentCount } = await supabase
+        .from('Student')
+        .select('*', { count: 'exact', head: true })
+        .eq('branch_id', branch.id)
+
+      const { count: todayClasses } = await supabase
+        .from('ClassSchedule')
+        .select('*', { count: 'exact', head: true })
+        .eq('branch_id', branch.id)
+        .eq('date', new Date().toISOString().split('T')[0])
+
+      return { ...branch, studentCount: studentCount ?? 0, todayClasses: todayClasses ?? 0 }
+    })
+  )
 
   return (
     <DashboardShell title="Branches" currentUser={currentUser}>
@@ -38,31 +57,7 @@ export default async function BranchesPage() {
         <AddBranchModal />
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-        <table className="w-full text-left">
-          <thead>
-            <tr className="border-b border-gray-100 bg-gray-50">
-              <th className="px-5 py-3 text-[12px] font-semibold text-gray-500 uppercase tracking-wide">Name</th>
-              <th className="px-5 py-3 text-[12px] font-semibold text-gray-500 uppercase tracking-wide">Address</th>
-            </tr>
-          </thead>
-          <tbody>
-            {branches?.length === 0 && (
-              <tr>
-                <td colSpan={2} className="px-5 py-10 text-center text-[14px] text-gray-400">
-                  No branches yet.
-                </td>
-              </tr>
-            )}
-            {branches?.map((branch) => (
-              <tr key={branch.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
-                <td className="px-5 py-3.5 text-[14px] font-medium text-black">{branch.name}</td>
-                <td className="px-5 py-3.5 text-[14px] text-gray-600">{branch.address}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <BranchesView branches={branchesWithStats} />
     </DashboardShell>
   )
 }
