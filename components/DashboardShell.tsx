@@ -6,7 +6,6 @@ import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 
-// ---------- Icons (consistent 20px, 1.75 stroke) ----------
 const GridIcon = () => (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 0h6v6h-6v-6z" />
@@ -28,15 +27,32 @@ const CalendarIcon = () => (
     <path strokeLinecap="round" strokeWidth={1.75} d="M3 10h18M8 3v4M16 3v4" />
   </svg>
 )
+const BuildingIcon = () => (
+  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M3 21h18M6 21V7l6-4 6 4v14M9 9h1m4 0h1m-6 4h1m4 0h1m-6 4h1m4 0h1" />
+  </svg>
+)
 const CreditCardIcon = () => (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <rect x="2" y="5" width="20" height="14" rx="2" strokeWidth={1.75} />
     <path strokeLinecap="round" strokeWidth={1.75} d="M2 10h20" />
   </svg>
 )
-const BuildingIcon = () => (
+const AwardIcon = () => (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M3 21h18M6 21V7l6-4 6 4v14M9 9h1m4 0h1m-6 4h1m4 0h1m-6 4h1m4 0h1" />
+    <circle cx="12" cy="8" r="6" strokeWidth={1.75} />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M8.5 13.5L6 22l6-3 6 3-2.5-8.5" />
+  </svg>
+)
+const BellIcon = () => (
+  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+  </svg>
+)
+const SettingsIcon = () => (
+  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <circle cx="12" cy="12" r="3" strokeWidth={1.75} />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
   </svg>
 )
 const LogoutIcon = () => (
@@ -51,13 +67,6 @@ type CurrentUser = {
   role: string
   home_branch_id: number | null
 } | null
-
-type NavItem = {
-  label: string
-  href: string
-  icon: () => ReactNode
-  show: boolean
-}
 
 export default function DashboardShell({
   title,
@@ -74,125 +83,130 @@ export default function DashboardShell({
 
   const isHeadCoach = currentUser?.role === 'head_coach'
 
-  const navItems: NavItem[] = [
-    { label: 'Dashboard', href: '/dashboard', icon: GridIcon, show: true },
-    { label: 'Students', href: '/students', icon: UsersIcon, show: true },
-    { label: 'Attendance', href: '/attendance', icon: CheckSquareIcon, show: true },
-    { label: 'Schedule', href: '/scheduling', icon: CalendarIcon, show: true },
-    { label: 'Payments', href: '/payments', icon: CreditCardIcon, show: true },
-    { label: 'Branches', href: '/branches', icon: BuildingIcon, show: isHeadCoach },
+  const workspaceItems = [
+    { label: 'Students', href: '/students', icon: UsersIcon, show: true, soon: false },
+    { label: 'Attendance', href: '/attendance', icon: CheckSquareIcon, show: true, soon: false },
+    { label: 'Schedule', href: '/scheduling', icon: CalendarIcon, show: true, soon: false },
+    { label: 'Branches', href: '/branches', icon: BuildingIcon, show: isHeadCoach, soon: false },
+  ]
+
+  const reportItems = [
+    { label: 'Payments', href: '/payments', icon: CreditCardIcon, show: true, soon: false },
+    { label: 'Promotions', href: '/promotions', icon: AwardIcon, show: true, soon: true },
+  ]
+
+  const systemItems = [
+    { label: 'Notifications', href: '/notifications', icon: BellIcon, show: true, soon: true },
+    { label: 'Settings', href: '/settings', icon: SettingsIcon, show: true, soon: true },
   ]
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
-    router.push('/')
+    router.push('/login')
   }
 
-  // Generate initials for the avatar
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2)
+  const renderItem = (item: { label: string; href: string; icon: () => React.ReactElement; soon: boolean }) => {
+    const isActive = pathname === item.href
+    const Icon = item.icon
+
+    if (item.soon) {
+      return (
+        <div
+          key={item.href}
+          title="Coming soon"
+          className="flex items-center justify-between px-3.5 py-2.5 rounded-lg text-[14px] font-medium text-gray-600 cursor-not-allowed"
+        >
+          <div className="flex items-center gap-3">
+            <Icon />
+            {item.label}
+          </div>
+          <span className="text-[10px] font-semibold text-gray-500 bg-white/5 px-2 py-0.5 rounded-full">
+            Soon
+          </span>
+        </div>
+      )
+    }
+
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        className={`flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-[14px] font-medium transition-colors ${
+          isActive
+            ? 'bg-red-600 text-white'
+            : 'text-gray-400 hover:bg-white/5 hover:text-white'
+        }`}
+      >
+        <Icon />
+        {item.label}
+      </Link>
+    )
   }
 
   return (
-    <div className="min-h-screen w-full flex bg-gray-50/50">
-      {/* ==================== SIDEBAR ==================== */}
-      <aside className="w-65 bg-[#1a1a1a] border-r border-gray-800 flex flex-col shrink-0">
-        
-        {/* Brand - Removed the bottom border here */}
-        <div className="h-20 flex items-center gap-3.5 px-6">
-          <div className="relative w-10 h-10 shrink-0 rounded-xl bg-white p-1.5 shadow-sm">
-            <Image src="/logo.png" alt="Rising Dragon" fill className="object-contain" />
+    <div className="min-h-screen w-full flex bg-gray-50">
+      <aside className="w-64 bg-black flex flex-col shrink-0">
+        <div className="flex items-center gap-2.5 px-6 py-6">
+          <div className="relative w-8 h-8 shrink-0">
+            <Image src="/logo.png" alt="" fill className="object-contain" />
           </div>
-          <span className="text-[17px] font-bold text-white tracking-tight">
-            Rising Dragon
-          </span>
+          <span className="text-white text-[14px] font-semibold">Rising Dragon</span>
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 px-4 py-6 flex flex-col gap-1 overflow-y-auto">
-          {navItems.filter((item) => item.show).map((item) => {
-            const isActive = pathname === item.href
-            const Icon = item.icon
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`relative group flex items-center gap-3 pl-6 pr-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
-                  isActive
-                    ? 'bg-red-600 text-white shadow-[0_4px_14px_rgba(220,38,38,0.25)]'
-                    : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-                }`}
-              >
-                {/* White vertical bar inside the active button */}
-                {isActive && (
-                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-1 bg-white rounded-full" />
-                )}
-                
-                <span className={isActive ? 'text-white' : 'text-gray-400 group-hover:text-gray-200'}>
-                  <Icon />
-                </span>
-                <span>{item.label}</span>
-              </Link>
-            )
-          })}
+        <nav className="flex-1 px-3 mt-2 flex flex-col gap-1 overflow-y-auto">
+          <Link
+            href="/dashboard"
+            className={`flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-[14px] font-medium transition-colors ${
+              pathname === '/dashboard'
+                ? 'bg-red-600 text-white'
+                : 'text-gray-400 hover:bg-white/5 hover:text-white'
+            }`}
+          >
+            <GridIcon />
+            Dashboard
+          </Link>
+
+          <p className="text-[10px] font-bold text-gray-600 uppercase tracking-wider px-3.5 mt-5 mb-1">
+            Workspace
+          </p>
+          {workspaceItems.filter((item) => item.show).map(renderItem)}
+
+          <p className="text-[10px] font-bold text-gray-600 uppercase tracking-wider px-3.5 mt-5 mb-1">
+            Reports
+          </p>
+          {reportItems.filter((item) => item.show).map(renderItem)}
+
+          <p className="text-[10px] font-bold text-gray-600 uppercase tracking-wider px-3.5 mt-5 mb-1">
+            System
+          </p>
+          {systemItems.filter((item) => item.show).map(renderItem)}
         </nav>
 
-        {/* Logout Section - Border already removed previously */}
-        <div className="px-4 pb-6 pt-2">
+        {currentUser && (
+          <div className="px-4 py-3 mx-3 mb-2 bg-white/5 rounded-lg">
+            <p className="text-[13px] font-medium text-white truncate">{currentUser.name}</p>
+            <p className="text-[11px] text-gray-400 uppercase tracking-wide mt-0.5">
+              {isHeadCoach ? 'Head Coach' : 'Assistant Coach'}
+            </p>
+          </div>
+        )}
+
+        <div className="p-3 border-t border-white/10">
           <button
             onClick={handleLogout}
-            className="flex items-center justify-center gap-3 px-4 py-3 rounded-xl text-sm font-medium bg-[#2a2a2a] text-white hover:bg-[#3a3a3a] transition-colors w-full"
+            className="flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-[14px] font-medium text-gray-400 hover:bg-white/5 hover:text-white transition-colors w-full"
           >
             <LogoutIcon />
-            <span>Logout</span>
+            Log out
           </button>
         </div>
       </aside>
 
-      {/* ==================== MAIN ==================== */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
-        <header className="h-20 bg-white border-b border-gray-200 flex items-center justify-between px-8 shrink-0">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900 tracking-tight">{title}</h1>
-            <p className="text-[12px] text-gray-400 mt-0.5">
-              {new Date().toLocaleDateString('en-US', {
-                weekday: 'long',
-                month: 'long',
-                day: 'numeric',
-              })}
-            </p>
-          </div>
-
-          {/* User Profile */}
-          {currentUser && (
-            <div className="flex items-center gap-3 pl-6 border-l border-gray-200">
-              <div className="hidden sm:block text-right">
-                <p className="text-[13.5px] font-semibold text-gray-900 leading-tight">
-                  {currentUser.name}
-                </p>
-                <p className="text-[11px] text-gray-500 uppercase tracking-wider mt-0.5">
-                  {isHeadCoach ? 'Head Coach' : 'Assistant Coach'}
-                </p>
-              </div>
-              <div className="w-10 h-10 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-600 text-[14px] font-semibold shrink-0">
-                {getInitials(currentUser.name)}
-              </div>
-            </div>
-          )}
+        <header className="h-16 bg-white border-b border-gray-100 flex items-center justify-between px-8 shrink-0">
+          <h1 className="text-[18px] font-semibold text-black">{title}</h1>
         </header>
-
-        {/* Content */}
-        <main className="flex-1 p-8 overflow-auto bg-gray-50/50">
-          <div className="max-w-6xl mx-auto">
-            {children}
-          </div>
-        </main>
+        <main className="flex-1 p-8 overflow-auto">{children}</main>
       </div>
     </div>
   )
