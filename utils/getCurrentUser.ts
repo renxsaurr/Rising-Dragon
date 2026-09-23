@@ -1,7 +1,12 @@
 import { createClient } from '@/utils/supabase/server'
+import { hasSupabaseConfig } from '@/utils/supabase/config'
 import { cookies } from 'next/headers'
 
 export async function getCurrentUser() {
+  if (!hasSupabaseConfig) {
+    return null
+  }
+
   const cookieStore = await cookies()
   const supabase = await createClient(cookieStore)
 

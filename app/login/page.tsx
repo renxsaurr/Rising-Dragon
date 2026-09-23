@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { createClient } from '@/utils/supabase/client'
+import { hasSupabaseConfig } from '@/utils/supabase/config'
 
 const LockIcon = () => (
   <svg className="w-4.5 h-4.5 cursor-pointer" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -19,11 +20,17 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false)
   const [loading, setLoading] = useState(false)
   const router = useRouter()
-  const supabase = createClient()
+  const supabase = hasSupabaseConfig ? createClient() : null
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+
+    if (!supabase) {
+      setError('Supabase is not configured. Add the required environment variables to .env.local.')
+      return
+    }
+
     setLoading(true)
 
     const { error } = await supabase.auth.signInWithPassword({
