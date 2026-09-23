@@ -2,48 +2,85 @@ import { createClient } from '@/utils/supabase/server'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import DashboardShell from '@/components/DashboardShell'
-import WeeklyScheduleBoard from '@/components/WeeklyScheduleBoard'
+import ScheduleBoard from '@/components/ScheduleBoard'
 import { getCurrentUser } from '@/utils/getCurrentUser'
 import type { Schedule } from '@/components/WeeklyScheduleBoard'
 
-// helper — get Monday of the current week as YYYY-MM-DD
-function getWeekDates() {
-  const today = new Date()
-  const day = today.getDay() // 0 = Sunday
-  const diffToMonday = day === 0 ? -6 : 1 - day
-  const monday = new Date(today)
-  monday.setDate(today.getDate() + diffToMonday)
+// local-safe date formatter — avoids the UTC-shift bug from toISOString()
+function toDateISO(d: Date) {
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
 
-  const week = []
+// Monday-start week containing baseDate
+function getWeekDates(baseDate: Date) {
+  const day = baseDate.getDay()
+  const diffToMonday = day === 0 ? -6 : 1 - day
+  const monday = new Date(baseDate)
+  monday.setDate(baseDate.getDate() + diffToMonday)
+
+  const week: string[] = []
   for (let i = 0; i < 7; i++) {
     const d = new Date(monday)
     d.setDate(monday.getDate() + i)
-    week.push(d.toISOString().split('T')[0]) // "2026-09-21" format
+    week.push(toDateISO(d))
   }
   return week
 }
 
-export default async function SchedulingPage() {
+// Full 6-row month grid (Sun–Sat) including leading/trailing days from adjacent months
+function getMonthDates(baseDate: Date) {
+  const year = baseDate.getFullYear()
+  const month = baseDate.getMonth()
+  const firstOfMonth = new Date(year, month, 1)
+  const lastOfMonth = new Date(year, month + 1, 0)
+
+  const startDay = firstOfMonth.getDay()
+  const gridStart = new Date(firstOfMonth)
+  gridStart.setDate(firstOfMonth.getDate() - startDay)
+
+  const endDay = lastOfMonth.getDay()
+  const gridEnd = new Date(lastOfMonth)
+  gridEnd.setDate(lastOfMonth.getDate() + (6 - endDay))
+
+  const dates: string[] = []
+  const cursor = new Date(gridStart)
+  while (cursor <= gridEnd) {
+    dates.push(toDateISO(cursor))
+    cursor.setDate(cursor.getDate() + 1)
+  }
+  return dates
+}
+
+export default async function SchedulingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string; view?: string }>
+}) {
   const cookieStore = await cookies()
   const supabase = await createClient(cookieStore)
   const currentUser = await getCurrentUser()
 
   if (!currentUser) redirect('/login')
 
-  const weekDates = getWeekDates()
+  const { date, view: viewParam } = await searchParams
+  const view: 'week' | 'month' = viewParam === 'month' ? 'month' : 'week'
+  const baseDate = date ? new Date(date + 'T00:00:00') : new Date()
 
-  // fetch branches (for the "add schedule" dropdown)
+  const weekDates = getWeekDates(baseDate)
+  const monthDates = getMonthDates(baseDate)
+  const rangeDates = view === 'month' ? monthDates : weekDates
+
   const { data: branches } = await supabase.from('Branch').select('id, name').order('name')
-
-  // fetch coaches — everyone in User table can be assigned a class
   const { data: coaches } = await supabase.from('User').select('id, name, role').order('name')
 
-  // fetch this week's schedule, joined with branch + coach names
   const { data: schedules, error } = await supabase
     .from('ClassSchedule')
     .select('id, date, time_start, time_end, branch_id, coach_id, Branch(name), User(name)')
-    .gte('date', weekDates[0])
-    .lte('date', weekDates[6])
+    .gte('date', rangeDates[0])
+    .lte('date', rangeDates[rangeDates.length - 1])
     .order('date')
     .order('time_start')
 
@@ -57,8 +94,11 @@ export default async function SchedulingPage() {
 
   return (
     <DashboardShell title="Schedule" currentUser={currentUser}>
-      <WeeklyScheduleBoard
+      <ScheduleBoard
+        view={view}
         weekDates={weekDates}
+        monthDates={monthDates}
+        baseDateISO={toDateISO(baseDate)}
         initialSchedules={(schedules ?? []) as unknown as Schedule[]}
         branches={branches ?? []}
         coaches={coaches ?? []}

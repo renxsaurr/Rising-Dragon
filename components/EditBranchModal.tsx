@@ -217,12 +217,20 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
                   </div>
                 )}
 
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handlePhotoChange}
-                  className="w-full text-[13px] text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-[13px] file:font-semibold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200"
-                />
+                                <label className="flex items-center gap-3 w-full h-11 px-4 border border-gray-200 rounded-lg cursor-pointer hover:border-gray-300 transition-colors">
+                  <span className="bg-black text-white text-[12px] font-semibold px-3 py-1.5 rounded-md shrink-0">
+                    Choose File
+                  </span>
+                  <span className="text-[13px] text-gray-500 truncate">
+                    {photoFile ? photoFile.name : 'No file chosen'}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoChange}
+                    className="hidden"
+                  />
+                </label>
               </div>
               {/* --- end photo field --- */}
 
@@ -242,40 +250,58 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
               </button>
             </form>
 
-            {/* --- delete branch section --- */}
+                         {/* --- delete button (opens confirm popup) --- */}
             <div className="mt-6 pt-5 border-t border-gray-100">
-              {!confirmDelete ? (
-                <button
-                  onClick={() => setConfirmDelete(true)}
-                  className="text-[13px] text-red-600 hover:text-red-700 font-medium"
-                >
-                  Delete this branch
-                </button>
-              ) : (
-                <div className="bg-red-50 border border-red-100 rounded-lg p-4">
-                  <p className="text-[13px] text-red-700 mb-3">
-                    Are you sure? This can't be undone.
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="h-9 px-4 bg-white border border-red-200 text-red-600 hover:bg-red-50 rounded-lg text-[13px] font-semibold transition-colors"
+              >
+                Delete this branch
+              </button>
+            </div>
+            {/* --- end delete button --- */}
+
+            {/* --- delete confirmation popup --- */}
+            {confirmDelete && (
+              <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 px-4">
+                <div className="bg-white rounded-2xl w-full max-w-sm p-6">
+                  <p className="text-[12px] font-bold text-red-700 uppercase tracking-wide mb-1">
+                    Danger Zone
                   </p>
+                  <h3 className="text-[17px] font-semibold text-black mb-2">
+                    Delete "{branch.name}"?
+                  </h3>
+                  <p className="text-[13px] text-gray-500 mb-5">
+                    This is permanent and can't be undone. Branches with students or schedules attached can't be deleted.
+                  </p>
+
+                  {error && (
+                    <p className="text-[13px] text-red-600 mb-4">{error}</p>
+                  )}
+
                   <div className="flex gap-2">
                     <button
-                      onClick={() => setConfirmDelete(false)}
-                      className="flex-1 h-9 border border-gray-200 rounded-lg text-[13px]"
+                      onClick={() => {
+                        setConfirmDelete(false)
+                        setError('')
+                      }}
+                      className="flex-1 h-10 border border-gray-200 rounded-lg text-[13px] font-medium"
                     >
                       Cancel
                     </button>
                     <button
                       onClick={handleDelete}
                       disabled={deleting}
-                      className="flex-1 h-9 bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white rounded-lg text-[13px] font-semibold"
+                      className="flex-1 h-10 bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white rounded-lg text-[13px] font-semibold"
                     >
                       {deleting ? 'Deleting…' : 'Yes, Delete'}
                     </button>
                   </div>
                 </div>
-              )}
-            </div>
-            {/* --- end delete section --- */}
-            
+              </div>
+            )}
+            {/* --- end delete confirmation popup --- */}
+
           </div>
         </div>
       )}
