@@ -105,7 +105,7 @@ export default function DashboardShell({
   const systemItems = [
     { label: 'Notifications', href: '/notifications', icon: BellIcon, show: true, soon: true },
     { label: 'Settings', href: '/settings', icon: SettingsIcon, show: true, soon: true },
-    { label: 'Users', href: '/users', icon: IdCardIcon, show: true, soon: true},
+    { label: 'Users', href: '/users', icon: IdCardIcon, show: true, soon: false},
   ]
 
   const handleLogout = async () => {
