@@ -33,18 +33,41 @@ export default function LoginPage() {
 
     setLoading(true)
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    try {
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+      if (signInError) {
+        setError(signInError.message)
+        return
+      }
 
-    if (error) {
-      setError(error.message)
+      const { data: profile, error: profileError } = await supabase
+        .from('user')
+        .select('id, role')
+        .eq('auth_id', data.user.id)
+        .maybeSingle()
+
+      if (profileError) {
+        await supabase.auth.signOut()
+        setError(`Your password was accepted, but the app could not verify your staff profile. Check the public.user profile and its read policy. (${profileError.message})`)
+        return
+      }
+      if (!profile) {
+        await supabase.auth.signOut()
+        setError('Your password was accepted, but this login has no matching public.user profile. Add a Head Coach or Assistant Coach profile with this Auth user ID before signing in.')
+        return
+      }
+      if (!['head_coach', 'assistant_coach'].includes(profile.role)) {
+        await supabase.auth.signOut()
+        setError('This account has an unsupported role. Set its role to head_coach or assistant_coach in public.user.')
+        return
+      }
+
+      router.replace('/dashboard')
+    } catch (loginError) {
+      setError(loginError instanceof Error ? loginError.message : 'Unable to sign in right now. Please try again.')
+    } finally {
       setLoading(false)
-      return
     }
-
-    router.push('/students')
   }
 
   return (

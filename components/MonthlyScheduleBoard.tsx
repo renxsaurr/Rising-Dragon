@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import ScheduleModal from './AddScheduleModal'
 import { Toast } from './Toast'
@@ -24,11 +24,6 @@ function branchColor(branchId: number) {
   return BRANCH_COLORS[branchId % BRANCH_COLORS.length]
 }
 
-function initials(name?: string | null) {
-  if (!name) return '?'
-  return name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase()
-}
-
 function shiftMonth(dateISO: string, months: number) {
   const d = new Date(dateISO + 'T00:00:00')
   d.setMonth(d.getMonth() + months, 1)
@@ -43,12 +38,14 @@ export default function MonthlyScheduleBoard({
   initialSchedules,
   branches,
   coaches,
+  isHeadCoach,
 }: {
   monthDates: string[]
   baseDateISO: string
   initialSchedules: Schedule[]
   branches: { id: number; name: string }[]
   coaches: { id: number; name: string; role: string }[]
+  isHeadCoach: boolean
 }) {
   const router = useRouter()
   const [schedules, setSchedules] = useState(initialSchedules)
@@ -57,6 +54,8 @@ export default function MonthlyScheduleBoard({
   const [modalDate, setModalDate] = useState<string>(baseDateISO)
   const [expandedDate, setExpandedDate] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+
+  useEffect(() => setSchedules(initialSchedules), [initialSchedules])
 
   const now = new Date()
   const today = toDateISO(now)
@@ -85,7 +84,7 @@ export default function MonthlyScheduleBoard({
 
   return (
     <div>
-      <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-sm pt-1 pb-4">
+      <div className="pb-4">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-[20px] font-semibold text-black">{monthLabel}</h2>
@@ -123,12 +122,12 @@ export default function MonthlyScheduleBoard({
               </svg>
             </button>
 
-            <button
+            {isHeadCoach && <button
               onClick={() => openAddModal(today)}
-              className="ml-2 bg-black text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-red-600 transition-colors"
+              className="ml-2 bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors"
             >
               + Add Schedule
-            </button>
+            </button>}
           </div>
         </div>
 
@@ -147,7 +146,7 @@ export default function MonthlyScheduleBoard({
         )}
       </div>
 
-      <div className="grid grid-cols-7 gap-px bg-gray-100 border border-gray-100 rounded-lg overflow-hidden">
+      <div className="grid grid-cols-7 gap-px bg-gray-200/80 border border-gray-200/80 rounded-lg overflow-hidden">
         {WEEKDAY_LABELS.map((label) => (
           <div key={label} className="bg-gray-50 px-2 py-2 text-[11px] font-semibold text-gray-500 text-center">
             {label}
@@ -167,7 +166,7 @@ export default function MonthlyScheduleBoard({
           return (
             <div
               key={dateISO}
-              className={`relative min-h-[110px] p-1.5 group ${inMonth ? 'bg-white' : 'bg-gray-50/50'}`}
+              className={`relative min-h-[110px] p-1.5 group ${inMonth ? 'bg-surface' : 'bg-gray-100/60'}`}
             >
               <div className="flex items-center justify-between mb-1">
                 <span
@@ -181,13 +180,13 @@ export default function MonthlyScheduleBoard({
                 >
                   {d.getDate()}
                 </span>
-                <button
+                {isHeadCoach && <button
                   onClick={() => openAddModal(dateISO)}
                   className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-600 text-[13px] leading-none transition-opacity"
                   aria-label="Add schedule"
                 >
                   +
-                </button>
+                </button>}
               </div>
 
               <div className="space-y-1">
@@ -196,19 +195,18 @@ export default function MonthlyScheduleBoard({
                   return (
                     <button
                       key={s.id}
-                      onClick={() => openEditModal(s)}
-                      className={`w-full text-left ${color.bg} border ${color.border} rounded px-1.5 py-0.5 text-[10px] hover:shadow-sm transition-shadow truncate flex items-center gap-1`}
+                      onClick={isHeadCoach ? () => openEditModal(s) : undefined}
+                      disabled={!isHeadCoach}
+                      className={`w-full text-left ${color.bg} border ${color.border} rounded px-1.5 py-0.5 text-[10px] transition-shadow truncate flex items-center gap-1 ${isHeadCoach ? 'hover:shadow-sm' : 'cursor-default'} ${s.status === 'Cancelled' ? 'opacity-55 line-through' : ''}`}
                     >
-                      <span className={`w-3.5 h-3.5 rounded-full ${color.dot} text-white text-[7px] font-semibold flex items-center justify-center shrink-0`}>
-                        {initials(s.User?.name)}
-                      </span>
-                      <span className="truncate text-black">{s.User?.name ?? 'Unassigned'}</span>
+                      <span className={`w-1.5 h-1.5 rounded-full ${color.dot} shrink-0`} />
+                      <span className="truncate text-black">{s.coach?.name ?? 'Unassigned'} · {s.time_start.slice(0, 5)}</span>
                     </button>
                   )
                 })}
                 {overflow > 0 && (
                   <button
-                    onClick={() => setExpandedDate(dateISO)}
+                      onClick={() => setExpandedDate(dateISO)}
                     className="text-[10px] text-gray-400 hover:text-red-600 pl-1"
                   >
                     +{overflow} more
@@ -243,25 +241,23 @@ export default function MonthlyScheduleBoard({
                 .map((s) => {
                   const color = branchColor(s.branch_id)
                   return (
-                    <button
-                      key={s.id}
-                      onClick={() => {
-                        setExpandedDate(null)
-                        openEditModal(s)
-                      }}
+                        <button
+                          key={s.id}
+                          onClick={isHeadCoach ? () => {
+                            setExpandedDate(null)
+                            openEditModal(s)
+                          } : undefined}
+                          disabled={!isHeadCoach}
                       className={`w-full text-left ${color.bg} border ${color.border} rounded p-2 text-[12px] hover:shadow-sm transition-shadow`}
                     >
                       <div className="flex items-center gap-1.5">
                         <span className={`w-1.5 h-1.5 rounded-full ${color.dot} shrink-0`} />
-                        <p className="font-semibold text-black truncate">{s.Branch?.name ?? 'Unknown branch'}</p>
+                        <p className="font-semibold text-black truncate">{s.branch?.name ?? 'Unknown branch'}</p>
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className={`w-4 h-4 rounded-full ${color.dot} text-white text-[8px] font-semibold flex items-center justify-center shrink-0`}>
-                          {initials(s.User?.name)}
-                        </span>
-                        <p className="text-gray-500 truncate">{s.User?.name ?? 'Unassigned'}</p>
+                        <p className="text-gray-500 truncate">{s.coach?.name ?? 'Unassigned'}</p>
                       </div>
-                      <p className="text-gray-500">{s.time_start} – {s.time_end}</p>
+                      <p className="text-gray-500">{s.time_start.slice(0, 5)} – {s.time_end.slice(0, 5)} · {s.status}</p>
                     </button>
                   )
                 })}
@@ -273,20 +269,18 @@ export default function MonthlyScheduleBoard({
         </div>
       )}
 
-      {showModal && (
+      {showModal && isHeadCoach && (
         <ScheduleModal
           branches={branches}
           coaches={coaches}
-          existingSchedules={schedules}
           editingSchedule={editingSchedule}
           initialDate={modalDate}
           onClose={() => {
             setShowModal(false)
             setEditingSchedule(null)
           }}
-          onCreated={(newSchedule) => { setSchedules([...schedules, newSchedule]); setToast('Schedule added') }}
-          onUpdated={(updated) => { setSchedules(schedules.map((s) => (s.id === updated.id ? updated : s))); setToast('Schedule updated') }}
-          onDeleted={(id) => { setSchedules(schedules.filter((s) => s.id !== id)); setToast('Schedule deleted') }}
+          onCreated={(newSchedule) => { setSchedules((current) => [...current, newSchedule]); setToast('Schedule added'); router.refresh() }}
+          onUpdated={(updated) => { setSchedules((current) => current.map((s) => (s.id === updated.id ? updated : s))); setToast('Schedule updated'); router.refresh() }}
         />
       )}
 

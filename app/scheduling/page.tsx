@@ -3,8 +3,10 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import DashboardShell from '@/components/DashboardShell'
 import ScheduleBoard from '@/components/ScheduleBoard'
+import AvailabilityPanel, { type AvailabilityEntry } from '@/components/AvailabilityPanel'
 import { getCurrentUser } from '@/utils/getCurrentUser'
 import type { Schedule } from '@/components/WeeklyScheduleBoard'
+import { dateInTimeZone } from '@/utils/dates'
 
 // local-safe date formatter — avoids the UTC-shift bug from toISOString()
 function toDateISO(d: Date) {
@@ -67,22 +69,32 @@ export default async function SchedulingPage({
 
   const { date, view: viewParam } = await searchParams
   const view: 'week' | 'month' = viewParam === 'month' ? 'month' : 'week'
-  const baseDate = date ? new Date(date + 'T00:00:00') : new Date()
+  const baseDate = new Date(`${date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : dateInTimeZone()}T12:00:00`)
 
   const weekDates = getWeekDates(baseDate)
   const monthDates = getMonthDates(baseDate)
   const rangeDates = view === 'month' ? monthDates : weekDates
 
-  const { data: branches } = await supabase.from('Branch').select('id, name').order('name')
-  const { data: coaches } = await supabase.from('User').select('id, name, role').order('name')
+  const { data: branches } = await supabase.from('branch').select('id, name').order('name')
+  const { data: coaches } = await supabase.from('user').select('id, name, role').in('role', ['head_coach', 'assistant_coach']).order('name')
 
   const { data: schedules, error } = await supabase
-    .from('ClassSchedule')
-    .select('id, date, time_start, time_end, branch_id, coach_id, Branch(name), User(name)')
+    .from('class_schedule')
+    .select('id, date, time_start, time_end, branch_id, coach_id, status, branch:branch!class_schedule_branch_id_fkey(name), coach:user!class_schedule_coach_id_fkey(name)')
     .gte('date', rangeDates[0])
     .lte('date', rangeDates[rangeDates.length - 1])
     .order('date')
     .order('time_start')
+
+  let availabilityQuery = supabase
+    .from('coach_availability')
+    .select('id, coach_id, date, time_start, time_end, status, coach:user!coach_availability_coach_id_fkey(name)')
+    .gte('date', rangeDates[0])
+    .lte('date', rangeDates[rangeDates.length - 1])
+    .order('date')
+    .order('time_start')
+  if (currentUser.role === 'assistant_coach') availabilityQuery = availabilityQuery.eq('coach_id', currentUser.id)
+  const { data: availability } = await availabilityQuery
 
   if (error) {
     return (
@@ -102,6 +114,11 @@ export default async function SchedulingPage({
         initialSchedules={(schedules ?? []) as unknown as Schedule[]}
         branches={branches ?? []}
         coaches={coaches ?? []}
+        isHeadCoach={currentUser.role === 'head_coach'}
+      />
+      <AvailabilityPanel
+        entries={(availability ?? []) as unknown as AvailabilityEntry[]}
+        isAssistantCoach={currentUser.role === 'assistant_coach'}
       />
     </DashboardShell>
   )

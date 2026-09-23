@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { createClient } from '@/utils/supabase/client'
 import type { Schedule } from './WeeklyScheduleBoard'
+import { saveSchedule } from '@/app/scheduling/actions'
 
 function toDateISO(d: Date) {
   const year = d.getFullYear()
@@ -15,26 +15,21 @@ export default function AddScheduleModal({
   weekDates,
   branches,
   coaches,
-  existingSchedules,
   editingSchedule,
   initialDate,
   onClose,
   onCreated,
   onUpdated,
-  onDeleted,
 }: {
   weekDates?: string[]
   branches: { id: number; name: string }[]
   coaches: { id: number; name: string; role: string }[]
-  existingSchedules: Schedule[]
   editingSchedule?: Schedule | null
   initialDate?: string
   onClose: () => void
   onCreated: (schedule: Schedule) => void
   onUpdated?: (schedule: Schedule) => void
-  onDeleted?: (id: number) => void
 }) {
-  const supabase = createClient()
   const isEditing = !!editingSchedule
 
   const defaultDate =
@@ -45,24 +40,15 @@ export default function AddScheduleModal({
   const [coachId, setCoachId] = useState(editingSchedule?.coach_id ?? coaches[0]?.id)
   const [timeStart, setTimeStart] = useState(editingSchedule?.time_start ?? '')
   const [timeEnd, setTimeEnd] = useState(editingSchedule?.time_end ?? '')
+  const [status, setStatus] = useState<Schedule['status']>(editingSchedule?.status ?? 'Scheduled')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  const [confirmDelete, setConfirmDelete] = useState(false)
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => setVisible(true))
     return () => cancelAnimationFrame(frame)
   }, [])
-
-  const hasConflict = () => {
-    return existingSchedules.some((s) => {
-      if (isEditing && s.id === editingSchedule!.id) return false
-      if (s.date !== date || s.coach_id !== coachId) return false
-      return timeStart < s.time_end && timeEnd > s.time_start
-    })
-  }
 
   const handleSubmit = async () => {
     setError('')
@@ -75,61 +61,23 @@ export default function AddScheduleModal({
       setError('End time must be after start time.')
       return
     }
-    if (hasConflict()) {
-      setError('This coach is already scheduled at an overlapping time that day.')
-      return
-    }
-
     setSaving(true)
-
-    if (isEditing) {
-      const { data, error: updateError } = await supabase
-        .from('ClassSchedule')
-        .update({ date, branch_id: branchId, coach_id: coachId, time_start: timeStart, time_end: timeEnd })
-        .eq('id', editingSchedule!.id)
-        .select('id, date, time_start, time_end, branch_id, coach_id, Branch(name), User(name)')
-        .single()
-
-      setSaving(false)
-      if (updateError) {
-        setError(updateError.message)
-        return
-      }
-      onUpdated?.(data as unknown as Schedule)
-      onClose()
-      return
-    }
-
-    const { data, error: insertError } = await supabase
-      .from('ClassSchedule')
-      .insert({ date, branch_id: branchId, coach_id: coachId, time_start: timeStart, time_end: timeEnd })
-      .select('id, date, time_start, time_end, branch_id, coach_id, Branch(name), User(name)')
-      .single()
-
+    const result = await saveSchedule(editingSchedule?.id ?? null, {
+      date,
+      branch_id: Number(branchId),
+      coach_id: Number(coachId),
+      time_start: timeStart,
+      time_end: timeEnd,
+      status,
+    })
     setSaving(false)
-
-    if (insertError) {
-      setError(insertError.message)
+    if (result.error) {
+      setError(result.error)
       return
     }
-
-    onCreated(data as unknown as Schedule)
-    onClose()
-  }
-
-  const handleDelete = async () => {
-    if (!editingSchedule) return
-    setDeleting(true)
-    const { error: deleteError } = await supabase.from('ClassSchedule').delete().eq('id', editingSchedule.id)
-
-    setDeleting(false)
-
-    if (deleteError) {
-      setError(deleteError.message)
-      return
-    }
-
-    onDeleted?.(editingSchedule.id)
+    const saved = result.data as unknown as Schedule
+    if (editingSchedule) onUpdated?.(saved)
+    else onCreated(saved)
     onClose()
   }
 
@@ -235,6 +183,15 @@ export default function AddScheduleModal({
             </div>
           </div>
 
+          <div>
+            <label className={labelClass}>Status</label>
+            <select value={status} onChange={(event) => setStatus(event.target.value as Schedule['status'])} className={inputClass}>
+              <option value="Scheduled">Scheduled</option>
+              <option value="Completed">Completed</option>
+              <option value="Cancelled">Cancelled</option>
+            </select>
+          </div>
+
           {error && (
             <div className="bg-red-50 border border-red-100 rounded-lg px-3 py-2">
               <p className="text-[12px] text-red-600">{error}</p>
@@ -252,7 +209,7 @@ export default function AddScheduleModal({
           <button
             onClick={handleSubmit}
             disabled={saving}
-            className="flex-1 bg-black text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            className="flex-1 bg-red-600 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {saving && (
               <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
@@ -264,32 +221,6 @@ export default function AddScheduleModal({
           </button>
         </div>
 
-        {isEditing && (
-          <div className="mt-4 pt-4 border-t border-gray-100">
-            {!confirmDelete ? (
-              <button
-                onClick={() => setConfirmDelete(true)}
-                className="text-[13px] text-red-600 hover:text-red-700 font-medium"
-              >
-                Delete this schedule
-              </button>
-            ) : (
-              <div className="flex items-center gap-2">
-                <p className="text-[12px] text-gray-500 flex-1">Delete this class?</p>
-                <button onClick={() => setConfirmDelete(false)} className="text-[12px] border rounded px-2 py-1">
-                  Cancel
-                </button>
-                <button
-                  onClick={handleDelete}
-                  disabled={deleting}
-                  className="text-[12px] bg-red-600 text-white rounded px-2 py-1 disabled:opacity-50"
-                >
-                  {deleting ? 'Deleting…' : 'Yes, delete'}
-                </button>
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   )

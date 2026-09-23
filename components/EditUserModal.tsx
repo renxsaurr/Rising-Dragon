@@ -2,40 +2,43 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/utils/supabase/client'
+import { updateUser } from '@/app/users/actions'
 
 type User = {
-  id: string
+  id: number
   name: string
   contact: string | null
   role: string
+  home_branch_id: number | null
 }
 
 type EditUserModalProps = {
   user: User
   isSelf?: boolean
+  branches: { id: number; name: string }[]
 }
 
 export default function EditUserModal({
   user,
   isSelf = false,
+  branches,
 }: EditUserModalProps) {
   const [isOpen, setIsOpen] = useState(false)
 
   const [name, setName] = useState(user.name)
   const [contact, setContact] = useState(user.contact ?? '')
   const [role, setRole] = useState(user.role)
+  const [branchId, setBranchId] = useState(user.home_branch_id ? String(user.home_branch_id) : '')
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   const router = useRouter()
-  const supabase = createClient()
-
   const resetForm = () => {
     setName(user.name)
     setContact(user.contact ?? '')
     setRole(user.role)
+    setBranchId(user.home_branch_id ? String(user.home_branch_id) : '')
     setError('')
   }
 
@@ -50,17 +53,15 @@ export default function EditUserModal({
     setLoading(true)
     setError('')
 
-    const { error } = await supabase
-      .from('User')
-      .update({
-        name,
-        contact,
-        role,
-      })
-      .eq('id', user.id)
+    const result = await updateUser(user.id, {
+      name,
+      contact,
+      role: role as 'head_coach' | 'assistant_coach',
+      home_branch_id: branchId ? Number(branchId) : null,
+    })
 
-    if (error) {
-      setError(error.message)
+    if (result.error) {
+      setError(result.error)
       setLoading(false)
       return
     }
@@ -120,6 +121,18 @@ export default function EditUserModal({
                 />
               </div>
 
+              <div>
+                <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Home branch</label>
+                <select
+                  value={branchId}
+                  onChange={(event) => setBranchId(event.target.value)}
+                  className="w-full h-10 px-3 border border-gray-200 rounded-lg text-[13px] text-black bg-white outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/10"
+                >
+                  <option value="">No home branch</option>
+                  {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+                </select>
+              </div>
+
               {/* Contact */}
               <div>
                 <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
@@ -131,7 +144,6 @@ export default function EditUserModal({
                   value={contact}
                   onChange={(e) => setContact(e.target.value)}
                   placeholder="Enter contact number"
-                  required
                   className="w-full h-10 px-3 border border-gray-200 rounded-lg text-[13px] text-black outline-none focus:border-violet-500 focus:ring-[3px] focus:ring-violet-500/10 transition-all"
                 />
               </div>

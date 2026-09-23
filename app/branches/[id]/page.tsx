@@ -5,6 +5,7 @@ import Link from 'next/link'
 import DashboardShell from '@/components/DashboardShell'
 import { getCurrentUser } from '@/utils/getCurrentUser'
 import EditBranchModal from '@/components/EditBranchModal'
+import { dateInTimeZone } from '@/utils/dates'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,7 +25,7 @@ export default async function BranchDetailPage({ params }: { params: Promise<{ i
 
   // fetch just this one branch by the id from the URL
   const { data: branch } = await supabase
-    .from('Branch')
+    .from('branch')
     .select('*')
     .eq('id', id)
     .single()
@@ -34,19 +35,20 @@ export default async function BranchDetailPage({ params }: { params: Promise<{ i
 
           // students for this specific branch
   const { data: students } = await supabase
-    .from('Student')
+    .from('student')
     .select('id, first_name, middle_name, last_name, belt_level', { count: 'exact' })
     .eq('branch_id', branch.id)
 
   // today's schedule for this branch, including the assigned coach's name
   // User:coach_id(name) is a Supabase join — pulls the coach's name from the User table
   // via the coach_id foreign key on ClassSchedule
-  const { data: todaySchedule } = await supabase
-    .from('ClassSchedule')
-    .select('time_start, time_end, coach_id, User:coach_id(name)')
+  const { data: todayData } = await supabase
+    .from('class_schedule')
+    .select('time_start, time_end, coach_id, coach:user!class_schedule_coach_id_fkey(name)')
     .eq('branch_id', branch.id)
-    .eq('date', new Date().toISOString().split('T')[0])
+    .eq('date', dateInTimeZone())
     .order('time_start')
+  const todaySchedule = todayData as unknown as { time_start: string; time_end: string; coach_id: number; coach: { name: string } | null }[] | null
 
   return (
     <DashboardShell title={branch.name} currentUser={currentUser}>
@@ -72,7 +74,7 @@ export default async function BranchDetailPage({ params }: { params: Promise<{ i
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                       {/* stat card 1 — students */}
-        <div className="bg-white border border-gray-100 rounded-xl p-4 flex items-center gap-4">
+        <div className="bg-surface border border-gray-200/80 rounded-xl p-4 flex items-center gap-4">
           <div className="w-11 h-11 rounded-full bg-red-50 flex items-center justify-center shrink-0">
             <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-3.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a4 4 0 10-4-4" />
@@ -85,7 +87,7 @@ export default async function BranchDetailPage({ params }: { params: Promise<{ i
         </div>
 
         {/* stat card 2 — classes today */}
-        <div className="bg-white border border-gray-100 rounded-xl p-4 flex items-center gap-4">
+        <div className="bg-surface border border-gray-200/80 rounded-xl p-4 flex items-center gap-4">
           <div className="w-11 h-11 rounded-full bg-red-50 flex items-center justify-center shrink-0">
             <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -97,7 +99,7 @@ export default async function BranchDetailPage({ params }: { params: Promise<{ i
           </div>
         </div>
                 {/* enrolled students list — spans both columns, mirrors Today's Schedule styling */}
-        <div className="md:col-span-2 bg-white border border-gray-100 rounded-xl p-4">
+        <div className="md:col-span-2 bg-surface border border-gray-200/80 rounded-xl p-4">
           <h3 className="font-semibold text-[14px] mb-3">Enrolled Students</h3>
           {students && students.length > 0 ? (
             <ul className="space-y-2">
@@ -117,16 +119,14 @@ export default async function BranchDetailPage({ params }: { params: Promise<{ i
         </div>
 
         {/* today's schedule list — spans both columns */}
-        <div className="md:col-span-2 bg-white border border-gray-100 rounded-xl p-4">
+        <div className="md:col-span-2 bg-surface border border-gray-200/80 rounded-xl p-4">
           <h3 className="font-semibold text-[14px] mb-3">Today's Schedule</h3>
           {todaySchedule && todaySchedule.length > 0 ? (
             <ul className="space-y-2">
               {todaySchedule.map((slot, i) => (
                 <li key={i} className="flex justify-between text-[13px] border-b border-gray-50 pb-2 last:border-0">
                   <span>{slot.time_start} – {slot.time_end}</span>
-                  {/* (slot as any) is a quick type workaround for the joined User data —
-                      not the cleanest TypeScript but fine for tonight */}
-                  <span className="text-gray-500">{(slot as any).User?.name ?? 'Unassigned'}</span>
+                  <span className="text-gray-500">{slot.coach?.name ?? 'Unassigned'}</span>
                 </li>
               ))}
             </ul>

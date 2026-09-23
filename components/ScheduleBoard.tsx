@@ -12,6 +12,7 @@ export default function ScheduleBoard({
   initialSchedules,
   branches,
   coaches,
+  isHeadCoach,
 }: {
   view: 'week' | 'month'
   weekDates: string[]
@@ -20,6 +21,7 @@ export default function ScheduleBoard({
   initialSchedules: Schedule[]
   branches: { id: number; name: string }[]
   coaches: { id: number; name: string; role: string }[]
+  isHeadCoach: boolean
 }) {
   const router = useRouter()
 
@@ -62,6 +64,7 @@ export default function ScheduleBoard({
           initialSchedules={initialSchedules}
           branches={branches}
           coaches={coaches}
+          isHeadCoach={isHeadCoach}
         />
       ) : (
         <MonthlyScheduleBoard
@@ -70,6 +73,7 @@ export default function ScheduleBoard({
           initialSchedules={initialSchedules}
           branches={branches}
           coaches={coaches}
+          isHeadCoach={isHeadCoach}
         />
       )}
     </div>

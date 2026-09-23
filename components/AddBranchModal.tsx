@@ -44,7 +44,7 @@ export default function AddBranchModal() {
       }
     }
 
-    const { error } = await supabase.from('Branch').insert({
+    const { error } = await supabase.from('branch').insert({
       name,
       address,
       description: description || null,
@@ -71,7 +71,7 @@ export default function AddBranchModal() {
     <>
       <button
         onClick={() => setIsOpen(true)}
-        className="bg-black hover:bg-red-600 text-white text-[14px] font-semibold px-5 py-2.5 rounded-lg transition-colors"
+        className="bg-red-600 hover:bg-red-700 text-white text-[14px] font-semibold px-5 py-2.5 rounded-lg transition-colors"
       >
         + Add Branch
       </button>
@@ -163,7 +163,7 @@ export default function AddBranchModal() {
               <button
                 type="submit"
                 disabled={loading}
-                className="mt-2 h-11 w-full bg-black hover:bg-red-600 disabled:opacity-60 text-white text-[14px] font-semibold rounded-lg transition-colors"
+                className="mt-2 h-11 w-full bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white text-[14px] font-semibold rounded-lg transition-colors"
               >
                 {loading ? 'Adding…' : 'Add Branch'}
               </button>

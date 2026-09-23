@@ -42,12 +42,12 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
 
     // safety check — block delete if students or schedules still reference this branch
     const { count: studentCount } = await supabase
-      .from('Student')
+      .from('student')
       .select('id', { count: 'exact', head: true })
       .eq('branch_id', branch.id)
 
     const { count: scheduleCount } = await supabase
-      .from('ClassSchedule')
+      .from('class_schedule')
       .select('id', { count: 'exact', head: true })
       .eq('branch_id', branch.id)
 
@@ -60,7 +60,7 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
     }
 
     const { error: deleteError } = await supabase
-      .from('Branch')
+      .from('branch')
       .delete()
       .eq('id', branch.id)
 
@@ -111,7 +111,7 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
     }
 
     const { error } = await supabase
-      .from('Branch')
+      .from('branch')
       .update({
         name,
         address,
@@ -244,7 +244,7 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
                             <button
                 type="submit"
                 disabled={loading}
-                className="mt-2 h-11 w-full bg-black hover:bg-red-600 disabled:opacity-60 text-white text-[14px] font-semibold rounded-lg transition-colors"
+                className="mt-2 h-11 w-full bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white text-[14px] font-semibold rounded-lg transition-colors"
               >
                 {loading ? 'Saving…' : 'Save Changes'}
               </button>

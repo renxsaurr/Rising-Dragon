@@ -5,6 +5,7 @@ import DashboardShell from '@/components/DashboardShell'
 import AddBranchModal from '@/components/AddBranchModal'
 import BranchesView from '@/components/BranchesView'
 import { getCurrentUser } from '@/utils/getCurrentUser'
+import { dateInTimeZone } from '@/utils/dates'
 
 export default async function BranchesPage() {
   const cookieStore = await cookies()
@@ -16,7 +17,7 @@ export default async function BranchesPage() {
   }
 
   const { data: branches, error } = await supabase
-    .from('Branch')
+    .from('branch')
     .select('*')
     .order('name')
 
@@ -31,15 +32,15 @@ export default async function BranchesPage() {
   const branchesWithStats = await Promise.all(
     (branches ?? []).map(async (branch) => {
       const { count: studentCount } = await supabase
-        .from('Student')
+        .from('student')
         .select('*', { count: 'exact', head: true })
         .eq('branch_id', branch.id)
 
       const { count: todayClasses } = await supabase
-        .from('ClassSchedule')
+        .from('class_schedule')
         .select('*', { count: 'exact', head: true })
         .eq('branch_id', branch.id)
-        .eq('date', new Date().toISOString().split('T')[0])
+        .eq('date', dateInTimeZone())
 
       return { ...branch, studentCount: studentCount ?? 0, todayClasses: todayClasses ?? 0 }
     })

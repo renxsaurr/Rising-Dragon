@@ -2,32 +2,34 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/utils/supabase/client'
+import { deleteStudent } from '@/app/students/actions'
 
 export default function DeleteStudentButton({
   studentId,
   studentName,
+  className,
+  label,
 }: {
   studentId: number
   studentName: string
+  className?: string
+  label?: string
 }) {
   const [isConfirming, setIsConfirming] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   const router = useRouter()
-  const supabase = createClient()
-
   const handleDelete = async () => {
     setLoading(true)
     setError('')
 
-    const { error } = await supabase.from('Student').delete().eq('id', studentId)
+    const result = await deleteStudent(studentId)
 
     setLoading(false)
 
-    if (error) {
-      setError(error.message)
+    if (result.error) {
+      setError(result.error)
       return
     }
 
@@ -73,12 +75,15 @@ export default function DeleteStudentButton({
     )
   }
 
-  return (
+    return (
     <button
       onClick={() => setIsConfirming(true)}
-      className="text-[12px] font-semibold text-gray-400 hover:text-red-600 transition-colors"
+      className={
+        className ??
+        'text-[12px] font-semibold text-gray-400 hover:text-red-600 transition-colors'
+      }
     >
-      Delete
+      {label ?? 'Delete'}
     </button>
   )
 }

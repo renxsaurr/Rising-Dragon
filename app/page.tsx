@@ -5,7 +5,7 @@ export default async function RootPage() {
   const currentUser = await getCurrentUser()
 
   if (currentUser) {
-      redirect('/students')
+      redirect('/dashboard')
   } else {
     redirect('/login')
   }

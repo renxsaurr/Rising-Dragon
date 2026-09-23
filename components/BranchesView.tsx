@@ -47,7 +47,7 @@ export default function BranchesView({ branches }: { branches: Branch[] }) {
       </div>
 
       {branches.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-100 py-16 text-center text-[14px] text-gray-400">
+        <div className="bg-surface rounded-xl border border-gray-200/80 py-16 text-center text-[14px] text-gray-400">
           No branches yet.
         </div>
       ) : view === 'list' ? (
@@ -56,7 +56,7 @@ export default function BranchesView({ branches }: { branches: Branch[] }) {
             <Link
               key={branch.id}
               href={`/branches/${branch.id}`}
-              className="flex items-stretch bg-white border border-gray-100 rounded-lg overflow-hidden hover:shadow-md hover:border-red-200 transition-all group"
+              className="flex items-stretch bg-surface border border-gray-200/80 rounded-lg overflow-hidden hover:shadow-md hover:border-red-200 transition-all group"
             >
               <div className="w-1.5 bg-red-600 shrink-0" />
               <div className="flex-1 flex items-center justify-between px-5 py-4">
@@ -84,7 +84,7 @@ export default function BranchesView({ branches }: { branches: Branch[] }) {
             <Link
               key={branch.id}
               href={`/branches/${branch.id}`}
-              className="bg-white border border-gray-100 rounded-xl overflow-hidden hover:shadow-lg hover:border-red-200 transition-all group"
+              className="bg-surface border border-gray-200/80 rounded-xl overflow-hidden hover:shadow-lg hover:border-red-200 transition-all group"
             >
               {branch.photo_url ? (
                 <img src={branch.photo_url} alt={branch.name} className="h-36 w-full object-cover" />

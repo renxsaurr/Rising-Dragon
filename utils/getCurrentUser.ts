@@ -15,9 +15,12 @@ export async function getCurrentUser() {
   if (!authUser) {
     return null
   }
+  if (authUser.banned_until && Date.parse(authUser.banned_until) > Date.now()) {
+    return null
+  }
 
   const { data: profile } = await supabase
-    .from('User')
+    .from('user')
     .select('id, name, role, home_branch_id')
     .eq('auth_id', authUser.id)
     .single()

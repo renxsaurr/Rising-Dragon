@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/utils/supabase/client'
+import { saveStudent } from '@/app/students/actions'
 
 type Branch = {
   id: number
@@ -15,28 +15,12 @@ type Student = {
   middle_name: string | null
   last_name: string
   guardian_name: string
-  guardian_contact: string
+  guardian_contact: string | null
+  guardian_email: string
   belt_level: string
   enrollment_date: string
   branch_id: number
 }
-
-const BELT_LEVELS = [
-  'Practitioner',
-  'White Belt',
-  'Low Yellow',
-  'High Yellow',
-  'Low Blue',
-  'High Blue',
-  'Low Red',
-  'High Red',
-  'Low Brown',
-  'High Brown',
-  '1st Dan Black Belt',
-  '2nd Dan Black Belt',
-  '3rd Dan Black Belt',
-  '4th Dan Black Belt',
-]
 
 const BELT_LABELS: Record<string, string> = {
   practitioner: 'Practitioner',
@@ -54,6 +38,8 @@ const BELT_LABELS: Record<string, string> = {
   third_dan_black_belt: '3rd Dan Black Belt',
   fourth_dan_black_belt: '4th Dan Black Belt',
 }
+
+const BELT_LEVELS = Object.entries(BELT_LABELS)
 
 const formatBeltLabel = (belt: string) => BELT_LABELS[belt] ?? belt
 
@@ -77,12 +63,12 @@ export default function StudentModal({
   const [lastName, setLastName] = useState(student?.last_name ?? '')
   const [guardianName, setGuardianName] = useState(student?.guardian_name ?? '')
   const [guardianContact, setGuardianContact] = useState(student?.guardian_contact ?? '')
+  const [guardianEmail, setGuardianEmail] = useState(student?.guardian_email ?? '')
   const [beltLevel, setBeltLevel] = useState(student?.belt_level ?? '')
   const [enrollmentDate, setEnrollmentDate] = useState(student?.enrollment_date ?? '')
   const [branchId, setBranchId] = useState(student?.branch_id ? String(student.branch_id) : '')
 
   const router = useRouter()
-  const supabase = createClient()
 
   const resetForm = () => {
     if (!isEditMode) {
@@ -91,6 +77,7 @@ export default function StudentModal({
       setLastName('')
       setGuardianName('')
       setGuardianContact('')
+      setGuardianEmail('')
       setBeltLevel('')
       setEnrollmentDate('')
       setBranchId('')
@@ -109,19 +96,18 @@ export default function StudentModal({
       last_name: lastName,
       guardian_name: guardianName,
       guardian_contact: guardianContact,
+      guardian_email: guardianEmail,
       belt_level: beltLevel,
       enrollment_date: enrollmentDate,
       branch_id: Number(branchId),
     }
 
-    const { error } = isEditMode
-      ? await supabase.from('Student').update(payload).eq('id', student!.id)
-      : await supabase.from('Student').insert(payload)
+    const result = await saveStudent(student?.id ?? null, payload)
 
     setLoading(false)
 
-    if (error) {
-      setError(error.message)
+    if (result.error) {
+      setError(result.error)
       return
     }
 
@@ -137,7 +123,7 @@ export default function StudentModal({
       ) : (
         <button
           onClick={() => setIsOpen(true)}
-          className="bg-black hover:bg-red-600 text-white text-[14px] font-semibold px-5 py-2.5 rounded-lg transition-colors"
+          className="bg-red-600 hover:bg-red-700 text-white text-[14px] font-semibold px-5 py-2.5 rounded-lg transition-colors"
         >
           + Enroll Student
         </button>
@@ -167,7 +153,7 @@ export default function StudentModal({
 
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">First Name</label>
                   <input
@@ -200,7 +186,7 @@ export default function StudentModal({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">Guardian Name</label>
                   <input
@@ -217,13 +203,22 @@ export default function StudentModal({
                     type="text"
                     value={guardianContact}
                     onChange={(e) => setGuardianContact(e.target.value)}
+                    className="w-full h-11 px-4 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">Guardian Email</label>
+                  <input
+                    type="email"
+                    value={guardianEmail}
+                    onChange={(e) => setGuardianEmail(e.target.value)}
                     required
                     className="w-full h-11 px-4 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">Belt Level</label>
                   <select
@@ -233,8 +228,8 @@ export default function StudentModal({
                     className="w-full h-11 px-4 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all bg-white"
                   >
                     <option value="" disabled>Select belt</option>
-                    {BELT_LEVELS.map((belt) => (
-                      <option key={belt} value={belt}>{formatBeltLabel(belt)}</option>
+                    {BELT_LEVELS.map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
                 </div>
@@ -275,7 +270,7 @@ export default function StudentModal({
               <button
                 type="submit"
                 disabled={loading}
-                className="mt-2 h-11 w-full bg-black hover:bg-red-600 disabled:opacity-60 text-white text-[14px] font-semibold rounded-lg transition-colors"
+                className="mt-2 h-11 w-full bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white text-[14px] font-semibold rounded-lg transition-colors"
               >
                 {loading ? 'Saving…' : isEditMode ? 'Save Changes' : 'Add Student'}
               </button>

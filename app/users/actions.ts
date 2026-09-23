@@ -1,190 +1,129 @@
 'use server'
 
-import { createClient } from '@/utils/supabase/server'
-import { cookies } from 'next/headers'
-import { createAdminClient } from '../../utils/supabase/admin'
-/**
- * Update an existing user
- */
-export async function updateUser(
-  userId: string,
-  data: {
-    name: string
-    contact: string
-    role: string
-  }
-) {
-  try {
-    const cookieStore = await cookies()
-    const supabase = await createClient(cookieStore)
+import { revalidatePath } from 'next/cache'
+import { createAdminClient } from '@/utils/supabase/admin'
+import { getCurrentUser } from '@/utils/getCurrentUser'
 
-    // Check the currently logged-in user
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+type CoachRole = 'head_coach' | 'assistant_coach'
 
-    if (!user) {
-      return {
-        error: 'You must be logged in.',
-      }
-    }
-
-    // Get the current user's profile
-    const { data: currentUser, error: currentUserError } =
-      await supabase
-        .from('User')
-        .select('id, role')
-        .eq('auth_id', user.id)
-        .single()
-
-    if (currentUserError || !currentUser) {
-      return {
-        error: 'Unable to verify your account.',
-      }
-    }
-
-    // Only Head Coaches can manage users
-    if (currentUser.role !== 'head_coach') {
-      return {
-        error: 'Only Head Coaches can update users.',
-      }
-    }
-
-    // Prevent invalid roles
-    if (!['head_coach', 'assistant_coach'].includes(data.role)) {
-      return {
-        error: 'Invalid user role.',
-      }
-    }
-
-    // Update the user
-    const { error } = await supabase
-      .from('User')
-      .update({
-        name: data.name.trim(),
-        contact: data.contact.trim(),
-        role: data.role,
-      })
-      .eq('id', userId)
-
-    if (error) {
-      return {
-        error: error.message,
-      }
-    }
-
-    return {
-      success: true,
-    }
-  } catch (error) {
-    console.error('updateUser error:', error)
-
-    return {
-      error: 'Something went wrong while updating the user.',
-    }
-  }
+async function requireHeadCoach() {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return { error: 'Please sign in to manage users.' as const }
+  if (currentUser.role !== 'head_coach') return { error: 'Only the Head Coach can manage users.' as const }
+  return { currentUser }
 }
 
+export async function createUser(input: {
+  name: string
+  email: string
+  password: string
+  contact: string
+  role: CoachRole
+  home_branch_id: number | null
+}) {
+  const access = await requireHeadCoach()
+  if ('error' in access) return access
 
-/**
- * Delete an existing user
- */
-export async function deleteUser(userId: string) {
-  try {
-    const cookieStore = await cookies()
-    const supabase = await createClient(cookieStore)
+  const name = input.name.trim()
+  const email = input.email.trim().toLowerCase()
+  const contact = input.contact.trim()
+  if (!name || !/^\S+@\S+\.\S+$/.test(email)) return { error: 'Enter a name and valid email address.' }
+  if (input.password.length < 8) return { error: 'Use a temporary password with at least 8 characters.' }
+  if (!['head_coach', 'assistant_coach'].includes(input.role)) return { error: 'Select a valid role.' }
+  if (input.home_branch_id !== null && !Number.isInteger(input.home_branch_id)) return { error: 'Select a valid home branch.' }
 
-    // Check logged-in user
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+  const admin = createAdminClient()
+  const { data: authResult, error: authError } = await admin.auth.admin.createUser({
+    email,
+    password: input.password,
+    email_confirm: true,
+    user_metadata: { name },
+  })
+  if (authError || !authResult.user) return { error: authError?.message ?? 'Could not create the login account.' }
 
-    if (!user) {
-      return {
-        error: 'You must be logged in.',
-      }
-    }
+  const { error: profileError } = await admin.from('user').insert({
+    name,
+    contact: contact || null,
+    role: input.role,
+    home_branch_id: input.home_branch_id,
+    auth_id: authResult.user.id,
+  })
 
-    // Get current user's profile
-    const { data: currentUser, error: currentUserError } =
-      await supabase
-        .from('User')
-        .select('id, role')
-        .eq('auth_id', user.id)
-        .single()
-
-    if (currentUserError || !currentUser) {
-      return {
-        error: 'Unable to verify your account.',
-      }
-    }
-
-    // Only Head Coaches can delete users
-    if (currentUser.role !== 'head_coach') {
-      return {
-        error: 'Only Head Coaches can delete users.',
-      }
-    }
-
-    // Prevent deleting yourself
-    if (currentUser.id === userId) {
-      return {
-        error: 'You cannot delete your own account.',
-      }
-    }
-
-    // Get the user being deleted
-    const { data: profile, error: profileError } =
-      await supabase
-        .from('User')
-        .select('id, auth_id')
-        .eq('id', userId)
-        .single()
-
-    if (profileError || !profile) {
-      return {
-        error: 'User not found.',
-      }
-    }
-
-    // Delete the User table record first
-    const { error: deleteError } = await supabase
-      .from('User')
-      .delete()
-      .eq('id', userId)
-
-    if (deleteError) {
-      return {
-        error: deleteError.message,
-      }
-    }
-
-    // If the user has a Supabase Auth account,
-    // remove that account as well.
-    if (profile.auth_id) {
-      const admin = createAdminClient()
-
-      const { error: authError } =
-        await admin.auth.admin.deleteUser(profile.auth_id)
-
-      if (authError) {
-        console.error('Auth deletion error:', authError)
-
-        return {
-          error:
-            'The user profile was deleted, but the login account could not be deleted.',
-        }
-      }
-    }
-
-    return {
-      success: true,
-    }
-  } catch (error) {
-    console.error('deleteUser error:', error)
-
-    return {
-      error: 'Something went wrong while deleting the user.',
-    }
+  if (profileError) {
+    await admin.auth.admin.deleteUser(authResult.user.id)
+    return { error: profileError.message }
   }
+
+  revalidatePath('/users')
+  return { success: true }
+}
+
+export async function updateUser(userId: number, data: {
+  name: string
+  contact: string
+  role: CoachRole
+  home_branch_id: number | null
+}) {
+  const access = await requireHeadCoach()
+  if ('error' in access) return access
+  if (!Number.isInteger(userId) || !data.name.trim()) return { error: 'Enter a valid user name.' }
+  if (!['head_coach', 'assistant_coach'].includes(data.role)) return { error: 'Select a valid role.' }
+  if (data.home_branch_id !== null && !Number.isInteger(data.home_branch_id)) return { error: 'Select a valid home branch.' }
+
+  const admin = createAdminClient()
+  const { data: target, error: lookupError } = await admin
+    .from('user')
+    .select('id, role')
+    .eq('id', userId)
+    .maybeSingle()
+  if (lookupError || !target) return { error: 'User profile not found.' }
+  if (target.id === access.currentUser.id && data.role !== 'head_coach') {
+    return { error: 'You cannot change your own role.' }
+  }
+
+  if (target.role === 'head_coach' && data.role !== 'head_coach') {
+    const { count, error } = await admin.from('user').select('id', { count: 'exact', head: true }).eq('role', 'head_coach')
+    if (error) return { error: error.message }
+    if ((count ?? 0) <= 1) return { error: 'Keep at least one Head Coach account active.' }
+  }
+
+  const { error } = await admin.from('user').update({
+    name: data.name.trim(),
+    contact: data.contact.trim() || null,
+    role: data.role,
+    home_branch_id: data.home_branch_id,
+  }).eq('id', userId)
+  if (error) return { error: error.message }
+
+  revalidatePath('/users')
+  return { success: true }
+}
+
+export async function setUserActive(userId: number, active: boolean) {
+  const access = await requireHeadCoach()
+  if ('error' in access) return access
+  if (!Number.isInteger(userId)) return { error: 'User profile not found.' }
+  if (userId === access.currentUser.id) return { error: 'You cannot deactivate your own account.' }
+
+  const admin = createAdminClient()
+  const { data: target, error: lookupError } = await admin
+    .from('user')
+    .select('id, auth_id, role')
+    .eq('id', userId)
+    .maybeSingle()
+  if (lookupError || !target) return { error: 'User profile not found.' }
+
+  if (!active && target.role === 'head_coach') {
+    const { count, error } = await admin.from('user').select('id', { count: 'exact', head: true }).eq('role', 'head_coach')
+    if (error) return { error: error.message }
+    if ((count ?? 0) <= 1) return { error: 'Keep at least one Head Coach account active.' }
+  }
+
+  const { error } = await admin.auth.admin.updateUserById(target.auth_id, {
+    ban_duration: active ? 'none' : '876000h',
+  })
+  if (error) return { error: error.message }
+
+  revalidatePath('/users')
+  return { success: true }
 }
