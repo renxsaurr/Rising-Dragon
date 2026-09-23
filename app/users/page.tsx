@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+<<<<<<< HEAD
 import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { getCurrentUser } from '@/utils/getCurrentUser'
@@ -7,12 +8,29 @@ import DashboardShell from '@/components/DashboardShell'
 import AddUserModal from '@/components/AddUserModal'
 import EditUserModal from '@/components/EditUserModal'
 import DeleteUserButton from '@/components/DeleteUserButton'
+=======
 
-const ROLE_LABELS: Record<string, string> = {
-  head_coach: 'Head Coach',
-  assistant_coach: 'Assistant Coach',
+import DashboardShell from '@/components/DashboardShell'
+import AddUserModal from '@/components/AddUserModal'
+import UsersTable from '@/components/UsersTable'
+
+import { getCurrentUser } from '@/utils/getCurrentUser'
+>>>>>>> 5fdc5c3fd17b6095824860e67ee2dd26ef9bfdb3
+
+function getManilaDate() {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+
+<<<<<<< HEAD
+=======
+  return formatter.format(new Date())
 }
 
+>>>>>>> 5fdc5c3fd17b6095824860e67ee2dd26ef9bfdb3
 export default async function UsersPage() {
   const currentUser = await getCurrentUser()
   if (!currentUser) redirect('/login')
@@ -20,6 +38,7 @@ export default async function UsersPage() {
 
   const cookieStore = await cookies()
   const supabase = await createClient(cookieStore)
+<<<<<<< HEAD
   const [{ data: userData, error }, { data: branches }] = await Promise.all([
     supabase.from('user')
       .select('id, auth_id, name, contact, role, home_branch_id, branch:branch!user_home_branch_id_fkey(name)')
@@ -31,6 +50,75 @@ export default async function UsersPage() {
 
   if (error) {
     return <DashboardShell title="Users & roles" currentUser={currentUser}><p role="alert" className="text-sm text-red-600">Could not load users: {error.message}</p></DashboardShell>
+=======
+
+  const currentUser = await getCurrentUser()
+
+  // Only Head Coach can access Users
+  if (
+    !currentUser ||
+    currentUser.role !== 'head_coach'
+  ) {
+    redirect('/students')
+  }
+
+  /*
+   * Get all users
+   */
+  const {
+    data: users,
+    error: usersError,
+  } = await supabase
+    .from('User')
+    .select('id, name, contact, role')
+    .order('name')
+
+  if (usersError) {
+    return (
+      <DashboardShell
+        title="Users"
+        currentUser={currentUser}
+      >
+        <p className="text-red-600 text-sm">
+          Something went wrong:{' '}
+          {usersError.message}
+        </p>
+      </DashboardShell>
+    )
+  }
+
+  /*
+   * Get today's classes.
+   *
+   * We only need today's schedules because
+   * Active means the coach is teaching a
+   * class RIGHT NOW.
+   */
+  const today = getManilaDate()
+
+  const {
+    data: schedules,
+    error: schedulesError,
+  } = await supabase
+    .from('ClassSchedule')
+    .select(
+      'id, date, time_start, time_end, coach_id'
+    )
+    .eq('date', today)
+
+  if (schedulesError) {
+    return (
+      <DashboardShell
+        title="Users"
+        currentUser={currentUser}
+      >
+        <p className="text-red-600 text-sm">
+          Unable to load class schedules:{' '}
+          {schedulesError.message}
+        </p>
+      </DashboardShell>
+    )
+>>>>>>> 5fdc5c3fd17b6095824860e67ee2dd26ef9bfdb3
   }
 
   let authUsers: { id: string; email?: string; banned_until?: string | null }[] = []
@@ -47,6 +135,7 @@ export default async function UsersPage() {
   const total = users?.length ?? 0
 
   return (
+<<<<<<< HEAD
     <DashboardShell title="Users & roles" currentUser={currentUser}>
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
@@ -133,6 +222,38 @@ export default async function UsersPage() {
         )}
         <div className="border-t border-gray-100 px-5 py-3 text-xs text-gray-500">Staff records remain available for schedule and attendance history when login access is deactivated.</div>
       </div>
+=======
+    <DashboardShell
+      title="Users"
+      currentUser={currentUser}
+    >
+
+      {/* Page Header */}
+      <div className="flex items-center justify-between mb-6">
+
+        <div>
+          <h2 className="text-[20px] font-semibold text-black">
+            All Users
+          </h2>
+
+          <p className="text-[13px] text-gray-500 mt-0.5">
+            {users?.length ?? 0} user
+            {users?.length === 1 ? '' : 's'}
+          </p>
+        </div>
+
+        <AddUserModal />
+
+      </div>
+
+      {/* Users Table */}
+      <UsersTable
+        users={users ?? []}
+        schedules={schedules ?? []}
+        currentUserId={currentUser.id}
+      />
+
+>>>>>>> 5fdc5c3fd17b6095824860e67ee2dd26ef9bfdb3
     </DashboardShell>
   )
 }
