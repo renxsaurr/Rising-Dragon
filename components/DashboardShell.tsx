@@ -60,6 +60,13 @@ const LogoutIcon = () => (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M17 16l4-4m0 0l-4-4m4 4H7m6 5v1a3 3 0 01-3 3H6a3 3 0 01-3-3V6a3 3 0 013-3h4a3 3 0 013 3v1" />
   </svg>
 )
+const IdCardIcon = () => (
+  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <rect x="2" y="5" width="20" height="14" rx="2" strokeWidth={1.75} />
+    <circle cx="8" cy="12" r="2" strokeWidth={1.75} />
+    <path strokeLinecap="round" strokeWidth={1.75} d="M5 17c.5-1.5 1.8-2.5 3-2.5s2.5 1 3 2.5M14 9h6M14 13h6" />
+  </svg>
+)
 
 type CurrentUser = {
   id: number
@@ -98,6 +105,7 @@ export default function DashboardShell({
   const systemItems = [
     { label: 'Notifications', href: '/notifications', icon: BellIcon, show: true, soon: true },
     { label: 'Settings', href: '/settings', icon: SettingsIcon, show: true, soon: true },
+    { label: 'Users', href: '/users', icon: UsersIcon, show:true, soon: true},
   ]
 
   const handleLogout = async () => {
