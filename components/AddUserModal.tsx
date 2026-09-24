@@ -58,19 +58,8 @@ export default function AddUserModal({ branches }: { branches: Branch[] }) {
 
   return (
     <>
-<<<<<<< HEAD
       <button onClick={() => setIsOpen(true)} className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700">
         <span aria-hidden="true">+</span> Add user
-=======
-      <button
-        onClick={() => setIsOpen(true)}
-              className="inline-flex items-center gap-2 bg-black hover:bg-gray-800 text-white text-sm font-semibold px-5 py-2.5 rounded-xl transition-colors"      >
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <circle cx="12" cy="12" r="9" strokeWidth={1.75} />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 8v8M8 12h8" />
-        </svg>
-        Add User
->>>>>>> 5fdc5c3fd17b6095824860e67ee2dd26ef9bfdb3
       </button>
 
       {isOpen && (

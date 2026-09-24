@@ -2,11 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-<<<<<<< HEAD
-=======
 import { Pencil, X } from 'lucide-react'
-
->>>>>>> 5fdc5c3fd17b6095824860e67ee2dd26ef9bfdb3
 import { updateUser } from '@/app/users/actions'
 
 type User = {
@@ -39,10 +35,7 @@ export default function EditUserModal({
   const [error, setError] = useState('')
 
   const router = useRouter()
-<<<<<<< HEAD
-=======
 
->>>>>>> 5fdc5c3fd17b6095824860e67ee2dd26ef9bfdb3
   const resetForm = () => {
     setName(user.name)
     setContact(user.contact ?? '')
@@ -72,22 +65,13 @@ export default function EditUserModal({
     setError('')
 
     const result = await updateUser(user.id, {
-<<<<<<< HEAD
-      name,
-      contact,
+      name: name.trim(),
+      contact: contact.trim(),
       role: role as 'head_coach' | 'assistant_coach',
       home_branch_id: branchId ? Number(branchId) : null,
     })
 
-    if (result.error) {
-=======
-      name: name.trim(),
-      contact: contact.trim(),
-      role,
-    })
-
     if (result?.error) {
->>>>>>> 5fdc5c3fd17b6095824860e67ee2dd26ef9bfdb3
       setError(result.error)
       setLoading(false)
       return
@@ -193,12 +177,8 @@ export default function EditUserModal({
                     setContact(e.target.value)
                   }
                   placeholder="Enter contact number"
-<<<<<<< HEAD
-                  className="w-full h-10 px-3 border border-gray-200 rounded-lg text-[13px] text-black outline-none focus:border-violet-500 focus:ring-[3px] focus:ring-violet-500/10 transition-all"
-=======
                   disabled={loading}
                   className="w-full h-10 px-3 border border-gray-200 rounded-lg text-[13px] text-black outline-none focus:border-black transition-colors disabled:bg-gray-50"
->>>>>>> 5fdc5c3fd17b6095824860e67ee2dd26ef9bfdb3
                 />
               </div>
 
