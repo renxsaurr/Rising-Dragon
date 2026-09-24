@@ -18,7 +18,10 @@ export async function saveSchedule(scheduleId: number | null, input: ScheduleInp
   if (!currentUser) return { error: 'Please sign in to manage schedules.' }
   if (currentUser.role !== 'head_coach') return { error: 'Only the Head Coach can change schedules.' }
 
-  const { date, time_start, time_end, branch_id, coach_id, status } = input
+  const { date, branch_id, coach_id, status } = input
+  // Postgres returns time columns as HH:MM:SS; compare everything as HH:MM
+  const time_start = String(input.time_start ?? '').slice(0, 5)
+  const time_end = String(input.time_end ?? '').slice(0, 5)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time_start) || !/^\d{2}:\d{2}$/.test(time_end)) {
     return { error: 'Enter a valid date and time range.' }
   }
@@ -43,7 +46,7 @@ export async function saveSchedule(scheduleId: number | null, input: ScheduleInp
     if (error) return { error: error.message }
     const conflict = (sameDay ?? []).some((slot) => {
       if (scheduleId !== null && Number(slot.id) === scheduleId) return false
-      return time_start < slot.time_end && time_end > slot.time_start
+      return time_start < slot.time_end.slice(0, 5) && time_end > slot.time_start.slice(0, 5)
     })
     if (conflict) return { error: 'This coach already has an overlapping class at another branch or this branch.' }
   }
@@ -55,7 +58,7 @@ export async function saveSchedule(scheduleId: number | null, input: ScheduleInp
       .eq('date', date)
       .eq('status', 'Unavailable')
     if (error) return { error: error.message }
-    if ((unavailable ?? []).some((slot) => time_start < slot.time_end && time_end > slot.time_start)) {
+    if ((unavailable ?? []).some((slot) => time_start < slot.time_end.slice(0, 5) && time_end > slot.time_start.slice(0, 5))) {
       return { error: 'This coach marked part of that time as unavailable.' }
     }
   }
@@ -71,6 +74,28 @@ export async function saveSchedule(scheduleId: number | null, input: ScheduleInp
   revalidatePath('/scheduling')
   revalidatePath('/attendance')
   return { data }
+}
+
+export async function deleteSchedule(scheduleId: number) {
+  const currentUser = await getCurrentUser()
+  if (!currentUser) return { error: 'Please sign in to manage schedules.' }
+  if (currentUser.role !== 'head_coach') return { error: 'Only the Head Coach can change schedules.' }
+  if (!Number.isInteger(scheduleId)) return { error: 'Invalid schedule.' }
+
+  const admin = createAdminClient()
+  const { count, error: attendanceError } = await admin.from('attendance')
+    .select('schedule_id', { count: 'exact', head: true })
+    .eq('schedule_id', scheduleId)
+  if (attendanceError) return { error: attendanceError.message }
+  if (count) return { error: 'Attendance is already recorded for this class. Set its status to Cancelled instead.' }
+
+  const { data, error } = await admin.from('class_schedule').delete().eq('id', scheduleId).select('id')
+  if (error) return { error: error.message }
+  if (!data?.length) return { error: 'Schedule not found. It may have already been deleted.' }
+
+  revalidatePath('/scheduling')
+  revalidatePath('/attendance')
+  return { success: true }
 }
 
 export async function saveAvailability(input: {

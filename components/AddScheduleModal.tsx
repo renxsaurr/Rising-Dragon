@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { Schedule } from './WeeklyScheduleBoard'
-import { saveSchedule } from '@/app/scheduling/actions'
+import { deleteSchedule, saveSchedule } from '@/app/scheduling/actions'
 
 function toDateISO(d: Date) {
   const year = d.getFullYear()
@@ -20,6 +20,7 @@ export default function AddScheduleModal({
   onClose,
   onCreated,
   onUpdated,
+  onDeleted,
 }: {
   weekDates?: string[]
   branches: { id: number; name: string }[]
@@ -29,6 +30,7 @@ export default function AddScheduleModal({
   onClose: () => void
   onCreated: (schedule: Schedule) => void
   onUpdated?: (schedule: Schedule) => void
+  onDeleted?: (scheduleId: number) => void
 }) {
   const isEditing = !!editingSchedule
 
@@ -38,11 +40,13 @@ export default function AddScheduleModal({
   const [date, setDate] = useState(defaultDate)
   const [branchId, setBranchId] = useState(editingSchedule?.branch_id ?? branches[0]?.id)
   const [coachId, setCoachId] = useState(editingSchedule?.coach_id ?? coaches[0]?.id)
-  const [timeStart, setTimeStart] = useState(editingSchedule?.time_start ?? '')
-  const [timeEnd, setTimeEnd] = useState(editingSchedule?.time_end ?? '')
+  const [timeStart, setTimeStart] = useState(editingSchedule?.time_start.slice(0, 5) ?? '')
+  const [timeEnd, setTimeEnd] = useState(editingSchedule?.time_end.slice(0, 5) ?? '')
   const [status, setStatus] = useState<Schedule['status']>(editingSchedule?.status ?? 'Scheduled')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
@@ -50,7 +54,23 @@ export default function AddScheduleModal({
     return () => cancelAnimationFrame(frame)
   }, [])
 
+  const handleDelete = async () => {
+    if (!editingSchedule) return
+    setError('')
+    setDeleting(true)
+    const result = await deleteSchedule(editingSchedule.id)
+    setDeleting(false)
+    if (result.error) {
+      setError(result.error)
+      setConfirmingDelete(false)
+      return
+    }
+    onDeleted?.(editingSchedule.id)
+    onClose()
+  }
+
   const handleSubmit = async () => {
+    if (saving || deleting || confirmingDelete) return
     setError('')
 
     if (!timeStart || !timeEnd) {
@@ -199,6 +219,40 @@ export default function AddScheduleModal({
           )}
         </div>
 
+        {isEditing && (
+          <div className="mt-5 pt-4 border-t border-gray-100">
+            {confirmingDelete ? (
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[12px] text-gray-600">Delete this schedule?</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setConfirmingDelete(false)}
+                    disabled={deleting}
+                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-[12px] font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    Keep
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-[12px] font-semibold hover:bg-red-700 transition-colors disabled:opacity-50"
+                  >
+                    {deleting ? 'Deleting…' : 'Delete'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmingDelete(true)}
+                disabled={saving}
+                className="text-[12px] font-medium text-red-600 hover:text-red-700 transition-colors"
+              >
+                Delete schedule
+              </button>
+            )}
+          </div>
+        )}
+
         <div className="flex gap-2 mt-6">
           <button
             onClick={onClose}
@@ -208,7 +262,7 @@ export default function AddScheduleModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={saving}
+            disabled={saving || deleting}
             className="flex-1 bg-red-600 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {saving && (

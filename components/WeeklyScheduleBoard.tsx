@@ -212,6 +212,7 @@ export default function WeeklyScheduleBoard({
           onClose={() => { setShowModal(false); setEditingSchedule(null) }}
           onCreated={(newSchedule) => { setSchedules((current) => [...current, newSchedule]); setToast('Schedule added'); router.refresh() }}
           onUpdated={(updated) => { setSchedules((current) => current.map((s) => (s.id === updated.id ? updated : s))); setToast('Schedule updated'); router.refresh() }}
+          onDeleted={(deletedId) => { setSchedules((current) => current.filter((s) => s.id !== deletedId)); setToast('Schedule deleted'); router.refresh() }}
         />
       )}
 
