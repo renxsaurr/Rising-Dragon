@@ -71,16 +71,17 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen w-full flex bg-white p-3">
-      <div className="flex w-full rounded-2xl overflow-hidden">
+    <div className="flex min-h-screen w-full bg-white">
+      <div className="flex min-h-screen w-full overflow-hidden">
 
         {/* Left — photo */}
-        <div className="hidden lg:block lg:w-1/2 relative">
+        <div className="relative hidden min-h-screen lg:block lg:w-1/2">
           <Image
             src="/hero1.png"
             alt="Rising Dragon Taekwondo"
             fill
             priority
+            sizes="50vw"
             className="object-cover"
           />
           <div className="absolute inset-0 bg-black/25" />
@@ -113,7 +114,7 @@ export default function LoginPage() {
               Welcome Back
             </h1>
             <p className="text-[14px] text-gray-500 mb-8 text-center">
-              Please enter your details to manage your.
+              Please enter your details to manage your branch.
             </p>
 
             <form onSubmit={handleLogin} className="flex flex-col gap-5">
