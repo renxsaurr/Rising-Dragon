@@ -19,11 +19,31 @@ export async function getCurrentUser() {
     return null
   }
 
-  const { data: profile } = await supabase
+  const { data: profile, error } = await supabase
     .from('user')
-    .select('id, name, role, home_branch_id')
+    .select('id, first_name, middle_name, last_name, role, primary_branch_id')
     .eq('auth_id', authUser.id)
-    .single()
+    .maybeSingle()
 
-  return profile
+  if (error || !profile) {
+    return null
+  }
+
+  // Keep the application's supported roles explicit. Pages and Server Actions
+  // use this helper as their authorization boundary, so an unknown role must
+  // never be treated as a signed-in staff member.
+  if (profile.role !== 'head_coach' && profile.role !== 'assistant_coach') {
+    return null
+  }
+
+  const name = [
+    profile.first_name,
+    profile.middle_name,
+    profile.last_name,
+  ].filter(Boolean).join(' ')
+
+  return {
+    ...profile,
+    name,
+  }
 }

@@ -119,7 +119,7 @@ export default async function StudentsPage() {
                   const beltStyle = BELT_COLORS[student.belt_level] ?? 'bg-gray-100 text-gray-700'
 
                   return (
-                    <tr key={student.id} className="group transition-colors hover:bg-gray-50">
+                    <tr id={`student-${student.id}-desktop`} key={student.id} className="group transition-colors hover:bg-gray-50">
                       <td className="break-words px-4 py-4 text-sm font-medium text-gray-900">
                         {fullName}
                       </td>
@@ -178,7 +178,7 @@ export default async function StudentsPage() {
                 const beltStyle = BELT_COLORS[student.belt_level] ?? 'bg-gray-100 text-gray-700'
 
                 return (
-                  <div key={student.id} className="p-4 sm:p-5">
+                  <div id={`student-${student.id}-mobile`} key={student.id} className="p-4 sm:p-5">
                     <div className="flex items-start justify-between gap-3">
                       <p className="min-w-0 break-words text-sm font-semibold text-gray-900">{fullName}</p>
                       <RowActionsMenu>

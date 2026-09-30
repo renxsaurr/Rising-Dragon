@@ -5,6 +5,8 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
+import GlobalSearch from '@/components/GlobalSearch'
+import HeaderNotifications from '@/components/HeaderNotifications'
 
 const GridIcon = () => (
   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -72,7 +74,7 @@ type CurrentUser = {
   id: number
   name: string
   role: string
-  home_branch_id: number | null
+  primary_branch_id: number | null
 } | null
 
 export default function DashboardShell({
@@ -114,7 +116,6 @@ export default function DashboardShell({
   }
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`)
-  const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Manila' })
   const initials = (currentUser?.name ?? '?').split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('')
 
   const navLink = (href: string, label: string, Icon: () => React.ReactElement) => {
@@ -184,18 +185,21 @@ export default function DashboardShell({
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="flex shrink-0 items-center justify-between gap-4 px-8 pt-7 pb-5">
-          <div className="min-w-0">
+        <header className="flex shrink-0 items-center justify-between gap-3 px-4 pb-5 pt-6 sm:gap-4 sm:px-6 sm:pt-7 lg:px-8">
+          <div className="min-w-0 flex-1">
             <h1 className="truncate text-[22px] font-semibold text-gray-900">{title}</h1>
-            <p className="mt-0.5 text-[13px] text-gray-400">{todayLabel}</p>
           </div>
           {currentUser && (
-            <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-surface py-1.5 pl-1.5 pr-4">
-              <span className="grid h-9 w-9 place-items-center rounded-lg bg-red-600 text-[13px] font-semibold text-white">{initials}</span>
-              <span className="leading-tight">
-                <span className="block text-[13px] font-semibold capitalize text-gray-900">{currentUser.name}</span>
-                <span className="block text-[11px] text-gray-500">{isHeadCoach ? 'Head Coach' : 'Assistant Coach'}</span>
-              </span>
+            <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
+              <GlobalSearch canSearchStaff={isHeadCoach} />
+              <HeaderNotifications isHeadCoach={isHeadCoach} />
+              <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-surface py-1.5 pl-1.5 pr-2 sm:pr-4">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-red-600 text-[13px] font-semibold text-white">{initials}</span>
+                <span className="hidden leading-tight sm:block">
+                  <span className="block max-w-36 truncate text-[13px] font-semibold capitalize text-gray-900">{currentUser.name}</span>
+                  <span className="block text-[11px] text-gray-500">{isHeadCoach ? 'Head Coach' : 'Assistant Coach'}</span>
+                </span>
+              </div>
             </div>
           )}
         </header>

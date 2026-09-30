@@ -8,6 +8,11 @@ import { getCurrentUser } from '@/utils/getCurrentUser'
 import type { Schedule } from '@/components/WeeklyScheduleBoard'
 import { dateInTimeZone } from '@/utils/dates'
 
+function coachDisplayName(coach: { first_name: string | null; middle_name: string | null; last_name: string | null } | null) {
+  if (!coach) return 'Coach'
+  return [coach.first_name, coach.middle_name, coach.last_name].filter(Boolean).join(' ') || 'Coach'
+}
+
 // local-safe date formatter — avoids the UTC-shift bug from toISOString()
 function toDateISO(d: Date) {
   const year = d.getFullYear()
@@ -76,11 +81,16 @@ export default async function SchedulingPage({
   const rangeDates = view === 'month' ? monthDates : weekDates
 
   const { data: branches } = await supabase.from('branch').select('id, name').order('name')
-  const { data: coaches } = await supabase.from('user').select('id, name, role').in('role', ['head_coach', 'assistant_coach']).order('name')
+  const { data: coachRows } = await supabase.from('user').select('id, first_name, middle_name, last_name, role').in('role', ['head_coach', 'assistant_coach']).order('first_name')
+  const coaches = (coachRows ?? []).map((coach) => ({
+    id: Number(coach.id),
+    name: coachDisplayName(coach),
+    role: coach.role,
+  }))
 
   const { data: schedules, error } = await supabase
     .from('class_schedule')
-    .select('id, date, time_start, time_end, branch_id, coach_id, status, branch:branch!class_schedule_branch_id_fkey(name), coach:user!class_schedule_coach_id_fkey(name)')
+    .select('id, date, time_start, time_end, branch_id, coach_id, status, branch:branch!class_schedule_branch_id_fkey(name), coach:user!class_schedule_coach_id_fkey(first_name, middle_name, last_name)')
     .gte('date', rangeDates[0])
     .lte('date', rangeDates[rangeDates.length - 1])
     .order('date')
@@ -88,7 +98,7 @@ export default async function SchedulingPage({
 
   let availabilityQuery = supabase
     .from('coach_availability')
-    .select('id, coach_id, date, time_start, time_end, status, coach:user!coach_availability_coach_id_fkey(name)')
+    .select('id, coach_id, date, time_start, time_end, status, coach:user!coach_availability_coach_id_fkey(first_name, middle_name, last_name)')
     .gte('date', rangeDates[0])
     .lte('date', rangeDates[rangeDates.length - 1])
     .order('date')
@@ -104,6 +114,15 @@ export default async function SchedulingPage({
     )
   }
 
+  const initialSchedules = (schedules ?? []).map((schedule) => ({
+    ...schedule,
+    coach: schedule.coach ? { name: coachDisplayName(schedule.coach) } : null,
+  })) as unknown as Schedule[]
+  const availabilityEntries = (availability ?? []).map((entry) => ({
+    ...entry,
+    coach: entry.coach ? { name: coachDisplayName(entry.coach) } : null,
+  })) as unknown as AvailabilityEntry[]
+
   return (
     <DashboardShell title="Schedule" currentUser={currentUser}>
       <ScheduleBoard
@@ -111,13 +130,13 @@ export default async function SchedulingPage({
         weekDates={weekDates}
         monthDates={monthDates}
         baseDateISO={toDateISO(baseDate)}
-        initialSchedules={(schedules ?? []) as unknown as Schedule[]}
+        initialSchedules={initialSchedules}
         branches={branches ?? []}
         coaches={coaches ?? []}
         isHeadCoach={currentUser.role === 'head_coach'}
       />
       <AvailabilityPanel
-        entries={(availability ?? []) as unknown as AvailabilityEntry[]}
+        entries={availabilityEntries}
         isAssistantCoach={currentUser.role === 'assistant_coach'}
       />
     </DashboardShell>

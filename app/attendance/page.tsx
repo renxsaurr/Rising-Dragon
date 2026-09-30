@@ -17,7 +17,7 @@ type ScheduleRow = {
   coach_id: number
   status: string
   branch: { name: string } | null
-  coach: { name: string } | null
+  coach: { first_name: string | null; middle_name: string | null; last_name: string | null } | null
 }
 
 // Monday of the week containing isoDate
@@ -49,7 +49,7 @@ export default async function AttendancePage({
 
   // one query for the whole week: feeds both the day strip counts and the selected day's sessions
   let scheduleQuery = supabase.from('class_schedule')
-    .select('id, date, time_start, time_end, branch_id, coach_id, status, branch:branch!class_schedule_branch_id_fkey(name), coach:user!class_schedule_coach_id_fkey(name)')
+    .select('id, date, time_start, time_end, branch_id, coach_id, status, branch:branch!class_schedule_branch_id_fkey(name), coach:user!class_schedule_coach_id_fkey(first_name, middle_name, last_name)')
     .gte('date', weekDates[0])
     .lte('date', weekDates[6])
     .neq('status', 'Cancelled')
@@ -168,7 +168,7 @@ export default async function AttendancePage({
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-gray-950">{schedule.branch?.name ?? 'Branch'}</p>
-                    <p className="mt-0.5 truncate text-xs text-gray-500">{formatTime(schedule.time_start)}–{formatTime(schedule.time_end)} · {schedule.coach?.name ?? 'Coach'}</p>
+                    <p className="mt-0.5 truncate text-xs text-gray-500">{formatTime(schedule.time_start)}–{formatTime(schedule.time_end)} · {schedule.coach ? [schedule.coach.first_name, schedule.coach.middle_name, schedule.coach.last_name].filter(Boolean).join(' ') || 'Coach' : 'Coach'}</p>
                   </div>
                   {upcoming
                     ? <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">Upcoming</span>

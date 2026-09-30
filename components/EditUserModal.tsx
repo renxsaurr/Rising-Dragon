@@ -2,15 +2,17 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Pencil, X } from 'lucide-react'
+import { Pencil } from 'lucide-react'
 import { updateUser } from '@/app/users/actions'
 
 type User = {
   id: number
-  name: string
+  first_name: string | null
+  middle_name: string | null
+  last_name: string | null
   contact: string | null
   role: string
-  home_branch_id: number | null
+  primary_branch_id: number | null
 }
 
 type EditUserModalProps = {
@@ -26,21 +28,24 @@ export default function EditUserModal({
 }: EditUserModalProps) {
   const [isOpen, setIsOpen] = useState(false)
 
-  const [name, setName] = useState(user.name)
+  const [firstName, setFirstName] = useState(user.first_name ?? '')
+  const [middleName, setMiddleName] = useState(user.middle_name ?? '')
+  const [lastName, setLastName] = useState(user.last_name ?? '')
   const [contact, setContact] = useState(user.contact ?? '')
-  const [role, setRole] = useState(user.role)
-  const [branchId, setBranchId] = useState(user.home_branch_id ? String(user.home_branch_id) : '')
+  const [branchId, setBranchId] = useState(user.primary_branch_id ? String(user.primary_branch_id) : '')
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   const router = useRouter()
+  const inputClass = 'w-full h-10 px-3 border border-gray-200 rounded-lg text-[13px] text-gray-900 placeholder:text-gray-400 outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/10 disabled:bg-gray-50'
 
   const resetForm = () => {
-    setName(user.name)
+    setFirstName(user.first_name ?? '')
+    setMiddleName(user.middle_name ?? '')
+    setLastName(user.last_name ?? '')
     setContact(user.contact ?? '')
-    setRole(user.role)
-    setBranchId(user.home_branch_id ? String(user.home_branch_id) : '')
+    setBranchId(user.primary_branch_id ? String(user.primary_branch_id) : '')
     setError('')
   }
 
@@ -65,10 +70,11 @@ export default function EditUserModal({
     setError('')
 
     const result = await updateUser(user.id, {
-      name: name.trim(),
+      first_name: firstName.trim(),
+      middle_name: middleName.trim(),
+      last_name: lastName.trim(),
       contact: contact.trim(),
-      role: role as 'head_coach' | 'assistant_coach',
-      home_branch_id: branchId ? Number(branchId) : null,
+      primary_branch_id: branchId ? Number(branchId) : null,
     })
 
     if (result?.error) {
@@ -90,164 +96,58 @@ export default function EditUserModal({
         type="button"
         onClick={openModal}
         title="Edit user"
-        aria-label={`Edit ${user.name}`}
-        className="p-2 text-black hover:bg-gray-100 rounded-lg transition-colors"
+        aria-label={`Edit ${[user.first_name, user.middle_name, user.last_name].filter(Boolean).join(' ') || 'user'}`}
+        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-900 transition-colors hover:bg-gray-50"
       >
-        <Pencil
-          size={20}
-          strokeWidth={2}
-        />
+        <Pencil size={14} strokeWidth={2} />
+        Edit
       </button>
 
       {/* EDIT MODAL */}
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <section role="dialog" aria-modal="true" aria-labelledby={`edit-user-title-${user.id}`} className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl sm:p-7">
+            <button type="button" onClick={closeModal} disabled={loading} aria-label="Close" className="absolute right-5 top-5 text-xl leading-none text-gray-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50">×</button>
+            <h2 id={`edit-user-title-${user.id}`} className="text-lg font-semibold text-gray-950">Edit staff account</h2>
+            <p className="mb-5 mt-1 text-sm text-gray-500">Update this staff member's information and branch assignment.</p>
 
-          <div className="relative w-full max-w-md rounded-2xl bg-white shadow-xl">
-
-            {/* Close */}
-            <button
-              type="button"
-              onClick={closeModal}
-              disabled={loading}
-              aria-label="Close"
-              className="absolute right-5 top-5 p-1 text-gray-400 hover:text-black transition-colors"
-            >
-              <X size={20} />
-            </button>
-
-            {/* Header */}
-            <div className="px-7 pt-7 pb-4">
-              <h2 className="text-[18px] font-semibold text-black">
-                Edit User
-              </h2>
-
-              <p className="mt-1 text-[12px] text-gray-500">
-                Update the user's information below.
-              </p>
-            </div>
-
-            {/* Form */}
-            <form
-              onSubmit={handleSubmit}
-              className="px-7 pb-7"
-            >
-
-              {/* Name */}
-              <div className="mb-4">
-                <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
-                  Full Name
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <label className="block text-xs font-medium text-gray-700"><span className="flex h-8 items-center">First Name</span>
+                  <input type="text" value={firstName} onChange={(event) => setFirstName(event.target.value)} placeholder="First name" required disabled={loading} autoComplete="given-name" className={`${inputClass} mt-1.5`} />
                 </label>
-
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) =>
-                    setName(e.target.value)
-                  }
-                  placeholder="Enter full name"
-                  required
-                  disabled={loading}
-                  className="w-full h-10 px-3 border border-gray-200 rounded-lg text-[13px] text-black outline-none focus:border-black transition-colors disabled:bg-gray-50"
-                />
+                <label className="block text-xs font-medium text-gray-700"><span className="flex h-8 items-center gap-1 whitespace-nowrap text-[11px]">Middle Name <span className="text-[10px] font-normal text-gray-400">(optional)</span></span>
+                  <input type="text" value={middleName} onChange={(event) => setMiddleName(event.target.value)} placeholder="Middle name" disabled={loading} autoComplete="additional-name" className={`${inputClass} mt-1.5`} />
+                </label>
+                <label className="block text-xs font-medium text-gray-700"><span className="flex h-8 items-center">Last Name</span>
+                  <input type="text" value={lastName} onChange={(event) => setLastName(event.target.value)} placeholder="Last name" required disabled={loading} autoComplete="family-name" className={`${inputClass} mt-1.5`} />
+                </label>
               </div>
 
-              <div>
-                <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Home branch</label>
-                <select
-                  value={branchId}
-                  onChange={(event) => setBranchId(event.target.value)}
-                  className="w-full h-10 px-3 border border-gray-200 rounded-lg text-[13px] text-black bg-white outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/10"
-                >
-                  <option value="">No home branch</option>
+              <label className="block text-xs font-medium text-gray-700">Contact number
+                <input type="tel" value={contact} onChange={(event) => setContact(event.target.value)} placeholder="Enter contact number" required disabled={loading} autoComplete="tel" className={`${inputClass} mt-1.5`} />
+              </label>
+
+              <label className="block text-xs font-medium text-gray-700">Primary branch
+                <select value={branchId} onChange={(event) => setBranchId(event.target.value)} disabled={loading} className={`${inputClass} mt-1.5 bg-white`}>
+                  <option value="">No primary branch</option>
                   {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
                 </select>
+              </label>
+
+              <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5">
+                <p className="text-xs font-medium text-gray-700">Role</p>
+                <p className="mt-1 text-sm text-gray-900">{user.role === 'head_coach' ? 'Head Coach' : 'Assistant Coach'}</p>
+                <p className="mt-0.5 text-xs text-gray-500">Roles are assigned during staff account setup.</p>
               </div>
 
-              {/* Contact */}
-              <div className="mb-4">
-                <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
-                  Contact
-                </label>
-
-                <input
-                  type="text"
-                  value={contact}
-                  onChange={(e) =>
-                    setContact(e.target.value)
-                  }
-                  placeholder="Enter contact number"
-                  disabled={loading}
-                  className="w-full h-10 px-3 border border-gray-200 rounded-lg text-[13px] text-black outline-none focus:border-black transition-colors disabled:bg-gray-50"
-                />
+              {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+              <div className="flex justify-end gap-2 border-t border-gray-100 pt-4">
+                <button type="button" onClick={closeModal} disabled={loading} className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">Cancel</button>
+                <button type="submit" disabled={loading} className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50">{loading ? 'Saving…' : 'Save changes'}</button>
               </div>
-
-              {/* Role */}
-              <div className="mb-4">
-                <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
-                  Role
-                </label>
-
-                <select
-                  value={role}
-                  onChange={(e) =>
-                    setRole(e.target.value)
-                  }
-                  required
-                  disabled={loading || isSelf}
-                  className="w-full h-10 px-3 border border-gray-200 rounded-lg bg-white text-[13px] text-black outline-none focus:border-black transition-colors disabled:bg-gray-50 disabled:text-gray-400"
-                >
-                  <option value="head_coach">
-                    Head Coach
-                  </option>
-
-                  <option value="assistant_coach">
-                    Assistant Coach
-                  </option>
-                </select>
-
-                {isSelf && (
-                  <p className="mt-1.5 text-[11px] text-gray-400">
-                    You cannot change your own role.
-                  </p>
-                )}
-              </div>
-
-              {/* Error */}
-              {error && (
-                <div className="mb-4 rounded-lg bg-red-50 border border-red-100 px-3 py-2.5">
-                  <p className="text-[12px] text-red-600">
-                    {error}
-                  </p>
-                </div>
-              )}
-
-              {/* Buttons */}
-              <div className="flex justify-end gap-3 pt-2">
-
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  disabled={loading}
-                  className="h-10 px-5 border border-gray-200 rounded-lg text-[13px] font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="h-10 px-5 bg-black text-white rounded-lg text-[13px] font-medium hover:bg-gray-800 transition-colors disabled:opacity-50"
-                >
-                  {loading
-                    ? 'Saving...'
-                    : 'Save Changes'}
-                </button>
-
-              </div>
-
             </form>
-          </div>
+          </section>
         </div>
       )}
     </>

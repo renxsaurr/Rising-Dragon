@@ -19,7 +19,7 @@ type ScheduleRow = {
   coach_id: number
   status: string
   branch: { name: string } | null
-  coach: { name: string } | null
+  coach: { first_name: string; middle_name: string | null; last_name: string } | null
 }
 type AttendanceRow = { schedule_id: number; date: string; status: 'Present' | 'Absent' }
 
@@ -79,7 +79,7 @@ export default async function DashboardPage() {
 
   let scheduleQuery = supabase
     .from('class_schedule')
-    .select('id, date, time_start, time_end, branch_id, coach_id, status, branch:branch!class_schedule_branch_id_fkey(name), coach:user!class_schedule_coach_id_fkey(name)')
+    .select('id, date, time_start, time_end, branch_id, coach_id, status, branch:branch!class_schedule_branch_id_fkey(name), coach:user!class_schedule_coach_id_fkey(first_name, middle_name, last_name)')
     .gte('date', rangeStart)
     .lte('date', weekEnd)
     .neq('status', 'Cancelled')
@@ -117,7 +117,9 @@ export default async function DashboardPage() {
       date: s.date,
       time: `${formatTime(s.time_start)} – ${formatTime(s.time_end)}`,
       branch: s.branch?.name ?? 'Branch',
-      coach: s.coach?.name ?? 'Coach',
+      coach: s.coach
+        ? [s.coach.first_name, s.coach.middle_name, s.coach.last_name].filter(Boolean).join(' ') || 'Coach'
+        : 'Coach',
       status,
     }
   }

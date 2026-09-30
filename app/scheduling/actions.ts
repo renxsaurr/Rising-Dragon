@@ -64,16 +64,23 @@ export async function saveSchedule(scheduleId: number | null, input: ScheduleInp
   }
 
   const payload = { date, time_start, time_end, branch_id, coach_id, status }
-  const selection = 'id, date, time_start, time_end, branch_id, coach_id, status, branch:branch!class_schedule_branch_id_fkey(name), coach:user!class_schedule_coach_id_fkey(name)'
+  const selection = 'id, date, time_start, time_end, branch_id, coach_id, status, branch:branch!class_schedule_branch_id_fkey(name), coach:user!class_schedule_coach_id_fkey(first_name, middle_name, last_name)'
   const result = scheduleId === null
     ? await admin.from('class_schedule').insert(payload).select(selection).single()
     : await admin.from('class_schedule').update(payload).eq('id', scheduleId).select(selection).single()
   const { data, error } = result
   if (error) return { error: error.message }
 
+  const savedSchedule = data ? {
+    ...data,
+    coach: data.coach ? {
+      name: [data.coach.first_name, data.coach.middle_name, data.coach.last_name].filter(Boolean).join(' ') || 'Coach',
+    } : null,
+  } : null
+
   revalidatePath('/scheduling')
   revalidatePath('/attendance')
-  return { data }
+  return { data: savedSchedule }
 }
 
 export async function deleteSchedule(scheduleId: number) {

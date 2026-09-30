@@ -1,10 +1,9 @@
 'use server'
 
+import { randomInt } from 'node:crypto'
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { getCurrentUser } from '@/utils/getCurrentUser'
-
-type CoachRole = 'head_coach' | 'assistant_coach'
 
 async function requireHeadCoach() {
   const currentUser = await getCurrentUser()
@@ -13,39 +12,62 @@ async function requireHeadCoach() {
   return { currentUser }
 }
 
+function generateTemporaryPassword() {
+  const groups = [
+    'ABCDEFGHJKLMNPQRSTUVWXYZ',
+    'abcdefghijkmnopqrstuvwxyz',
+    '23456789',
+    '!@#$%&*_-',
+  ]
+  const allCharacters = groups.join('')
+  const characters = groups.map((group) => group[randomInt(group.length)])
+  while (characters.length < 16) characters.push(allCharacters[randomInt(allCharacters.length)])
+  for (let index = characters.length - 1; index > 0; index -= 1) {
+    const swapIndex = randomInt(index + 1)
+    ;[characters[index], characters[swapIndex]] = [characters[swapIndex], characters[index]]
+  }
+  return characters.join('')
+}
+
 export async function createUser(input: {
-  name: string
+  first_name: string
+  middle_name: string
+  last_name: string
   email: string
-  password: string
   contact: string
-  role: CoachRole
-  home_branch_id: number | null
+  primary_branch_id: number | null
 }) {
   const access = await requireHeadCoach()
   if ('error' in access) return access
 
-  const name = input.name.trim()
+  const first_name = input.first_name.trim()
+  const middle_name = input.middle_name.trim() || null
+  const last_name = input.last_name.trim()
+  const name = [first_name, middle_name, last_name].filter(Boolean).join(' ')
   const email = input.email.trim().toLowerCase()
   const contact = input.contact.trim()
-  if (!name || !/^\S+@\S+\.\S+$/.test(email)) return { error: 'Enter a name and valid email address.' }
-  if (input.password.length < 8) return { error: 'Use a temporary password with at least 8 characters.' }
-  if (!['head_coach', 'assistant_coach'].includes(input.role)) return { error: 'Select a valid role.' }
-  if (input.home_branch_id !== null && !Number.isInteger(input.home_branch_id)) return { error: 'Select a valid home branch.' }
+  if (!first_name || !last_name || !contact || !/^\S+@\S+\.\S+$/.test(email)) {
+    return { error: 'Enter first and last name, a contact number, and a valid email address.' }
+  }
+  if (input.primary_branch_id !== null && !Number.isInteger(input.primary_branch_id)) return { error: 'Select a valid primary branch.' }
 
+  const temporaryPassword = generateTemporaryPassword()
   const admin = createAdminClient()
   const { data: authResult, error: authError } = await admin.auth.admin.createUser({
     email,
-    password: input.password,
+    password: temporaryPassword,
     email_confirm: true,
-    user_metadata: { name },
+    user_metadata: { name, first_name, middle_name, last_name },
   })
   if (authError || !authResult.user) return { error: authError?.message ?? 'Could not create the login account.' }
 
   const { error: profileError } = await admin.from('user').insert({
-    name,
-    contact: contact || null,
-    role: input.role,
-    home_branch_id: input.home_branch_id,
+    first_name,
+    middle_name,
+    last_name,
+    contact,
+    role: 'assistant_coach',
+    primary_branch_id: input.primary_branch_id,
     auth_id: authResult.user.id,
   })
 
@@ -55,45 +77,37 @@ export async function createUser(input: {
   }
 
   revalidatePath('/users')
-  return { success: true }
+  return { success: true, temporaryPassword }
 }
 
 export async function updateUser(userId: number, data: {
-  name: string
+  first_name: string
+  middle_name: string
+  last_name: string
   contact: string
-  role: CoachRole
-  home_branch_id: number | null
+  primary_branch_id: number | null
 }) {
   const access = await requireHeadCoach()
   if ('error' in access) return access
-  if (!Number.isInteger(userId) || !data.name.trim()) return { error: 'Enter a valid user name.' }
-  if (!['head_coach', 'assistant_coach'].includes(data.role)) return { error: 'Select a valid role.' }
-  if (data.home_branch_id !== null && !Number.isInteger(data.home_branch_id)) return { error: 'Select a valid home branch.' }
+  const first_name = data.first_name.trim()
+  const middle_name = data.middle_name.trim() || null
+  const last_name = data.last_name.trim()
+  const contact = data.contact.trim()
+  if (!Number.isInteger(userId) || !first_name || !last_name || !contact) {
+    return { error: 'Enter first and last name and a contact number.' }
+  }
+  if (data.primary_branch_id !== null && !Number.isInteger(data.primary_branch_id)) return { error: 'Select a valid primary branch.' }
 
   const admin = createAdminClient()
-  const { data: target, error: lookupError } = await admin
-    .from('user')
-    .select('id, role')
-    .eq('id', userId)
-    .maybeSingle()
-  if (lookupError || !target) return { error: 'User profile not found.' }
-  if (target.id === access.currentUser.id && data.role !== 'head_coach') {
-    return { error: 'You cannot change your own role.' }
-  }
-
-  if (target.role === 'head_coach' && data.role !== 'head_coach') {
-    const { count, error } = await admin.from('user').select('id', { count: 'exact', head: true }).eq('role', 'head_coach')
-    if (error) return { error: error.message }
-    if ((count ?? 0) <= 1) return { error: 'Keep at least one Head Coach account active.' }
-  }
-
-  const { error } = await admin.from('user').update({
-    name: data.name.trim(),
-    contact: data.contact.trim() || null,
-    role: data.role,
-    home_branch_id: data.home_branch_id,
-  }).eq('id', userId)
+  const { data: updatedUser, error } = await admin.from('user').update({
+    first_name,
+    middle_name,
+    last_name,
+    contact,
+    primary_branch_id: data.primary_branch_id,
+  }).eq('id', userId).select('id').maybeSingle()
   if (error) return { error: error.message }
+  if (!updatedUser) return { error: 'User profile not found.' }
 
   revalidatePath('/users')
   return { success: true }

@@ -13,6 +13,21 @@ const ROLE_LABELS: Record<string, string> = {
   assistant_coach: 'Assistant Coach',
 }
 
+type StaffUser = {
+  id: number
+  auth_id: string
+  first_name: string | null
+  middle_name: string | null
+  last_name: string | null
+  contact: string | null
+  role: string
+  primary_branch_id: number | null
+}
+
+function displayName(user: Pick<StaffUser, 'first_name' | 'middle_name' | 'last_name'>) {
+  return [user.first_name, user.middle_name, user.last_name].filter(Boolean).join(' ') || 'Unnamed user'
+}
+
 export default async function UsersPage() {
   const currentUser = await getCurrentUser()
   if (!currentUser) redirect('/login')
@@ -22,12 +37,13 @@ export default async function UsersPage() {
   const supabase = await createClient(cookieStore)
   const [{ data: userData, error }, { data: branches }] = await Promise.all([
     supabase.from('user')
-      .select('id, auth_id, name, contact, role, home_branch_id, branch:branch!user_home_branch_id_fkey(name)')
-      .order('name'),
+      .select('id, auth_id, first_name, middle_name, last_name, contact, role, primary_branch_id')
+      .order('first_name'),
     supabase.from('branch').select('id, name').order('name'),
   ])
 
-  const users = userData as unknown as { id: number; auth_id: string; name: string; contact: string | null; role: string; home_branch_id: number | null; branch: { name: string } | null }[] | null
+  const users = userData as unknown as StaffUser[] | null
+  const branchNameById = new Map((branches ?? []).map((branch) => [Number(branch.id), branch.name]))
 
   if (error) {
     return <DashboardShell title="Users & roles" currentUser={currentUser}><p role="alert" className="text-sm text-red-600">Could not load users: {error.message}</p></DashboardShell>
@@ -50,15 +66,18 @@ export default async function UsersPage() {
     <DashboardShell title="Users & roles" currentUser={currentUser}>
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight text-gray-950">Staff accounts</h2>
-          <p className="mt-1 text-sm text-gray-500">Manage coach access and role assignments. {total} account{total === 1 ? '' : 's'}.</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="text-xl font-semibold tracking-tight text-gray-950">Staff accounts</h2>
+            <span className="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">{total} account{total === 1 ? '' : 's'}</span>
+          </div>
+          <p className="mt-1 text-sm text-gray-500">Manage coach contact details, branch assignments, and login access.</p>
         </div>
         <AddUserModal branches={branches ?? []} />
       </div>
 
       {authLoadError && <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Login status could not be loaded. Confirm the server has SUPABASE_SERVICE_ROLE_KEY configured.</p>}
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-surface">
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
         {total === 0 ? (
           <div className="px-6 py-16 text-center">
             <p className="text-sm font-medium text-gray-800">No staff accounts yet</p>
@@ -70,12 +89,12 @@ export default async function UsersPage() {
             <table className="w-full table-fixed text-left">
               <thead className="border-b border-gray-200 bg-gray-50/70">
                 <tr>
-                  <th className="w-[19%] px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Name</th>
-                  <th className="w-[23%] px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Login email</th>
-                  <th className="w-[17%] px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Role</th>
-                  <th className="w-[17%] px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Home branch</th>
+                  <th className="w-[15%] px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Name</th>
+                  <th className="w-[19%] px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Login email</th>
+                  <th className="w-[18%] px-3 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Role</th>
+                  <th className="w-[15%] px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Primary branch</th>
                   <th className="w-[12%] px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Status</th>
-                  <th className="w-[12%] px-4 py-3"><span className="sr-only">Actions</span></th>
+                  <th className="w-[21%] px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-500">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -83,17 +102,18 @@ export default async function UsersPage() {
                   const authUser = authById.get(user.auth_id)
                   const active = Boolean(authUser && (!authUser.banned_until || Date.parse(authUser.banned_until) <= Date.now()))
                   const isSelf = user.id === currentUser.id
+                  const name = displayName(user)
                   return (
-                    <tr key={user.id} className="hover:bg-gray-50/70">
-                      <td className="px-5 py-4 text-sm font-medium text-gray-900">{user.name}{isSelf && <span className="ml-2 text-xs font-normal text-gray-400">You</span>}</td>
-                      <td className="px-5 py-4 text-sm text-gray-600">{authUser?.email ?? '—'}</td>
-                      <td className="px-5 py-4"><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${user.role === 'head_coach' ? 'bg-red-50 text-red-700' : 'bg-gray-100 text-gray-700'}`}>{ROLE_LABELS[user.role] ?? user.role}</span></td>
-                      <td className="px-5 py-4 text-sm text-gray-600">{user.branch?.name ?? '—'}</td>
-                      <td className="px-5 py-4"><span className={`inline-flex items-center gap-1.5 text-xs font-medium ${active ? 'text-emerald-700' : 'text-gray-400'}`}><span className={`h-1.5 w-1.5 rounded-full ${active ? 'bg-emerald-500' : 'bg-gray-300'}`} />{authUser ? active ? 'Active' : 'Inactive' : 'Unavailable'}</span></td>
+                    <tr id={`user-${user.id}-desktop`} key={user.id} className="hover:bg-gray-50/70">
+                      <td className="px-5 py-4 text-sm font-medium text-gray-950">{name}{isSelf && <span className="ml-2 text-xs font-normal text-gray-400">You</span>}</td>
+                      <td className="px-5 py-4 text-sm font-medium text-gray-950">{authUser?.email ?? '—'}</td>
+                      <td className="whitespace-nowrap px-3 py-4"><span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium text-gray-950 ring-1 ring-inset ${user.role === 'head_coach' ? 'bg-red-50 ring-red-200' : 'bg-blue-50 ring-blue-200'}`}>{ROLE_LABELS[user.role] ?? user.role}</span></td>
+                      <td className="px-5 py-4 text-sm font-medium text-gray-950">{branchNameById.get(Number(user.primary_branch_id)) ?? '—'}</td>
+                      <td className="px-5 py-4"><span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-950"><span className={`h-1.5 w-1.5 rounded-full ${active ? 'bg-emerald-500' : 'bg-gray-300'}`} />{authUser ? active ? 'Active' : 'Inactive' : 'Unavailable'}</span></td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-1">
+                        <div className="flex items-center justify-end gap-2">
                           <EditUserModal user={user} isSelf={isSelf} branches={branches ?? []} />
-                          <DeleteUserButton userId={user.id} userName={user.name} active={active} disabled={isSelf || !authUser} />
+                          <DeleteUserButton userId={user.id} userName={name} active={active} disabled={isSelf || !authUser} />
                         </div>
                       </td>
                     </tr>
@@ -107,23 +127,24 @@ export default async function UsersPage() {
               const authUser = authById.get(user.auth_id)
               const active = Boolean(authUser && (!authUser.banned_until || Date.parse(authUser.banned_until) <= Date.now()))
               const isSelf = user.id === currentUser.id
+              const name = displayName(user)
               return (
-                <article key={user.id} className="p-4 sm:p-5">
+                <article id={`user-${user.id}-mobile`} key={user.id} className="p-4 sm:p-5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <h3 className="break-words text-sm font-semibold text-gray-900">{user.name}{isSelf && <span className="ml-2 text-xs font-normal text-gray-400">You</span>}</h3>
-                      <p className="mt-1 break-all text-xs text-gray-500">{authUser?.email ?? 'Login email unavailable'}</p>
+                      <h3 className="break-words text-sm font-semibold text-gray-900">{name}{isSelf && <span className="ml-2 text-xs font-normal text-gray-400">You</span>}</h3>
+                      <p className="mt-1 break-all text-xs font-medium text-gray-950">{authUser?.email ?? 'Login email unavailable'}</p>
                     </div>
-                    <span className={`inline-flex shrink-0 items-center gap-1.5 text-xs font-medium ${active ? 'text-emerald-700' : 'text-gray-400'}`}><span className={`h-1.5 w-1.5 rounded-full ${active ? 'bg-emerald-500' : 'bg-gray-300'}`} />{authUser ? active ? 'Active' : 'Inactive' : 'Unavailable'}</span>
+                    <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-gray-950"><span className={`h-1.5 w-1.5 rounded-full ${active ? 'bg-emerald-500' : 'bg-gray-300'}`} />{authUser ? active ? 'Active' : 'Inactive' : 'Unavailable'}</span>
                   </div>
                   <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
-                    <div><dt className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Role</dt><dd className="mt-1 text-sm text-gray-700">{ROLE_LABELS[user.role] ?? user.role}</dd></div>
-                    <div><dt className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Home branch</dt><dd className="mt-1 break-words text-sm text-gray-700">{user.branch?.name ?? '—'}</dd></div>
-                    <div><dt className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Contact</dt><dd className="mt-1 break-words text-sm text-gray-700">{user.contact || '—'}</dd></div>
+                    <div><dt className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Role</dt><dd className="mt-1"><span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium text-gray-950 ring-1 ring-inset ${user.role === 'head_coach' ? 'bg-red-50 ring-red-200' : 'bg-blue-50 ring-blue-200'}`}>{ROLE_LABELS[user.role] ?? user.role}</span></dd></div>
+                    <div><dt className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Primary branch</dt><dd className="mt-1 break-words text-sm font-medium text-gray-950">{branchNameById.get(Number(user.primary_branch_id)) ?? '—'}</dd></div>
+                    <div><dt className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Contact</dt><dd className="mt-1 break-words text-sm font-medium text-gray-950">{user.contact || '—'}</dd></div>
                   </dl>
-                  <div className="mt-3 flex justify-end gap-1 border-t border-gray-100 pt-2">
+                  <div className="mt-3 flex justify-end gap-2 border-t border-gray-100 pt-2">
                     <EditUserModal user={user} isSelf={isSelf} branches={branches ?? []} />
-                    <DeleteUserButton userId={user.id} userName={user.name} active={active} disabled={isSelf || !authUser} />
+                    <DeleteUserButton userId={user.id} userName={name} active={active} disabled={isSelf || !authUser} />
                   </div>
                 </article>
               )
