@@ -78,7 +78,7 @@ export default function GlobalSearch({ canSearchStaff }: { canSearchStaff: boole
   }
 
   return (
-    <div ref={wrapperRef} className="relative w-32 shrink-0 sm:w-44 lg:w-56 xl:w-64">
+    <div ref={wrapperRef} className="relative w-52 shrink-0 sm:w-64 xl:w-72">
       <div className="relative">
         <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
         <input
@@ -91,14 +91,14 @@ export default function GlobalSearch({ canSearchStaff }: { canSearchStaff: boole
           aria-label={canSearchStaff ? 'Search students and staff' : 'Search students'}
           aria-controls="global-search-results"
           aria-expanded={isOpen}
-          className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-16 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-red-400 focus:ring-2 focus:ring-red-500/10"
+          className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-red-400 focus:ring-2 focus:ring-red-500/10 xl:pr-12"
         />
         {query ? (
           <button type="button" aria-label="Clear search" onClick={() => { setQuery(''); inputRef.current?.focus() }} className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-1.5 py-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
             <X className="h-4 w-4" />
           </button>
         ) : (
-          <kbd className="absolute right-2 top-1/2 -translate-y-1/2 rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[10px] text-gray-400">Ctrl K</kbd>
+          <kbd className="absolute right-2 top-1/2 hidden -translate-y-1/2 rounded border border-gray-200 bg-gray-50 px-1 py-0.5 text-[9px] text-gray-400 xl:block">Ctrl K</kbd>
         )}
       </div>
 

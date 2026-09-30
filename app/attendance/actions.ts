@@ -29,6 +29,7 @@ export async function saveAttendance(scheduleId: number, records: { student_id: 
   const studentIds = [...new Set(records.map((record) => record.student_id))]
   const { data: students, error: studentsError } = await admin.from('student')
     .select('id')
+    .eq('is_active', true)
     .eq('branch_id', schedule.branch_id)
     .in('id', studentIds)
   if (studentsError) return { error: studentsError.message }

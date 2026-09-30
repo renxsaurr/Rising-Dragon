@@ -37,6 +37,7 @@ export default async function BranchDetailPage({ params }: { params: Promise<{ i
   const { data: students } = await supabase
     .from('student')
     .select('id, first_name, middle_name, last_name, belt_level', { count: 'exact' })
+    .eq('is_active', true)
     .eq('branch_id', branch.id)
 
   // today's schedule for this branch, including the assigned coach's name

@@ -34,6 +34,7 @@ export default async function BranchesPage() {
       const { count: studentCount } = await supabase
         .from('student')
         .select('*', { count: 'exact', head: true })
+        .eq('is_active', true)
         .eq('branch_id', branch.id)
 
       const { count: todayClasses } = await supabase

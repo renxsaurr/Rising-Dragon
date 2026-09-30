@@ -116,7 +116,6 @@ export default function DashboardShell({
   }
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`)
-  const initials = (currentUser?.name ?? '?').split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('')
 
   const navLink = (href: string, label: string, Icon: () => React.ReactElement) => {
     const active = isActive(href)
@@ -193,12 +192,9 @@ export default function DashboardShell({
             <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
               <GlobalSearch canSearchStaff={isHeadCoach} />
               <HeaderNotifications isHeadCoach={isHeadCoach} />
-              <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-surface py-1.5 pl-1.5 pr-2 sm:pr-4">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-red-600 text-[13px] font-semibold text-white">{initials}</span>
-                <span className="hidden leading-tight sm:block">
-                  <span className="block max-w-36 truncate text-[13px] font-semibold capitalize text-gray-900">{currentUser.name}</span>
-                  <span className="block text-[11px] text-gray-500">{isHeadCoach ? 'Head Coach' : 'Assistant Coach'}</span>
-                </span>
+              <div className="hidden min-w-0 flex-col border-l border-gray-200 pl-3 leading-tight md:flex">
+                <span className="block max-w-40 truncate text-[13px] font-semibold capitalize text-gray-900">{currentUser.name}</span>
+                <span className="block text-[11px] text-gray-500">{isHeadCoach ? 'Head Coach' : 'Assistant Coach'}</span>
               </div>
             </div>
           )}

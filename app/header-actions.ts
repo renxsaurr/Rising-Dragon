@@ -60,6 +60,7 @@ export async function searchDirectory(value: string) {
       let query = supabase
         .from('student')
         .select('id, first_name, middle_name, last_name, belt_level, branch_id, branch:branch!student_branch_id_fkey(name)')
+        .eq('is_active', true)
         .ilike(column, pattern)
       if (allowedBranchIds) query = query.in('branch_id', allowedBranchIds)
       return query.limit(5)

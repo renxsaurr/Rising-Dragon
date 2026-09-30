@@ -178,7 +178,7 @@ export default async function DashboardPage() {
       // falls back to 0 if assignments cannot be read
     }
     const { count: studentCount } = assignedBranchIds.length
-      ? await supabase.from('student').select('id', { count: 'exact', head: true }).in('branch_id', assignedBranchIds)
+      ? await supabase.from('student').select('id', { count: 'exact', head: true }).eq('is_active', true).in('branch_id', assignedBranchIds)
       : { count: 0 }
     const coached = schedules.filter((s) => s.date >= windowStart && isOver(s)).length
     const coachedBefore = schedules.filter((s) => s.date >= previousStart && s.date < windowStart).length
@@ -221,7 +221,7 @@ export default async function DashboardPage() {
   }
 
   const [studentsResult, branchesResult, coachesResult] = await Promise.all([
-    supabase.from('student').select('id, first_name, last_name, belt_level, branch_id, enrollment_date, branch:branch!student_branch_id_fkey(name)').order('enrollment_date', { ascending: false }),
+    supabase.from('student').select('id, first_name, last_name, belt_level, branch_id, enrollment_date, branch:branch!student_branch_id_fkey(name)').eq('is_active', true).order('enrollment_date', { ascending: false }),
     supabase.from('branch').select('id, name').order('name'),
     supabase.from('user').select('id', { count: 'exact', head: true }).in('role', ['head_coach', 'assistant_coach']),
   ])

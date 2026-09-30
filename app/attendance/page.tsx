@@ -69,7 +69,7 @@ export default async function AttendancePage({
   const branchIds = [...new Set(schedules.map((schedule) => Number(schedule.branch_id)))]
   const [branchStudentsResult, dayAttendanceResult] = schedules.length
     ? await Promise.all([
-      supabase.from('student').select('branch_id').in('branch_id', branchIds),
+      supabase.from('student').select('branch_id').eq('is_active', true).in('branch_id', branchIds),
       supabase.from('attendance').select('schedule_id').in('schedule_id', schedules.map((schedule) => schedule.id)),
     ])
     : [{ data: [] }, { data: [] }]
@@ -84,7 +84,7 @@ export default async function AttendancePage({
 
   if (selectedSchedule) {
     const [studentsResult, attendanceResult] = await Promise.all([
-      supabase.from('student').select('id, first_name, middle_name, last_name, belt_level').eq('branch_id', selectedSchedule.branch_id).order('last_name').order('first_name'),
+      supabase.from('student').select('id, first_name, middle_name, last_name, belt_level').eq('is_active', true).eq('branch_id', selectedSchedule.branch_id).order('last_name').order('first_name'),
       supabase.from('attendance').select('student_id, status').eq('schedule_id', selectedSchedule.id),
     ])
     if (studentsResult.error) rosterError = studentsResult.error.message
