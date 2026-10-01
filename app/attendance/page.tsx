@@ -53,6 +53,7 @@ export default async function AttendancePage({
     .gte('date', weekDates[0])
     .lte('date', weekDates[6])
     .neq('status', 'Cancelled')
+    .neq('status', 'Draft')
     .order('time_start')
   if (isAssistant) scheduleQuery = scheduleQuery.eq('coach_id', currentUser.id)
   const { data: weekData, error: scheduleError } = await scheduleQuery

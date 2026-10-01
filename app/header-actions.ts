@@ -13,7 +13,7 @@ type StudentMatch = {
   last_name: string | null
   belt_level: string
   branch_id: number
-  branch: { name: string } | null
+  branch: { name: string } | { name: string }[] | null
 }
 
 type StaffMatch = {
@@ -30,8 +30,12 @@ function cleanSearchTerm(value: string) {
   return value.trim().replace(/[%_*(),.\\]/g, ' ').replace(/\s+/g, ' ').slice(0, 80)
 }
 
-function fullName(person: { first_name: string | null; middle_name: string | null; last_name: string | null }) {
-  return [person.first_name, person.middle_name, person.last_name].filter(Boolean).join(' ')
+function fullName(person: { first_name: string | null; middle_name: string | null; last_name: string | null } | null) {
+  return [person?.first_name, person?.middle_name, person?.last_name].filter(Boolean).join(' ')
+}
+
+function firstRelation<T>(value: T | T[] | null) {
+  return Array.isArray(value) ? value[0] ?? null : value
 }
 
 export async function searchDirectory(value: string) {
@@ -84,7 +88,7 @@ export async function searchDirectory(value: string) {
       id: student.id,
       type: 'student' as const,
       name: fullName(student) || 'Unnamed student',
-      detail: `${student.branch?.name ?? 'No branch'} · ${String(student.belt_level).replace(/_/g, ' ')}`,
+      detail: `${firstRelation(student.branch)?.name ?? 'No branch'} · ${String(student.belt_level).replace(/_/g, ' ')}`,
       href: '/students',
     }))
   const staff = [...new Map(staffResults.flatMap((result) => result.data ?? []).map((member) => [member.id, member])).values()]
@@ -123,7 +127,7 @@ export async function getHeaderUpdates() {
     return {
       updates: (data ?? []).map((entry) => ({
         id: `availability-${entry.id}`,
-        title: `${fullName(entry.coach) || 'Assistant Coach'} submitted availability`,
+        title: `${fullName(firstRelation(entry.coach)) || 'Assistant Coach'} submitted availability`,
         detail: `${new Date(`${entry.date}T00:00:00`).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' })} · ${formatTime(entry.time_start)}–${formatTime(entry.time_end)} · ${entry.status}`,
         href: `/scheduling?date=${entry.date}`,
       })),
@@ -138,6 +142,7 @@ export async function getHeaderUpdates() {
     .gte('date', today)
     .lte('date', throughDate)
     .neq('status', 'Cancelled')
+    .neq('status', 'Draft')
     .order('date')
     .order('time_start')
     .limit(6)
@@ -146,7 +151,7 @@ export async function getHeaderUpdates() {
   return {
     updates: (data ?? []).map((schedule) => ({
       id: `schedule-${schedule.id}`,
-      title: `${schedule.branch?.name ?? 'Branch'} class assignment`,
+      title: `${firstRelation(schedule.branch)?.name ?? 'Branch'} class assignment`,
       detail: `${new Date(`${schedule.date}T00:00:00`).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' })} · ${formatTime(schedule.time_start)}–${formatTime(schedule.time_end)}`,
       href: `/attendance?date=${schedule.date}&scheduleId=${schedule.id}`,
     })),

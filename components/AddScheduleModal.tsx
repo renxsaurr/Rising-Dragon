@@ -42,7 +42,7 @@ export default function AddScheduleModal({
   const [coachId, setCoachId] = useState(editingSchedule?.coach_id ?? coaches[0]?.id)
   const [timeStart, setTimeStart] = useState(editingSchedule?.time_start.slice(0, 5) ?? '')
   const [timeEnd, setTimeEnd] = useState(editingSchedule?.time_end.slice(0, 5) ?? '')
-  const [status, setStatus] = useState<Schedule['status']>(editingSchedule?.status ?? 'Scheduled')
+  const [status, setStatus] = useState<Schedule['status']>(editingSchedule?.status === 'Cancelled' || editingSchedule?.status === 'Completed' ? editingSchedule.status : 'Scheduled')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)

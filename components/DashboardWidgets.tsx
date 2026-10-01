@@ -2,7 +2,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 
 export function Card({ title, chip, action, children, className = '', flush = false }: {
-  title: string
+  title: ReactNode
   chip?: string
   action?: ReactNode
   children: ReactNode
@@ -11,8 +11,8 @@ export function Card({ title, chip, action, children, className = '', flush = fa
 }) {
   return (
     <section className={`card ${className}`}>
-      <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-4">
-        <h3 className="text-[15px] font-semibold text-gray-900">{title}</h3>
+      <div className="flex items-center justify-between gap-3 px-5 pb-4 pt-5">
+        <h3 className="flex min-w-0 items-center gap-2.5 text-[15px] font-semibold text-gray-900">{title}</h3>
         {chip && <span className="chip">{chip}</span>}
         {action}
       </div>

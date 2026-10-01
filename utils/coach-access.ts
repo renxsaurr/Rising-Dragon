@@ -10,6 +10,7 @@ export async function getCoachBranchIdsForDate(coachId: number, date: string) {
     .eq('coach_id', coachId)
     .eq('date', date)
     .neq('status', 'Cancelled')
+    .neq('status', 'Draft')
 
   if (error) throw new Error(error.message)
   return [...new Set((data ?? []).map((schedule) => Number(schedule.branch_id)))]

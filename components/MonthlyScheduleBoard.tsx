@@ -13,15 +13,9 @@ function toDateISO(d: Date) {
   return `${year}-${month}-${day}`
 }
 
-const BRANCH_COLORS = [
-  { bg: 'bg-red-50', border: 'border-red-100', dot: 'bg-red-500' },
-  { bg: 'bg-blue-50', border: 'border-blue-100', dot: 'bg-blue-500' },
-  { bg: 'bg-amber-50', border: 'border-amber-100', dot: 'bg-amber-500' },
-  { bg: 'bg-emerald-50', border: 'border-emerald-100', dot: 'bg-emerald-500' },
-  { bg: 'bg-purple-50', border: 'border-purple-100', dot: 'bg-purple-500' },
-]
-function branchColor(branchId: number) {
-  return BRANCH_COLORS[branchId % BRANCH_COLORS.length]
+const BRANCH_COLOR = { bg: 'bg-white', border: 'border-gray-200', dot: 'bg-black' }
+function branchColor(_branchId: number) {
+  return BRANCH_COLOR
 }
 
 function shiftMonth(dateISO: string, months: number) {
@@ -70,12 +64,6 @@ export default function MonthlyScheduleBoard({
 
   const goToMonth = (dateISO: string) => router.push(`/scheduling?view=month&date=${dateISO}`)
 
-  const openAddModal = (dateISO: string) => {
-    setEditingSchedule(null)
-    setModalDate(dateISO)
-    setShowModal(true)
-  }
-
   const openEditModal = (s: Schedule) => {
     setEditingSchedule(s)
     setModalDate(s.date)
@@ -122,12 +110,6 @@ export default function MonthlyScheduleBoard({
               </svg>
             </button>
 
-            {isHeadCoach && <button
-              onClick={() => openAddModal(today)}
-              className="ml-2 bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors"
-            >
-              + Add Schedule
-            </button>}
           </div>
         </div>
 
@@ -146,9 +128,9 @@ export default function MonthlyScheduleBoard({
         )}
       </div>
 
-      <div className="grid grid-cols-7 gap-px bg-gray-200/80 border border-gray-200/80 rounded-lg overflow-hidden">
+      <div className="grid grid-cols-7 gap-px overflow-hidden rounded-2xl border border-gray-200 bg-gray-200 shadow-sm">
         {WEEKDAY_LABELS.map((label) => (
-          <div key={label} className="bg-gray-50 px-2 py-2 text-[11px] font-semibold text-gray-500 text-center">
+          <div key={label} className="bg-white px-2 py-3 text-[11px] font-semibold uppercase tracking-wide text-gray-500 text-center">
             {label}
           </div>
         ))}
@@ -166,13 +148,13 @@ export default function MonthlyScheduleBoard({
           return (
             <div
               key={dateISO}
-              className={`relative min-h-[110px] p-1.5 group ${inMonth ? 'bg-surface' : 'bg-gray-100/60'}`}
+              className={`relative min-h-[110px] p-2 group ${inMonth ? 'bg-white' : 'bg-gray-50'}`}
             >
               <div className="flex items-center justify-between mb-1">
                 <span
                   className={`text-[12px] w-5 h-5 flex items-center justify-center rounded ${
                     isToday
-                      ? 'bg-red-600 text-white font-semibold'
+                      ? 'bg-black text-white font-semibold'
                       : inMonth
                       ? 'text-gray-700'
                       : 'text-gray-300'
@@ -180,13 +162,6 @@ export default function MonthlyScheduleBoard({
                 >
                   {d.getDate()}
                 </span>
-                {isHeadCoach && <button
-                  onClick={() => openAddModal(dateISO)}
-                  className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-600 text-[13px] leading-none transition-opacity"
-                  aria-label="Add schedule"
-                >
-                  +
-                </button>}
               </div>
 
               <div className="space-y-1">
@@ -197,7 +172,7 @@ export default function MonthlyScheduleBoard({
                       key={s.id}
                       onClick={isHeadCoach ? () => openEditModal(s) : undefined}
                       disabled={!isHeadCoach}
-                      className={`w-full text-left ${color.bg} border ${color.border} rounded px-1.5 py-0.5 text-[10px] transition-shadow truncate flex items-center gap-1 ${isHeadCoach ? 'hover:shadow-sm' : 'cursor-default'} ${s.status === 'Cancelled' ? 'opacity-55 line-through' : ''}`}
+                      className={`w-full text-left ${color.bg} border ${color.border} rounded-md px-1.5 py-1 text-[10px] transition-shadow truncate flex items-center gap-1 ${isHeadCoach ? 'hover:border-black hover:shadow-sm' : 'cursor-default'} ${s.status === 'Cancelled' ? 'opacity-55 line-through' : ''}`}
                     >
                       <span className={`w-1.5 h-1.5 rounded-full ${color.dot} shrink-0`} />
                       <span className="truncate text-black">{s.coach?.name ?? 'Unassigned'} · {s.time_start.slice(0, 5)}</span>
@@ -207,7 +182,7 @@ export default function MonthlyScheduleBoard({
                 {overflow > 0 && (
                   <button
                       onClick={() => setExpandedDate(dateISO)}
-                    className="text-[10px] text-gray-400 hover:text-red-600 pl-1"
+                    className="text-[10px] text-gray-500 hover:text-black pl-1"
                   >
                     +{overflow} more
                   </button>

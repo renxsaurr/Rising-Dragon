@@ -48,6 +48,8 @@ export default async function BranchDetailPage({ params }: { params: Promise<{ i
     .select('time_start, time_end, coach_id, coach:user!class_schedule_coach_id_fkey(name)')
     .eq('branch_id', branch.id)
     .eq('date', dateInTimeZone())
+    .neq('status', 'Draft')
+    .neq('status', 'Cancelled')
     .order('time_start')
   const todaySchedule = todayData as unknown as { time_start: string; time_end: string; coach_id: number; coach: { name: string } | null }[] | null
 

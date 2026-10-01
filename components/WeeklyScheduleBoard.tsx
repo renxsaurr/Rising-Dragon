@@ -24,15 +24,9 @@ function toDateISO(d: Date) {
   return `${year}-${month}-${day}`
 }
 
-const BRANCH_COLORS = [
-  { bg: 'bg-red-50', border: 'border-red-100', dot: 'bg-red-500' },
-  { bg: 'bg-blue-50', border: 'border-blue-100', dot: 'bg-blue-500' },
-  { bg: 'bg-amber-50', border: 'border-amber-100', dot: 'bg-amber-500' },
-  { bg: 'bg-emerald-50', border: 'border-emerald-100', dot: 'bg-emerald-500' },
-  { bg: 'bg-purple-50', border: 'border-purple-100', dot: 'bg-purple-500' },
-]
-function branchColor(branchId: number) {
-  return BRANCH_COLORS[branchId % BRANCH_COLORS.length]
+const BRANCH_COLOR = { bg: 'bg-white', border: 'border-gray-200', dot: 'bg-black' }
+function branchColor(_branchId: number) {
+  return BRANCH_COLOR
 }
 
 function shiftDate(dateStr: string, days: number) {
@@ -123,12 +117,6 @@ export default function WeeklyScheduleBoard({
               </svg>
             </button>
 
-            {isHeadCoach && <button
-              onClick={() => { setEditingSchedule(null); setModalDate(isCurrentWeek ? today : weekDates[0]); setShowModal(true) }}
-              className="ml-2 bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors"
-            >
-              + Add Schedule
-            </button>}
           </div>
         </div>
 
@@ -157,22 +145,15 @@ export default function WeeklyScheduleBoard({
           return (
             <div
               key={date}
-              className={`group rounded-lg p-3 min-h-[180px] border ${
-                isToday ? 'bg-red-50/40 border-red-200' : 'bg-surface border-gray-200/80'
+              className={`group rounded-xl p-3 min-h-[180px] border bg-white shadow-sm transition-colors ${
+                isToday ? 'border-black ring-1 ring-black' : 'border-gray-200 hover:border-gray-300'
               }`}
             >
               <div className="flex items-center justify-between mb-2">
-                <p className={`font-semibold text-[12px] flex items-center gap-1.5 ${isToday ? 'text-red-600' : 'text-gray-700'}`}>
+                <p className={`font-semibold text-[12px] flex items-center gap-1.5 ${isToday ? 'text-black' : 'text-gray-700'}`}>
                   {dayLabel(date)}
-                  {isToday && <span className="w-1.5 h-1.5 rounded-full bg-red-600" />}
+                  {isToday && <span className="w-1.5 h-1.5 rounded-full bg-black" />}
                 </p>
-                {isHeadCoach && <button
-                  onClick={() => { setEditingSchedule(null); setModalDate(date); setShowModal(true) }}
-                  className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-600 text-[13px] leading-none transition-opacity"
-                  aria-label="Add schedule"
-                >
-                  +
-                </button>}
               </div>
 
               <div className="space-y-2">
@@ -183,7 +164,7 @@ export default function WeeklyScheduleBoard({
                       key={s.id}
                       onClick={isHeadCoach ? () => { setEditingSchedule(s); setModalDate(s.date); setShowModal(true) } : undefined}
                       disabled={!isHeadCoach}
-                      className={`w-full text-left ${color.bg} border ${color.border} rounded p-2 text-[11px] transition-shadow ${isHeadCoach ? 'hover:shadow-sm' : 'cursor-default'} ${s.status === 'Cancelled' ? 'opacity-55' : ''}`}
+                      className={`w-full text-left ${color.bg} border ${color.border} rounded-lg p-2 text-[11px] transition-shadow ${isHeadCoach ? 'hover:border-black hover:shadow-sm' : 'cursor-default'} ${s.status === 'Cancelled' ? 'opacity-55' : ''}`}
                     >
                       <div className="flex items-center gap-1.5">
                         <span className={`w-1.5 h-1.5 rounded-full ${color.dot} shrink-0`} />
@@ -192,7 +173,7 @@ export default function WeeklyScheduleBoard({
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <p className="text-gray-500 truncate">{s.coach?.name ?? 'Unassigned'}</p>
                       </div>
-                      <p className="text-gray-500 mt-0.5">{s.time_start.slice(0, 5)} – {s.time_end.slice(0, 5)}{s.status !== 'Scheduled' ? ` · ${s.status}` : ''}</p>
+                      <p className="mt-0.5 text-gray-500">{s.time_start.slice(0, 5)} – {s.time_end.slice(0, 5)}{s.status !== 'Scheduled' ? ` · ${s.status}` : ''}</p>
                     </button>
                   )
                 })}

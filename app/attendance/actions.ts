@@ -21,6 +21,7 @@ export async function saveAttendance(scheduleId: number, records: { student_id: 
     .maybeSingle()
   if (scheduleError || !schedule) return { error: 'Class session not found.' }
   if (schedule.status === 'Cancelled') return { error: 'Attendance cannot be recorded for a cancelled class.' }
+  if (schedule.status === 'Draft') return { error: 'This class session is still a draft. The Head Coach must publish it before attendance can be recorded.' }
   if (schedule.date > dateInTimeZone()) return { error: 'Attendance can only be recorded for today or a past class.' }
   if (currentUser.role === 'assistant_coach' && Number(schedule.coach_id) !== currentUser.id) {
     return { error: 'You can only mark attendance for your assigned classes.' }

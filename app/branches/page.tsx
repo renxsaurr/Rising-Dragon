@@ -42,6 +42,8 @@ export default async function BranchesPage() {
         .select('*', { count: 'exact', head: true })
         .eq('branch_id', branch.id)
         .eq('date', dateInTimeZone())
+        .neq('status', 'Draft')
+        .neq('status', 'Cancelled')
 
       return { ...branch, studentCount: studentCount ?? 0, todayClasses: todayClasses ?? 0 }
     })
