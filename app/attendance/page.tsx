@@ -109,7 +109,7 @@ export default async function AttendancePage({
             <h2 className="ml-1 text-base font-semibold text-gray-950">{monthLabel}</h2>
           </div>
           <div className="flex items-center gap-2">
-            {date !== today && <Link href="/attendance" className="h-9 rounded-lg bg-red-600 px-3.5 text-sm font-semibold leading-9 text-white hover:bg-red-700">Today</Link>}
+            {date !== today && <Link href="/attendance" className="h-9 rounded-lg bg-black px-3.5 text-sm font-semibold leading-9 text-white hover:bg-gray-800">Today</Link>}
             <AttendanceDatePicker date={date} />
           </div>
         </div>

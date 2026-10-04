@@ -144,7 +144,7 @@ export default function EditUserModal({
               {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
               <div className="flex justify-end gap-2 border-t border-gray-100 pt-4">
                 <button type="button" onClick={closeModal} disabled={loading} className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">Cancel</button>
-                <button type="submit" disabled={loading} className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50">{loading ? 'Saving…' : 'Save changes'}</button>
+                <button type="submit" disabled={loading} className="rounded-lg bg-black px-4 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50">{loading ? 'Saving…' : 'Save changes'}</button>
               </div>
             </form>
           </section>

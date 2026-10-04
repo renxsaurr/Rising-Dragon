@@ -4,7 +4,7 @@ import { cookies } from 'next/headers'
 import { createClient } from '@/utils/supabase/server'
 import { getCurrentUser } from '@/utils/getCurrentUser'
 import { getCoachBranchIdsForDate } from '@/utils/coach-access'
-import { addDays, dateInTimeZone, formatTime } from '@/utils/dates'
+import { addDays, dateInTimeZone, formatTimeRange } from '@/utils/dates'
 
 type StudentMatch = {
   id: number
@@ -113,27 +113,7 @@ export async function getHeaderUpdates() {
   const today = dateInTimeZone()
   const throughDate = addDays(today, 7)
 
-  if (user.role === 'head_coach') {
-    const { data, error } = await supabase
-      .from('coach_availability')
-      .select('id, date, time_start, time_end, status, coach:user!coach_availability_coach_id_fkey(first_name, middle_name, last_name)')
-      .gte('date', today)
-      .lte('date', throughDate)
-      .order('date')
-      .order('time_start')
-      .limit(6)
-
-    if (error) return { updates: [], error: 'Could not load availability updates.' }
-    return {
-      updates: (data ?? []).map((entry) => ({
-        id: `availability-${entry.id}`,
-        title: `${fullName(firstRelation(entry.coach)) || 'Assistant Coach'} submitted availability`,
-        detail: `${new Date(`${entry.date}T00:00:00`).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' })} · ${formatTime(entry.time_start)}–${formatTime(entry.time_end)} · ${entry.status}`,
-        href: `/scheduling?date=${entry.date}`,
-      })),
-      error: null,
-    }
-  }
+  if (user.role === 'head_coach') return { updates: [], error: null }
 
   const { data, error } = await supabase
     .from('class_schedule')
@@ -152,7 +132,7 @@ export async function getHeaderUpdates() {
     updates: (data ?? []).map((schedule) => ({
       id: `schedule-${schedule.id}`,
       title: `${firstRelation(schedule.branch)?.name ?? 'Branch'} class assignment`,
-      detail: `${new Date(`${schedule.date}T00:00:00`).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' })} · ${formatTime(schedule.time_start)}–${formatTime(schedule.time_end)}`,
+      detail: `${new Date(`${schedule.date}T00:00:00`).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' })} · ${formatTimeRange(schedule.time_start, schedule.time_end)}`,
       href: `/attendance?date=${schedule.date}&scheduleId=${schedule.id}`,
     })),
     error: null,

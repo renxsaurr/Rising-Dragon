@@ -1,6 +1,6 @@
 'use client'
 
-import { ReactNode } from 'react'
+import { MouseEvent, ReactNode, useEffect, useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
@@ -77,6 +77,13 @@ type CurrentUser = {
   primary_branch_id: number | null
 } | null
 
+// Last known user, so loading screens can render the same sidebar while the next page is fetched.
+let lastKnownUser: CurrentUser = null
+
+export function getLastKnownUser() {
+  return lastKnownUser
+}
+
 export default function DashboardShell({
   title,
   currentUser,
@@ -86,6 +93,10 @@ export default function DashboardShell({
   currentUser: CurrentUser
   children: ReactNode
 }) {
+  useEffect(() => {
+    if (currentUser) lastKnownUser = currentUser
+  }, [currentUser])
+
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
@@ -93,29 +104,45 @@ export default function DashboardShell({
   const isHeadCoach = currentUser?.role === 'head_coach'
 
   const workspaceItems = [
-    { label: 'Students', href: '/students', icon: UsersIcon, show: true, soon: false },
+    { label: isHeadCoach ? 'Students' : 'Student roster', href: '/students', icon: UsersIcon, show: true, soon: false },
     { label: 'Attendance', href: '/attendance', icon: CheckSquareIcon, show: true, soon: false },
     { label: 'Schedule', href: '/scheduling', icon: CalendarIcon, show: true, soon: false },
     { label: 'Branches', href: '/branches', icon: BuildingIcon, show: isHeadCoach, soon: false },
   ]
 
   const reportItems = [
-    { label: 'Payments', href: '/payments', icon: CreditCardIcon, show: true, soon: true },
-    { label: 'Promotions', href: '/promotions', icon: AwardIcon, show: true, soon: true },
+    { label: 'Payments', href: '/payments', icon: CreditCardIcon, show: isHeadCoach, soon: true },
+    { label: 'Promotions', href: '/promotions', icon: AwardIcon, show: isHeadCoach, soon: true },
   ]
 
   const systemItems = [
-    { label: 'Notifications', href: '/notifications', icon: BellIcon, show: true, soon: true },
-    { label: 'Settings', href: '/settings', icon: SettingsIcon, show: true, soon: true },
+    { label: 'Notifications', href: '/notifications', icon: BellIcon, show: isHeadCoach, soon: true },
+    { label: 'Settings', href: '/settings', icon: SettingsIcon, show: isHeadCoach, soon: true },
     { label: 'Users', href: '/users', icon: IdCardIcon, show: isHeadCoach, soon: false },
   ]
 
   const handleLogout = async () => {
+    lastKnownUser = null
     await supabase.auth.signOut()
     router.push('/login')
   }
 
-  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`)
+  // Highlight the clicked link immediately instead of waiting for the server render to finish.
+  const [pendingHref, setPendingHref] = useState<string | null>(null)
+  const [lastPathname, setLastPathname] = useState(pathname)
+  if (lastPathname !== pathname) {
+    setLastPathname(pathname)
+    setPendingHref(null)
+  }
+
+  const matches = (path: string, href: string) => path === href || path.startsWith(`${href}/`)
+  const isActive = (href: string) => (pendingHref ? matches(pendingHref, href) : matches(pathname, href))
+
+  const handleNavClick = (href: string) => (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return
+    if (pathname === href) return
+    setPendingHref(href)
+  }
 
   const navLink = (href: string, label: string, Icon: () => React.ReactElement) => {
     const active = isActive(href)
@@ -123,6 +150,7 @@ export default function DashboardShell({
       <Link
         key={href}
         href={href}
+        onClick={handleNavClick(href)}
         aria-current={active ? 'page' : undefined}
         className={`relative flex items-center gap-3 rounded-lg px-3.5 py-2.5 text-[14px] font-medium transition-colors ${
           active ? 'bg-red-600 text-white' : 'text-gray-400 hover:bg-white/5 hover:text-white'
@@ -153,7 +181,7 @@ export default function DashboardShell({
   return (
     <div className="flex h-dvh w-full overflow-hidden bg-white">
       <aside className="flex h-full w-64 shrink-0 flex-col bg-black">
-        <Link href="/dashboard" className="flex items-center gap-3 px-6 pt-7 pb-6">
+        <Link href="/dashboard" onClick={handleNavClick('/dashboard')} className="flex items-center gap-3 px-6 pt-7 pb-6">
           <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full ring-2 ring-white/80">
             <Image src="/logo.png" alt="" fill sizes="44px" className="scale-[1.18] object-cover" priority />
           </span>
@@ -166,10 +194,12 @@ export default function DashboardShell({
         <nav className="no-scrollbar flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3">
           {navLink('/dashboard', 'Dashboard', GridIcon)}
           {workspaceItems.filter((item) => item.show).map(renderItem)}
-          {sectionLabel('Report')}
-          {reportItems.filter((item) => item.show).map(renderItem)}
-          {sectionLabel('System')}
-          {systemItems.filter((item) => item.show).map(renderItem)}
+          {isHeadCoach && <>
+            {sectionLabel('Report')}
+            {reportItems.filter((item) => item.show).map(renderItem)}
+            {sectionLabel('System')}
+            {systemItems.filter((item) => item.show).map(renderItem)}
+          </>}
         </nav>
 
         <div className="p-4">
@@ -199,7 +229,10 @@ export default function DashboardShell({
             </div>
           )}
         </header>
-        <main className="no-scrollbar min-h-0 flex-1 overflow-y-auto px-8 pb-8">{children}</main>
+        <main
+          aria-busy={pendingHref ? true : undefined}
+          className={`no-scrollbar min-h-0 flex-1 overflow-y-auto px-8 pb-8 transition-opacity ${pendingHref ? 'opacity-60' : ''}`}
+        >{children}</main>
       </div>
     </div>
   )

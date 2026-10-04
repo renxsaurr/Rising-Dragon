@@ -3,8 +3,6 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { getCurrentUser } from '@/utils/getCurrentUser'
-import { getCoachBranchIdsForDate } from '@/utils/coach-access'
-import { dateInTimeZone } from '@/utils/dates'
 
 export type StudentFormData = {
   first_name: string
@@ -48,6 +46,7 @@ function isValidDate(value: string) {
 export async function saveStudent(studentId: number | null, input: StudentFormData) {
   const currentUser = await getCurrentUser()
   if (!currentUser) return { error: 'Please sign in to manage student records.' }
+  if (currentUser.role !== 'head_coach') return { error: 'Only the Head Coach can add or edit student profiles.' }
   if (!input || typeof input !== 'object') return { error: 'Student details are invalid.' }
 
   const payload: StudentFormData = {
@@ -80,20 +79,6 @@ export async function saveStudent(studentId: number | null, input: StudentFormDa
     return { error: 'Student record not found.' }
   }
 
-  let allowedBranchIds: number[] | null = null
-  if (currentUser.role === 'assistant_coach') {
-    try {
-      allowedBranchIds = await getCoachBranchIdsForDate(currentUser.id, dateInTimeZone())
-    } catch {
-      return { error: 'Unable to verify your class assignment right now.' }
-    }
-    if (!allowedBranchIds.includes(payload.branch_id)) {
-      return { error: 'You can only add or edit students in a branch where you are scheduled today.' }
-    }
-  } else if (currentUser.role !== 'head_coach') {
-    return { error: 'You do not have permission to manage student records.' }
-  }
-
   const admin = createAdminClient()
 
   const { data: branch, error: branchError } = await admin
@@ -112,9 +97,6 @@ export async function saveStudent(studentId: number | null, input: StudentFormDa
 
     if (existingError || !existingStudent) return { error: 'Student record not found.' }
     if (!existingStudent.is_active) return { error: 'Restore this student before editing their record.' }
-    if (allowedBranchIds && !allowedBranchIds.includes(Number(existingStudent.branch_id))) {
-      return { error: 'You can only edit students in a branch where you are scheduled today.' }
-    }
 
     const { error } = await admin.from('student').update(payload).eq('id', studentId)
     if (error) return { error: error.message }

@@ -38,10 +38,11 @@ export default async function StudentsPage({
   const currentUser = await getCurrentUser()
   if (!currentUser) redirect('/login')
   if (!['head_coach', 'assistant_coach'].includes(currentUser.role)) redirect('/scheduling')
+  const isHeadCoach = currentUser.role === 'head_coach'
 
   const params = await searchParams
   const requestedStatus = Array.isArray(params.status) ? params.status[0] : params.status
-  const statusFilter = currentUser.role === 'head_coach' && ['active', 'archived', 'all'].includes(requestedStatus ?? '')
+  const statusFilter = isHeadCoach && ['active', 'archived', 'all'].includes(requestedStatus ?? '')
     ? requestedStatus as 'active' | 'archived' | 'all'
     : 'active'
 
@@ -56,7 +57,8 @@ export default async function StudentsPage({
   }
 
   let branchQuery = supabase.from('branch').select('id, name').order('name')
-  if (assignedBranchIds) branchQuery = branchQuery.in('id', assignedBranchIds)
+  if (assignedBranchIds?.length) branchQuery = branchQuery.in('id', assignedBranchIds)
+  else if (assignedBranchIds) branchQuery = branchQuery.eq('id', -1)
   const { data: branches } = await branchQuery
 
   const requestedBranchIds = Array.isArray(params.branch) ? params.branch : params.branch ? [params.branch] : []
@@ -67,12 +69,15 @@ export default async function StudentsPage({
 
   let studentQuery = supabase
     .from('student')
-    .select('*, branch:branch!student_branch_id_fkey(name)')
+    .select(isHeadCoach
+      ? '*, branch:branch!student_branch_id_fkey(name)'
+      : 'id, first_name, middle_name, last_name, belt_level, branch_id, is_active, branch:branch!student_branch_id_fkey(name)')
     .order('last_name')
     .order('first_name')
   if (statusFilter === 'active') studentQuery = studentQuery.eq('is_active', true)
   if (statusFilter === 'archived') studentQuery = studentQuery.eq('is_active', false)
-  if (assignedBranchIds) studentQuery = studentQuery.in('branch_id', assignedBranchIds)
+  if (assignedBranchIds?.length) studentQuery = studentQuery.in('branch_id', assignedBranchIds)
+  else if (assignedBranchIds) studentQuery = studentQuery.eq('branch_id', -1)
   if (selectedBranchIds.length > 0) studentQuery = studentQuery.in('branch_id', selectedBranchIds.map(Number))
   if (selectedBelts.length > 0) studentQuery = studentQuery.in('belt_level', selectedBelts)
   const { data: students, error } = await studentQuery
@@ -86,19 +91,21 @@ export default async function StudentsPage({
   }
 
   const total = students?.length ?? 0
+  const assistantHasNoSchedule = currentUser.role === 'assistant_coach' && (assignedBranchIds?.length ?? 0) === 0
+  const summary = assistantHasNoSchedule
+    ? 'Your roster appears here when you are scheduled at a branch.'
+    : isHeadCoach
+      ? `${total} student record${total === 1 ? ' matches' : 's match'} the selected filters.`
+      : `${total} student${total === 1 ? '' : 's'} at your assigned branches today.`
 
   return (
     <DashboardShell title="Students" currentUser={currentUser}>
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight text-gray-950">{statusFilter === 'archived' ? 'Archived students' : statusFilter === 'all' ? 'All students' : 'Active students'}</h2>
-          <p className="text-[13px] text-gray-500 mt-0.5">
-            {total} student record{total === 1 ? ' matches' : 's match'} the selected filters.
-          </p>
+          <h2 className="text-xl font-semibold tracking-tight text-gray-950">{isHeadCoach ? statusFilter === 'archived' ? 'Archived students' : statusFilter === 'all' ? 'All students' : 'Active students' : 'Assigned branch roster'}</h2>
+          <p className="text-[13px] text-gray-500 mt-0.5">{summary}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          {statusFilter !== 'archived' && (currentUser.role === 'head_coach' || (branches?.length ?? 0) > 0) && <StudentModal branches={branches ?? []} />}
-        </div>
+        {isHeadCoach && statusFilter !== 'archived' && <StudentModal branches={branches ?? []} />}
       </div>
 
       <StudentFilters
@@ -113,31 +120,32 @@ export default async function StudentsPage({
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
         {total === 0 ? (
           <div className="px-6 py-16 text-center">
-            <p className="text-sm font-medium text-gray-700">{total === 0 && statusFilter === 'archived' ? 'No archived students' : 'No students match these filters'}</p>
-            <p className="mt-1 text-[13px] text-gray-500">{total === 0 && statusFilter === 'archived' ? 'Archived student records will appear here.' : 'Try changing or clearing the filters.'}</p>
+            <p className="text-sm font-medium text-gray-700">{assistantHasNoSchedule ? 'No branch assigned today' : total === 0 && statusFilter === 'archived' ? 'No archived students' : 'No students match these filters'}</p>
+            <p className="mt-1 text-[13px] text-gray-500">{assistantHasNoSchedule ? 'Your roster appears here when you are scheduled at a branch.' : total === 0 && statusFilter === 'archived' ? 'Archived student records will appear here.' : 'Try changing or clearing the filters.'}</p>
           </div>
         ) : (
           <>
             <div className="hidden xl:block">
               <table className="w-full table-fixed border-collapse text-left">
                 <colgroup>
-                  <col className="w-[16%]" />
-                  <col className="w-[18%]" />
-                  <col className="w-[9%]" />
-                  <col className="w-[11%]" />
-                  <col className="w-[16%]" />
-                  <col className="w-[11%]" />
-                  <col className="w-[19%]" />
+                  {isHeadCoach ? <>
+                    <col className="w-[16%]" /><col className="w-[18%]" /><col className="w-[9%]" />
+                    <col className="w-[11%]" /><col className="w-[16%]" /><col className="w-[11%]" /><col className="w-[19%]" />
+                  </> : <>
+                    <col className="w-[46%]" /><col className="w-[24%]" /><col className="w-[30%]" />
+                  </>}
                 </colgroup>
             <thead className="border-b border-gray-200 bg-gray-50/70">
               <tr>
                 <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Student</th>
                 <th className="px-3 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Belt level</th>
                 <th className="px-3 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Branch</th>
-                <th className="px-3 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Guardian</th>
-                <th className="px-3 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Guardian contact</th>
-                <th className="px-3 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Enrolled</th>
-                <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-500">Actions</th>
+                {isHeadCoach && <>
+                  <th className="px-3 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Guardian</th>
+                  <th className="px-3 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Guardian contact</th>
+                  <th className="px-3 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Enrolled</th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-500">Actions</th>
+                </>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -160,6 +168,7 @@ export default async function StudentsPage({
                       <td className="whitespace-normal break-words px-3 py-4 text-sm font-medium text-gray-950">
                         {student.branch?.name || '—'}
                       </td>
+                      {isHeadCoach && <>
                       <td className="whitespace-normal break-words px-3 py-4 text-sm font-medium text-gray-950">
                         {student.guardian_name || '—'}
                       </td>
@@ -194,6 +203,7 @@ export default async function StudentsPage({
                           />}
                         </div>
                       </td>
+                      </>}
                     </tr>
                   )
                 })}
@@ -212,19 +222,19 @@ export default async function StudentsPage({
                   <div id={`student-${student.id}-mobile`} key={student.id} className="p-4 sm:p-5">
                     <div className="flex items-start justify-between gap-3">
                       <p className="min-w-0 break-words text-sm font-medium text-gray-950">{fullName}</p>
-                      <div className="flex shrink-0 items-center gap-2">
+                      {isHeadCoach && <div className="flex shrink-0 items-center gap-2">
                         {student.is_active && <StudentModal
                           branches={branches ?? []}
                           student={student}
                           trigger={<button type="button" className="inline-flex items-center justify-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs font-medium text-gray-900 hover:bg-gray-50"><Pencil size={13} />Edit</button>}
                         />}
-                        {currentUser.role === 'head_coach' && <StudentStatusButton
+                        <StudentStatusButton
                           studentId={student.id}
                           studentName={fullName}
                           isActive={student.is_active}
                           className={`inline-flex items-center justify-center rounded-lg border bg-white px-2.5 py-2 text-xs font-medium ${student.is_active ? 'border-red-200 text-red-700 hover:bg-red-50' : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'}`}
-                        />}
-                      </div>
+                        />
+                      </div>}
                     </div>
 
                     <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
@@ -240,6 +250,7 @@ export default async function StudentsPage({
                         <dt className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Branch</dt>
                         <dd className="mt-1 break-words text-sm font-medium text-gray-950">{student.branch?.name || '—'}</dd>
                       </div>
+                      {isHeadCoach && <>
                       <div className="min-w-0">
                         <dt className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Guardian Name</dt>
                         <dd className="mt-1 break-words text-sm font-medium text-gray-950">{student.guardian_name || '—'}</dd>
@@ -262,6 +273,7 @@ export default async function StudentsPage({
                           })}
                         </dd>
                       </div>
+                      </>}
                     </dl>
                   </div>
                 )

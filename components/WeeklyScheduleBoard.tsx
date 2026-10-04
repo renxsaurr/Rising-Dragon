@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import ScheduleModal from './AddScheduleModal'
 import { Toast } from './Toast'
+import { formatTimeRange } from '@/utils/dates'
 
 export type Schedule = {
   id: number
@@ -119,20 +120,6 @@ export default function WeeklyScheduleBoard({
 
           </div>
         </div>
-
-        {branches.length > 0 && (
-          <div className="flex flex-wrap items-center gap-3 mt-4">
-            {branches.map((b) => {
-              const color = branchColor(b.id)
-              return (
-                <div key={b.id} className="flex items-center gap-1.5">
-                  <span className={`w-2 h-2 rounded-full ${color.dot}`} />
-                  <span className="text-[12px] text-gray-500">{b.name}</span>
-                </div>
-              )
-            })}
-          </div>
-        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
@@ -173,7 +160,7 @@ export default function WeeklyScheduleBoard({
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <p className="text-gray-500 truncate">{s.coach?.name ?? 'Unassigned'}</p>
                       </div>
-                      <p className="mt-0.5 text-gray-500">{s.time_start.slice(0, 5)} – {s.time_end.slice(0, 5)}{s.status !== 'Scheduled' ? ` · ${s.status}` : ''}</p>
+                      <p className="mt-0.5 text-gray-500">{formatTimeRange(s.time_start, s.time_end)}{s.status !== 'Scheduled' ? ` · ${s.status}` : ''}</p>
                     </button>
                   )
                 })}

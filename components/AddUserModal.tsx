@@ -76,7 +76,7 @@ export default function AddUserModal({ branches }: { branches: Branch[] }) {
 
   return (
     <>
-      <button onClick={() => setIsOpen(true)} className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700">
+      <button onClick={() => setIsOpen(true)} className="inline-flex items-center gap-2 rounded-lg bg-black px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-gray-800">
         <span aria-hidden="true">+</span> Add user
       </button>
 
@@ -96,7 +96,7 @@ export default function AddUserModal({ branches }: { branches: Branch[] }) {
                 {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
                 <div className="flex justify-end gap-2 border-t border-gray-100 pt-4">
                   <button type="button" onClick={closeModal} className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">Done</button>
-                  <button type="button" onClick={copyTemporaryPassword} className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700">{copied ? 'Copied' : 'Copy password'}</button>
+                  <button type="button" onClick={copyTemporaryPassword} className="rounded-lg bg-black px-4 py-2.5 text-sm font-semibold text-white hover:bg-gray-800">{copied ? 'Copied' : 'Copy password'}</button>
                 </div>
               </div>
             ) : (
@@ -128,7 +128,7 @@ export default function AddUserModal({ branches }: { branches: Branch[] }) {
               {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
               <div className="flex justify-end gap-2 border-t border-gray-100 pt-4">
                 <button type="button" onClick={closeModal} disabled={loading} className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">Cancel</button>
-                <button type="submit" disabled={loading} className="rounded-lg bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50">{loading ? 'Creating…' : 'Create account'}</button>
+                <button type="submit" disabled={loading} className="rounded-lg bg-black px-4 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50">{loading ? 'Creating…' : 'Create account'}</button>
               </div>
             </form>
             )}

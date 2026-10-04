@@ -3,7 +3,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import DashboardShell from '@/components/DashboardShell'
 import ScheduleBoard from '@/components/ScheduleBoard'
-import AvailabilityPanel, { type AvailabilityEntry } from '@/components/AvailabilityPanel'
+import AvailabilityPanel from '@/components/AvailabilityPanel'
 import SchedulePlanningPanel, { type WeeklyClassTemplate } from '@/components/SchedulePlanningPanel'
 import { getCurrentUser } from '@/utils/getCurrentUser'
 import type { Schedule } from '@/components/WeeklyScheduleBoard'
@@ -91,29 +91,58 @@ export default async function SchedulingPage({
   const weekDates = getWeekDates(baseDate)
   const monthDates = getMonthDates(baseDate)
   const rangeDates = view === 'month' ? monthDates : weekDates
-  let sessionSync = { created: 0, conflicts: [] as { date: string; branch: string; coach: string; reason: string }[], error: undefined as string | undefined }
+  let sessionSyncPromise: Promise<{ created: number; conflicts: { date: string; branch: string; coach: string; reason: string }[]; error?: string }> = Promise.resolve({ created: 0, conflicts: [] })
   if (currentUser.role === 'head_coach') {
-    const horizonEnd = addDaysISO(dateInTimeZone(), 27)
-    sessionSync = await ensureWeeklySessions(dateInTimeZone(), horizonEnd)
-    const viewStart = rangeDates[0] < dateInTimeZone() ? dateInTimeZone() : rangeDates[0]
-    const viewEnd = rangeDates[rangeDates.length - 1]
-    if (viewEnd > horizonEnd) {
-      const additionalSync = viewStart > horizonEnd
-        ? await ensureWeeklySessions(viewStart, viewEnd)
-        : await ensureWeeklySessions(addDaysISO(horizonEnd, 1), viewEnd)
-      sessionSync = {
-        created: sessionSync.created + additionalSync.created,
-        conflicts: [...sessionSync.conflicts, ...additionalSync.conflicts],
-        error: sessionSync.error ?? additionalSync.error,
+    sessionSyncPromise = (async () => {
+      const horizonEnd = addDaysISO(dateInTimeZone(), 27)
+      let sync = await ensureWeeklySessions(dateInTimeZone(), horizonEnd)
+      const viewStart = rangeDates[0] < dateInTimeZone() ? dateInTimeZone() : rangeDates[0]
+      const viewEnd = rangeDates[rangeDates.length - 1]
+      if (viewEnd > horizonEnd) {
+        const additionalSync = viewStart > horizonEnd
+          ? await ensureWeeklySessions(viewStart, viewEnd)
+          : await ensureWeeklySessions(addDaysISO(horizonEnd, 1), viewEnd)
+        sync = {
+          created: sync.created + additionalSync.created,
+          conflicts: [...sync.conflicts, ...additionalSync.conflicts],
+          error: sync.error ?? additionalSync.error,
+        }
       }
-    }
+      return sync
+    })()
   }
 
-  const { data: branches } = await supabase.from('branch').select('id, name').order('name')
-  const { data: coachRows } = await supabase.from('user')
+  const branchesPromise = supabase.from('branch').select('id, name').order('name')
+  const coachesPromise = supabase.from('user')
     .select('id, first_name, middle_name, last_name, role, primary_branch_id, primary_branch:branch!user_primary_branch_id_fkey(name)')
     .in('role', ['head_coach', 'assistant_coach'])
     .order('first_name')
+  let weeklyAvailabilityQuery = supabase
+    .from('coach_weekly_availability')
+    .select('id, coach_id, weekday, time_start, time_end, coach:user!coach_weekly_availability_coach_id_fkey(first_name, middle_name, last_name)')
+    .order('weekday')
+    .order('time_start')
+  if (currentUser.role === 'assistant_coach') weeklyAvailabilityQuery = weeklyAvailabilityQuery.eq('coach_id', currentUser.id)
+
+  const templatesPromise = currentUser.role === 'head_coach'
+    ? supabase.from('weekly_class_template')
+      .select('id, branch_id, coach_id, weekday, time_start, time_end, active_from, active_until, is_active, branch:branch!weekly_class_template_branch_id_fkey(name), coach:user!weekly_class_template_coach_id_fkey(first_name, middle_name, last_name, primary_branch:branch!user_primary_branch_id_fkey(name))')
+      .order('weekday')
+      .order('time_start')
+    : Promise.resolve({ data: [] })
+
+  const [sessionSync, branchResult, coachResult, weeklyAvailabilityResult, templateResult] = await Promise.all([
+    sessionSyncPromise,
+    branchesPromise,
+    coachesPromise,
+    weeklyAvailabilityQuery,
+    templatesPromise,
+  ])
+  const branches = branchResult.data
+  const coachRows = coachResult.data
+  const weeklyAvailability = weeklyAvailabilityResult.data
+  const templateRows = templateResult.data
+
   const coaches = (coachRows ?? []).map((coach) => {
     const primaryBranch = firstRelation(coach.primary_branch)
     return {
@@ -135,31 +164,6 @@ export default async function SchedulingPage({
   if (currentUser.role === 'assistant_coach') scheduleQuery = scheduleQuery.neq('status', 'Draft')
   const { data: schedules, error } = await scheduleQuery
 
-  let availabilityQuery = supabase
-    .from('coach_availability')
-    .select('id, coach_id, date, time_start, time_end, status, coach:user!coach_availability_coach_id_fkey(first_name, middle_name, last_name)')
-    .gte('date', rangeDates[0])
-    .lte('date', rangeDates[rangeDates.length - 1])
-    .order('date')
-    .order('time_start')
-  if (currentUser.role === 'assistant_coach') availabilityQuery = availabilityQuery.eq('coach_id', currentUser.id)
-  const { data: availability } = await availabilityQuery
-
-  let weeklyAvailabilityQuery = supabase
-    .from('coach_weekly_availability')
-    .select('id, coach_id, weekday, time_start, time_end, coach:user!coach_weekly_availability_coach_id_fkey(first_name, middle_name, last_name)')
-    .order('weekday')
-    .order('time_start')
-  if (currentUser.role === 'assistant_coach') weeklyAvailabilityQuery = weeklyAvailabilityQuery.eq('coach_id', currentUser.id)
-  const { data: weeklyAvailability } = await weeklyAvailabilityQuery
-
-  const { data: templateRows } = currentUser.role === 'head_coach'
-    ? await supabase.from('weekly_class_template')
-      .select('id, branch_id, coach_id, weekday, time_start, time_end, active_from, active_until, is_active, branch:branch!weekly_class_template_branch_id_fkey(name), coach:user!weekly_class_template_coach_id_fkey(first_name, middle_name, last_name, primary_branch:branch!user_primary_branch_id_fkey(name))')
-      .order('weekday')
-      .order('time_start')
-    : { data: [] }
-
   if (error) {
     return (
       <DashboardShell title="Schedule" currentUser={currentUser}>
@@ -172,10 +176,6 @@ export default async function SchedulingPage({
     ...schedule,
     coach: firstRelation(schedule.coach) ? { name: coachDisplayName(firstRelation(schedule.coach)) } : null,
   })) as unknown as Schedule[]
-  const availabilityEntries = (availability ?? []).map((entry) => ({
-    ...entry,
-    coach: firstRelation(entry.coach) ? { name: coachDisplayName(firstRelation(entry.coach)) } : null,
-  })) as unknown as AvailabilityEntry[]
   const weeklyAvailabilityEntries = (weeklyAvailability ?? []).map((entry) => ({
     ...entry,
     coach: firstRelation(entry.coach) ? { name: coachDisplayName(firstRelation(entry.coach)) } : null,
@@ -215,7 +215,6 @@ export default async function SchedulingPage({
         isHeadCoach={currentUser.role === 'head_coach'}
       />
       <AvailabilityPanel
-        entries={availabilityEntries}
         weeklyEntries={weeklyAvailabilityEntries}
         isAssistantCoach={currentUser.role === 'assistant_coach'}
       />

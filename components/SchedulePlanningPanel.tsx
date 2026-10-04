@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
+import { formatTimeRange } from '@/utils/dates'
 import {
   deleteWeeklyTemplate,
   saveWeeklyTemplate,
@@ -210,7 +211,7 @@ export default function SchedulePlanningPanel({
                   <div className="flex min-w-0 items-start gap-3">
                     <span className="mt-0.5 min-w-[82px] rounded-md bg-gray-100 px-2 py-1 text-center text-xs font-semibold text-gray-800">{weekdays[item.weekday - 1]?.label}</span>
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-gray-950">{item.time_start.slice(0, 5)}–{item.time_end.slice(0, 5)} <span className="font-normal text-gray-500">· {item.branch?.name ?? 'Branch'}</span></p>
+                      <p className="text-sm font-semibold text-gray-950">{formatTimeRange(item.time_start, item.time_end)} <span className="font-normal text-gray-500">· {item.branch?.name ?? 'Branch'}</span></p>
                       <p className="mt-0.5 truncate text-xs text-gray-500">{firstName(item.coach)}{coachBranch ? ` · Primary branch: ${coachBranch}` : ''}{assignedElsewhere ? ' · cross-branch assignment' : ''}</p>
                     </div>
                   </div>
@@ -257,7 +258,7 @@ export default function SchedulePlanningPanel({
                   setTimeStart(timeValue(window.time_start))
                   setTimeEnd(timeValue(window.time_end))
                 }
-              }}>{matchingAvailability.map((window) => <option key={availabilityKey(window)} value={availabilityKey(window)}>{timeValue(window.time_start)}–{timeValue(window.time_end)}</option>)}</SelectControl></label>
+              }}>{matchingAvailability.map((window) => <option key={availabilityKey(window)} value={availabilityKey(window)}>{formatTimeRange(window.time_start, window.time_end)}</option>)}</SelectControl></label>
             </div>
           )}
           <p className="mt-2 text-xs text-gray-500">
@@ -271,7 +272,9 @@ export default function SchedulePlanningPanel({
             <p role="status" className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
               {matchingAvailability.length === 0
                 ? `This class cannot be added because ${selectedCoach?.name ?? 'the selected coach'} has no weekly availability for ${weekdays[weekday - 1]?.label}.`
-                : `This class cannot be added because its time must fit within ${timeValue(selectedAvailability?.time_start ?? '')}–${timeValue(selectedAvailability?.time_end ?? '')} availability and end after it starts.`}
+                : selectedAvailability
+                  ? `This class cannot be added because its time must fit within ${formatTimeRange(selectedAvailability.time_start, selectedAvailability.time_end)} availability and end after it starts.`
+                  : 'Choose an available time window for this coach.'}
             </p>
           )}
           <div className="mt-4 flex flex-wrap gap-2">

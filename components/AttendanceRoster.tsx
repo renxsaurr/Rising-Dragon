@@ -228,7 +228,7 @@ export default function AttendanceRoster({
           </div>
           <div className="flex gap-2">
             {dirty && <button onClick={() => { setStatuses({ ...saved }); setError('') }} disabled={saving} className="rounded-lg px-3.5 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-100">Undo changes</button>}
-            <button onClick={submit} disabled={saving || !dirty} className="rounded-lg bg-red-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40">
+            <button onClick={submit} disabled={saving || !dirty} className="rounded-lg bg-black px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40">
               {saving ? 'Saving…' : 'Save attendance'}
             </button>
           </div>

@@ -53,30 +53,12 @@ async function validateCoach(admin: ReturnType<typeof createAdminClient>, coachI
   return !authError && !!authResult.user && !(authResult.user.banned_until && Date.parse(authResult.user.banned_until) > Date.now())
 }
 
-async function coachHasTimeOff(admin: ReturnType<typeof createAdminClient>, coachId: number, date: string, start: string, end: string) {
-  const { data, error } = await admin.from('coach_availability')
-    .select('time_start, time_end')
-    .eq('coach_id', coachId)
-    .eq('date', date)
-    .eq('status', 'Unavailable')
-  if (error) throw new Error(error.message)
-  return (data ?? []).some((slot) => overlaps(start, end, slot.time_start, slot.time_end))
-}
-
 async function coachWeeklyAvailabilityConflict(admin: ReturnType<typeof createAdminClient>, coachId: number, date: string, start: string, end: string) {
   // Supabase returns PostgreSQL `time` values with seconds (HH:mm:ss), while
   // callers may pass either HH:mm or HH:mm:ss. Compare normalized values so an
   // exact availability boundary such as 11:00–12:00 is accepted.
   const classStart = start.slice(0, 5)
   const classEnd = end.slice(0, 5)
-  const { data: extraAvailability, error: extraError } = await admin.from('coach_availability')
-    .select('time_start, time_end')
-    .eq('coach_id', coachId)
-    .eq('date', date)
-    .eq('status', 'Available')
-  if (extraError) throw new Error(extraError.message)
-  if ((extraAvailability ?? []).some((slot) => slot.time_start.slice(0, 5) <= classStart && slot.time_end.slice(0, 5) >= classEnd)) return false
-
   const weekday = isoWeekday(date)
   const { data, error } = await admin.from('coach_weekly_availability')
     .select('time_start, time_end')
@@ -131,7 +113,6 @@ export async function saveSchedule(scheduleId: number | null, input: ScheduleInp
 
   if (status === 'Scheduled') {
     try {
-      if (await coachHasTimeOff(admin, coach_id, date, time_start, time_end)) return { error: 'This coach marked part of that time as unavailable.' }
       if (await coachWeeklyAvailabilityConflict(admin, coach_id, date, time_start, time_end)) return { error: 'This class falls outside the coach’s submitted weekly availability.' }
     } catch (error) {
       return { error: error instanceof Error ? error.message : 'Could not validate coach availability.' }
@@ -294,6 +275,7 @@ export async function ensureWeeklySessions(startDate: string, endDate: string): 
     .select('id, branch_id, coach_id, weekday, time_start, time_end, is_active, branch:branch!weekly_class_template_branch_id_fkey(name), coach:user!weekly_class_template_coach_id_fkey(first_name, middle_name, last_name)')
     .eq('is_active', true)
   if (templateError) return { created: 0, conflicts: [], error: templateError.message }
+  if (!templates?.length) return { created: 0, conflicts: [] }
 
   const { data: sessions, error: sessionError } = await admin.from('class_schedule')
     .select('id, date, time_start, time_end, branch_id, coach_id, status, weekly_template_id')
@@ -301,8 +283,15 @@ export async function ensureWeeklySessions(startDate: string, endDate: string): 
     .lte('date', endDate)
   if (sessionError) return { created: 0, conflicts: [], error: sessionError.message }
 
+  const coachIds = [...new Set((templates ?? []).map((template) => Number(template.coach_id)))]
+  const { data: weeklyAvailabilityEntries, error: weeklyAvailabilityError } = await admin.from('coach_weekly_availability')
+    .select('coach_id, weekday, time_start, time_end')
+    .in('coach_id', coachIds)
+  if (weeklyAvailabilityError) return { created: 0, conflicts: [], error: weeklyAvailabilityError.message }
+
   const conflicts: { date: string; branch: string; coach: string; reason: string }[] = []
   const usedSessions = [...(sessions ?? [])]
+  const weeklyAvailability = weeklyAvailabilityEntries ?? []
   let created = 0
 
   for (let offset = 0; addDays(rangeStart, offset) <= endDate; offset++) {
@@ -319,20 +308,20 @@ export async function ensureWeeklySessions(startDate: string, endDate: string): 
       const coach = [coachData?.first_name, coachData?.middle_name, coachData?.last_name].filter(Boolean).join(' ') || 'Coach'
       const classStart = template.time_start.slice(0, 5)
       const classEnd = template.time_end.slice(0, 5)
+      const coachId = Number(template.coach_id)
+      const weeklySlots = weeklyAvailability.filter((slot) => Number(slot.coach_id) === coachId
+        && Number(slot.weekday) === weekday)
+      const outsideWeeklyAvailability = weeklySlots.length > 0
+        && !weeklySlots.some((slot) => slot.time_start.slice(0, 5) <= classStart && slot.time_end.slice(0, 5) >= classEnd)
+
       let reason: string | null = null
-      try {
-        if (usedSessions.some((session) => Number(session.id) !== Number(existing?.id)
-          && Number(session.coach_id) === Number(template.coach_id)
-          && session.date === date && session.status !== 'Cancelled'
-          && overlaps(classStart, classEnd, session.time_start, session.time_end))) {
-          reason = 'The coach already has an overlapping session.'
-        } else if (await coachHasTimeOff(admin, Number(template.coach_id), date, classStart, classEnd)) {
-          reason = 'The coach marked this time as unavailable.'
-        } else if (await coachWeeklyAvailabilityConflict(admin, Number(template.coach_id), date, classStart, classEnd)) {
-          reason = 'The class is outside the coach’s weekly availability.'
-        }
-      } catch (error) {
-        return { created, conflicts, error: error instanceof Error ? error.message : 'Could not validate coach availability.' }
+      if (usedSessions.some((session) => Number(session.id) !== Number(existing?.id)
+        && Number(session.coach_id) === coachId
+        && session.date === date && session.status !== 'Cancelled'
+        && overlaps(classStart, classEnd, session.time_start, session.time_end))) {
+        reason = 'The coach already has an overlapping session.'
+      } else if (outsideWeeklyAvailability) {
+        reason = 'The class is outside the coach’s weekly availability.'
       }
 
       if (reason) {
@@ -363,49 +352,4 @@ export async function ensureWeeklySessions(startDate: string, endDate: string): 
   }
 
   return { created, conflicts }
-}
-
-export async function saveAvailability(input: {
-  date: string
-  time_start: string
-  time_end: string
-  status: 'Available' | 'Unavailable'
-}) {
-  const currentUser = await getCurrentUser()
-  if (!currentUser) return { error: 'Please sign in to submit an availability exception.' }
-  if (currentUser.role !== 'assistant_coach') return { error: 'Availability exceptions are submitted by Assistant Coaches.' }
-  if (!isDate(input.date) || !isTime(input.time_start) || !isTime(input.time_end)) return { error: 'Enter a valid date and time range.' }
-  if (input.time_start >= input.time_end || !['Available', 'Unavailable'].includes(input.status)) return { error: 'Choose a valid time range and exception status.' }
-
-  const admin = createAdminClient()
-  const { data: sameDay, error: queryError } = await admin.from('coach_availability')
-    .select('time_start, time_end')
-    .eq('coach_id', currentUser.id)
-    .eq('date', input.date)
-  if (queryError) return { error: queryError.message }
-  if ((sameDay ?? []).some((slot) => overlaps(input.time_start, input.time_end, slot.time_start, slot.time_end))) {
-    return { error: 'Availability exceptions for the same day cannot overlap.' }
-  }
-
-  const { error } = await admin.from('coach_availability').insert({
-    coach_id: currentUser.id,
-    date: input.date,
-    time_start: input.time_start,
-    time_end: input.time_end,
-    status: input.status,
-  })
-  if (error) return { error: error.message }
-  revalidatePath('/scheduling')
-  return { success: true }
-}
-
-export async function removeAvailability(availabilityId: number) {
-  const currentUser = await getCurrentUser()
-  if (!currentUser) return { error: 'Please sign in to manage availability exceptions.' }
-  if (currentUser.role !== 'assistant_coach') return { error: 'Only the Assistant Coach who submitted an exception can remove it.' }
-  const admin = createAdminClient()
-  const { error } = await admin.from('coach_availability').delete().eq('id', availabilityId).eq('coach_id', currentUser.id)
-  if (error) return { error: error.message }
-  revalidatePath('/scheduling')
-  return { success: true }
 }

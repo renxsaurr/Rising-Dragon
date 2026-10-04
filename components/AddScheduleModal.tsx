@@ -263,7 +263,7 @@ export default function AddScheduleModal({
           <button
             onClick={handleSubmit}
             disabled={saving || deleting}
-            className="flex-1 bg-red-600 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            className="flex-1 bg-black text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-gray-800 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {saving && (
               <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">

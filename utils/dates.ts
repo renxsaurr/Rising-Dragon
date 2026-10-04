@@ -17,6 +17,10 @@ export function formatTime(value: string) {
   })
 }
 
+export function formatTimeRange(start: string, end: string) {
+  return `${formatTime(start)} – ${formatTime(end)}`
+}
+
 // shift a YYYY-MM-DD string by whole days without timezone drift
 export function addDays(isoDate: string, days: number) {
   const date = new Date(`${isoDate}T00:00:00Z`)

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import ScheduleModal from './AddScheduleModal'
 import { Toast } from './Toast'
 import type { Schedule } from './WeeklyScheduleBoard'
+import { formatTime, formatTimeRange } from '@/utils/dates'
 
 function toDateISO(d: Date) {
   const year = d.getFullYear()
@@ -112,20 +113,6 @@ export default function MonthlyScheduleBoard({
 
           </div>
         </div>
-
-        {branches.length > 0 && (
-          <div className="flex flex-wrap items-center gap-3 mt-4">
-            {branches.map((b) => {
-              const color = branchColor(b.id)
-              return (
-                <div key={b.id} className="flex items-center gap-1.5">
-                  <span className={`w-2 h-2 rounded-full ${color.dot}`} />
-                  <span className="text-[12px] text-gray-500">{b.name}</span>
-                </div>
-              )
-            })}
-          </div>
-        )}
       </div>
 
       <div className="grid grid-cols-7 gap-px overflow-hidden rounded-2xl border border-gray-200 bg-gray-200 shadow-sm">
@@ -175,7 +162,7 @@ export default function MonthlyScheduleBoard({
                       className={`w-full text-left ${color.bg} border ${color.border} rounded-md px-1.5 py-1 text-[10px] transition-shadow truncate flex items-center gap-1 ${isHeadCoach ? 'hover:border-black hover:shadow-sm' : 'cursor-default'} ${s.status === 'Cancelled' ? 'opacity-55 line-through' : ''}`}
                     >
                       <span className={`w-1.5 h-1.5 rounded-full ${color.dot} shrink-0`} />
-                      <span className="truncate text-black">{s.coach?.name ?? 'Unassigned'} · {s.time_start.slice(0, 5)}</span>
+                      <span className="truncate text-black">{s.coach?.name ?? 'Unassigned'} · {formatTime(s.time_start)}</span>
                     </button>
                   )
                 })}
@@ -232,7 +219,7 @@ export default function MonthlyScheduleBoard({
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <p className="text-gray-500 truncate">{s.coach?.name ?? 'Unassigned'}</p>
                       </div>
-                      <p className="text-gray-500">{s.time_start.slice(0, 5)} – {s.time_end.slice(0, 5)} · {s.status}</p>
+                      <p className="text-gray-500">{formatTimeRange(s.time_start, s.time_end)} · {s.status}</p>
                     </button>
                   )
                 })}
