@@ -4,6 +4,17 @@ import { useRouter } from 'next/navigation'
 import WeeklyScheduleBoard, { type Schedule } from './WeeklyScheduleBoard'
 import MonthlyScheduleBoard from './MonthlyScheduleBoard'
 
+export type ScheduleBoardProps = {
+  view: 'week' | 'month'
+  weekDates: string[]
+  monthDates: string[]
+  baseDateISO: string
+  initialSchedules: Schedule[]
+  branches: { id: number; name: string }[]
+  coaches: { id: number; name: string; role: string }[]
+  isHeadCoach: boolean
+}
+
 export default function ScheduleBoard({
   view,
   weekDates,
@@ -13,16 +24,7 @@ export default function ScheduleBoard({
   branches,
   coaches,
   isHeadCoach,
-}: {
-  view: 'week' | 'month'
-  weekDates: string[]
-  monthDates: string[]
-  baseDateISO: string
-  initialSchedules: Schedule[]
-  branches: { id: number; name: string }[]
-  coaches: { id: number; name: string; role: string }[]
-  isHeadCoach: boolean
-}) {
+}: ScheduleBoardProps) {
   const router = useRouter()
 
   const switchView = (nextView: 'week' | 'month') => {
@@ -31,7 +33,7 @@ export default function ScheduleBoard({
 
   return (
     <div>
-      <div className="flex justify-end mb-4">
+      <div className="mb-4 flex flex-wrap items-center justify-end gap-3">
         <div className="relative inline-flex bg-gray-100 rounded-lg p-1 gap-1">
           {/* sliding active pill */}
           <div

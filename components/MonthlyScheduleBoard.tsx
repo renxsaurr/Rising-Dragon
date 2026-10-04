@@ -77,7 +77,7 @@ export default function MonthlyScheduleBoard({
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-[20px] font-semibold text-black">{monthLabel}</h2>
-            <p className="text-[13px] text-gray-500 mt-0.5">Monthly overview</p>
+            <p className="text-[13px] text-gray-500 mt-0.5">{isHeadCoach ? 'Monthly overview' : 'My schedule this month'}</p>
           </div>
 
           <div className="flex items-center gap-2">

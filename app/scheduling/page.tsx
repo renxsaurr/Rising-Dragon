@@ -15,6 +15,10 @@ function coachDisplayName(coach: { first_name: string | null; middle_name: strin
   return [coach.first_name, coach.middle_name, coach.last_name].filter(Boolean).join(' ') || 'Coach'
 }
 
+function coachFirstName(coach: { first_name: string | null } | null) {
+  return coach?.first_name?.trim() || 'Coach'
+}
+
 function firstRelation<T>(value: T | T[] | null) {
   return Array.isArray(value) ? value[0] ?? null : value
 }
@@ -91,7 +95,7 @@ export default async function SchedulingPage({
   const weekDates = getWeekDates(baseDate)
   const monthDates = getMonthDates(baseDate)
   const rangeDates = view === 'month' ? monthDates : weekDates
-  let sessionSyncPromise: Promise<{ created: number; conflicts: { date: string; branch: string; coach: string; reason: string }[]; error?: string }> = Promise.resolve({ created: 0, conflicts: [] })
+  let sessionSyncPromise: Promise<{ created: number; updated: number; cancelled: number; conflicts: { date: string; branch: string; coach: string; reason: string }[]; error?: string }> = Promise.resolve({ created: 0, updated: 0, cancelled: 0, conflicts: [] })
   if (currentUser.role === 'head_coach') {
     sessionSyncPromise = (async () => {
       const horizonEnd = addDaysISO(dateInTimeZone(), 27)
@@ -104,6 +108,8 @@ export default async function SchedulingPage({
           : await ensureWeeklySessions(addDaysISO(horizonEnd, 1), viewEnd)
         sync = {
           created: sync.created + additionalSync.created,
+          updated: sync.updated + additionalSync.updated,
+          cancelled: sync.cancelled + additionalSync.cancelled,
           conflicts: [...sync.conflicts, ...additionalSync.conflicts],
           error: sync.error ?? additionalSync.error,
         }
@@ -161,7 +167,9 @@ export default async function SchedulingPage({
     .lte('date', rangeDates[rangeDates.length - 1])
     .order('date')
     .order('time_start')
-  if (currentUser.role === 'assistant_coach') scheduleQuery = scheduleQuery.neq('status', 'Draft')
+  if (currentUser.role === 'assistant_coach') {
+    scheduleQuery = scheduleQuery.eq('coach_id', currentUser.id).neq('status', 'Draft')
+  }
   const { data: schedules, error } = await scheduleQuery
 
   if (error) {
@@ -174,7 +182,7 @@ export default async function SchedulingPage({
 
   const initialSchedules = (schedules ?? []).map((schedule) => ({
     ...schedule,
-    coach: firstRelation(schedule.coach) ? { name: coachDisplayName(firstRelation(schedule.coach)) } : null,
+    coach: firstRelation(schedule.coach) ? { name: coachFirstName(firstRelation(schedule.coach)) } : null,
   })) as unknown as Schedule[]
   const weeklyAvailabilityEntries = (weeklyAvailability ?? []).map((entry) => ({
     ...entry,
@@ -190,7 +198,7 @@ export default async function SchedulingPage({
   })) as unknown as WeeklyClassTemplate[]
   return (
     <DashboardShell title="Schedule" currentUser={currentUser}>
-      {currentUser.role === 'head_coach' && (
+      {currentUser.role === 'head_coach' ? (
         <SchedulePlanningPanel
           templates={templates}
           branches={branches ?? []}
@@ -202,22 +210,41 @@ export default async function SchedulingPage({
             time_end: window.time_end,
           }))}
           sessionSync={sessionSync}
+          calendarProps={{
+            view,
+            weekDates,
+            monthDates,
+            baseDateISO: toDateISO(baseDate),
+            initialSchedules,
+            branches: branches ?? [],
+            coaches: coaches ?? [],
+            isHeadCoach: true,
+          }}
+          availabilityPanel={(
+            <AvailabilityPanel
+              weeklyEntries={weeklyAvailabilityEntries}
+              isAssistantCoach={false}
+            />
+          )}
         />
+      ) : (
+        <>
+          <ScheduleBoard
+            view={view}
+            weekDates={weekDates}
+            monthDates={monthDates}
+            baseDateISO={toDateISO(baseDate)}
+            initialSchedules={initialSchedules}
+            branches={branches ?? []}
+            coaches={coaches ?? []}
+            isHeadCoach={false}
+          />
+          <AvailabilityPanel
+            weeklyEntries={weeklyAvailabilityEntries}
+            isAssistantCoach
+          />
+        </>
       )}
-      <ScheduleBoard
-        view={view}
-        weekDates={weekDates}
-        monthDates={monthDates}
-        baseDateISO={toDateISO(baseDate)}
-        initialSchedules={initialSchedules}
-        branches={branches ?? []}
-        coaches={coaches ?? []}
-        isHeadCoach={currentUser.role === 'head_coach'}
-      />
-      <AvailabilityPanel
-        weeklyEntries={weeklyAvailabilityEntries}
-        isAssistantCoach={currentUser.role === 'assistant_coach'}
-      />
     </DashboardShell>
   )
 }

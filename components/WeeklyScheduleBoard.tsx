@@ -80,7 +80,7 @@ export default function WeeklyScheduleBoard({
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-[20px] font-semibold text-black">
-              {isCurrentWeek ? "This Week's Schedule" : 'Weekly Schedule'}
+              {!isHeadCoach ? 'My Schedule' : isCurrentWeek ? "This Week's Schedule" : 'Weekly Schedule'}
             </h2>
             <p className="text-[13px] text-gray-500 mt-0.5">
               {dayLabel(weekDates[0])} – {dayLabel(weekDates[6])}

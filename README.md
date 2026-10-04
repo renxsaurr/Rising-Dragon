@@ -24,6 +24,10 @@ After that, Head Coaches can create Assistant Coach and additional Head Coach lo
 
 Apply `supabase/migrations/20260924_attendance_student_schedule_unique.sql` to the Supabase database before using Attendance. It adds the one-attendance-per-student-per-session constraint used when saving marks.
 
+Apply `supabase/migrations/20261004_weekly_schedule_session_unique.sql` to Supabase before relying on automatic recurring-session generation. It prevents duplicate dated sessions if a page refresh and scheduled sync happen at the same time, and records which cancellations were caused automatically so a restored availability window can restore the future session. The migration stops with an error if duplicate sessions already exist so they can be reviewed before the constraint is added.
+
+Recurring classes create and reconcile dated sessions for the next four weeks when the Head Coach updates the master schedule or coach availability, and through a daily Vercel Cron job. Add a strong `CRON_SECRET` environment variable to the Vercel project before deploying; the scheduled job runs daily at midnight Asia/Manila (16:00 UTC). Vercel Cron runs on production deployments and uses UTC schedules.
+
 The provided schema extract does not show the custom enum declarations. Confirm that its role values include `head_coach` and `assistant_coach`, schedule values include `Scheduled`, `Cancelled`, and `Completed`, availability values include `Available` and `Unavailable`, and attendance values include `Present` and `Absent`.
 
 ## Getting Started

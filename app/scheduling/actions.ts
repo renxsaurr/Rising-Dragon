@@ -3,7 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { getCurrentUser } from '@/utils/getCurrentUser'
-import { dateInTimeZone } from '@/utils/dates'
+import { addDays, dateInTimeZone } from '@/utils/dates'
+import { syncWeeklySessions, type WeeklySessionSyncResult } from '@/utils/weekly-sessions'
 
 export type ScheduleInput = {
   date: string
@@ -37,12 +38,6 @@ const isoWeekday = (date: string) => {
   const day = new Date(`${date}T00:00:00Z`).getUTCDay()
   return day === 0 ? 7 : day
 }
-const addDays = (date: string, count: number) => {
-  const value = new Date(`${date}T00:00:00Z`)
-  value.setUTCDate(value.getUTCDate() + count)
-  return value.toISOString().slice(0, 10)
-}
-
 async function validateCoach(admin: ReturnType<typeof createAdminClient>, coachId: number) {
   const { data: coach, error } = await admin.from('user')
     .select('id, auth_id, role')
@@ -119,7 +114,7 @@ export async function saveSchedule(scheduleId: number | null, input: ScheduleInp
     }
   }
 
-  const payload = { date, time_start, time_end, branch_id, coach_id, status }
+  const payload = { date, time_start, time_end, branch_id, coach_id, status, auto_cancelled: false }
   const result = scheduleId === null
     ? await admin.from('class_schedule').insert(payload).select(scheduleSelection).single()
     : await admin.from('class_schedule').update(payload).eq('id', scheduleId).select(scheduleSelection).single()
@@ -174,8 +169,11 @@ export async function saveWeeklyAvailability(id: number | null, input: WeeklyAva
   const { data, error } = result
   if (error) return { error: error.message }
   if (id !== null && !data) return { error: 'Availability entry not found.' }
+  const today = dateInTimeZone()
+  const sync = await syncWeeklySessions(addDays(today, 1), addDays(today, 28))
   revalidatePath('/scheduling')
-  return { success: true }
+  revalidatePath('/attendance')
+  return { success: true, message: availabilitySyncMessage(sync) }
 }
 
 export async function removeWeeklyAvailability(id: number) {
@@ -189,8 +187,21 @@ export async function removeWeeklyAvailability(id: number) {
   const { data, error } = await query.select('id')
   if (error) return { error: error.message }
   if (!data?.length) return { error: 'Availability entry not found.' }
+  if (currentUser.role === 'assistant_coach') {
+    const today = dateInTimeZone()
+    const sync = await syncWeeklySessions(addDays(today, 1), addDays(today, 28))
+    revalidatePath('/attendance')
+    revalidatePath('/scheduling')
+    return { success: true, message: availabilitySyncMessage(sync) }
+  }
   revalidatePath('/scheduling')
   return { success: true }
+}
+
+function availabilitySyncMessage(sync: WeeklySessionSyncResult) {
+  if (sync.error) return `Availability saved, but upcoming classes could not be fully updated: ${sync.error}`
+  if (sync.cancelled > 0) return `Availability saved. ${sync.cancelled} upcoming class${sync.cancelled === 1 ? ' was' : 'es were'} cancelled because the coach is no longer available for the full class time. The Head Coach should review the master schedule.`
+  return 'Availability saved. Upcoming classes were checked against the updated availability.'
 }
 
 export async function saveWeeklyTemplate(id: number | null, input: WeeklyTemplateInput) {
@@ -242,8 +253,16 @@ export async function saveWeeklyTemplate(id: number | null, input: WeeklyTemplat
     : await admin.from('weekly_class_template').update(payload).eq('id', id).select('id').single()
   if (result.error) return { error: result.error.message }
 
+  const today = dateInTimeZone()
+  const sync = await syncWeeklySessions(addDays(today, 1), addDays(today, 28))
   revalidatePath('/scheduling')
-  return { success: true }
+  revalidatePath('/attendance')
+  return {
+    success: true,
+    message: sync.error
+      ? `Weekly class saved, but upcoming sessions could not be fully updated: ${sync.error}`
+      : 'Weekly class saved. Upcoming sessions have been updated automatically.',
+  }
 }
 
 export async function deleteWeeklyTemplate(id: number) {
@@ -252,104 +271,41 @@ export async function deleteWeeklyTemplate(id: number) {
   if (currentUser.role !== 'head_coach') return { error: 'Only the Head Coach can manage recurring classes.' }
   if (!Number.isInteger(id)) return { error: 'Invalid recurring class.' }
   const admin = createAdminClient()
-  const { error } = await admin.from('weekly_class_template').delete().eq('id', id)
-  if (error) return { error: error.message }
+  const today = dateInTimeZone()
+  const { data: futureSessions, error: queryError } = await admin.from('class_schedule')
+    .select('id')
+    .eq('weekly_template_id', id)
+    .eq('status', 'Scheduled')
+    .gt('date', today)
+  if (queryError) return { error: queryError.message }
+  const ids = (futureSessions ?? []).map((session) => Number(session.id))
+  let attendedIds = new Set<number>()
+  if (ids.length) {
+    const { data: attendance, error: attendanceError } = await admin.from('attendance').select('schedule_id').in('schedule_id', ids)
+    if (attendanceError) return { error: attendanceError.message }
+    attendedIds = new Set((attendance ?? []).map((row) => Number(row.schedule_id)))
+  }
+  const cancellableIds = ids.filter((sessionId) => !attendedIds.has(sessionId))
+  const { data: updatedTemplate, error: templateError } = await admin.from('weekly_class_template')
+    .update({ is_active: false })
+    .eq('id', id)
+    .eq('is_active', true)
+    .select('id')
+  if (templateError) return { error: templateError.message }
+  if (!updatedTemplate?.length) return { error: 'Recurring class not found or already removed.' }
+  if (cancellableIds.length) {
+    const { error } = await admin.from('class_schedule').update({ status: 'Cancelled', auto_cancelled: true })
+      .in('id', cancellableIds).eq('status', 'Scheduled')
+    if (error) return { error: `The weekly class was removed, but future sessions could not be cancelled: ${error.message}` }
+  }
   revalidatePath('/scheduling')
-  return { success: true }
+  revalidatePath('/attendance')
+  return { success: true, message: `${cancellableIds.length} upcoming session${cancellableIds.length === 1 ? ' was' : 's were'} cancelled. Past sessions and sessions with attendance records were preserved.` }
 }
 
-export async function ensureWeeklySessions(startDate: string, endDate: string): Promise<{
-  created: number
-  conflicts: { date: string; branch: string; coach: string; reason: string }[]
-  error?: string
-}> {
+export async function ensureWeeklySessions(startDate: string, endDate: string): Promise<WeeklySessionSyncResult> {
   const currentUser = await getCurrentUser()
-  if (!currentUser) return { created: 0, conflicts: [], error: 'Please sign in to load the schedule.' }
-  if (currentUser.role !== 'head_coach') return { created: 0, conflicts: [] }
-  const today = dateInTimeZone()
-  const rangeStart = startDate < today ? today : startDate
-  if (!isDate(rangeStart) || !isDate(endDate) || rangeStart > endDate) return { created: 0, conflicts: [] }
-
-  const admin = createAdminClient()
-  const { data: templates, error: templateError } = await admin.from('weekly_class_template')
-    .select('id, branch_id, coach_id, weekday, time_start, time_end, is_active, branch:branch!weekly_class_template_branch_id_fkey(name), coach:user!weekly_class_template_coach_id_fkey(first_name, middle_name, last_name)')
-    .eq('is_active', true)
-  if (templateError) return { created: 0, conflicts: [], error: templateError.message }
-  if (!templates?.length) return { created: 0, conflicts: [] }
-
-  const { data: sessions, error: sessionError } = await admin.from('class_schedule')
-    .select('id, date, time_start, time_end, branch_id, coach_id, status, weekly_template_id')
-    .gte('date', rangeStart)
-    .lte('date', endDate)
-  if (sessionError) return { created: 0, conflicts: [], error: sessionError.message }
-
-  const coachIds = [...new Set((templates ?? []).map((template) => Number(template.coach_id)))]
-  const { data: weeklyAvailabilityEntries, error: weeklyAvailabilityError } = await admin.from('coach_weekly_availability')
-    .select('coach_id, weekday, time_start, time_end')
-    .in('coach_id', coachIds)
-  if (weeklyAvailabilityError) return { created: 0, conflicts: [], error: weeklyAvailabilityError.message }
-
-  const conflicts: { date: string; branch: string; coach: string; reason: string }[] = []
-  const usedSessions = [...(sessions ?? [])]
-  const weeklyAvailability = weeklyAvailabilityEntries ?? []
-  let created = 0
-
-  for (let offset = 0; addDays(rangeStart, offset) <= endDate; offset++) {
-    const date = addDays(rangeStart, offset)
-    const weekday = isoWeekday(date)
-    for (const template of templates ?? []) {
-      if (Number(template.weekday) !== weekday) continue
-      const templateId = Number(template.id)
-      const existing = usedSessions.find((session) => Number(session.weekly_template_id) === templateId && session.date === date)
-      if (existing && ['Cancelled', 'Completed'].includes(existing.status)) continue
-
-      const branch = (template.branch as { name?: string } | null)?.name ?? 'Branch'
-      const coachData = template.coach as { first_name?: string | null; middle_name?: string | null; last_name?: string | null } | null
-      const coach = [coachData?.first_name, coachData?.middle_name, coachData?.last_name].filter(Boolean).join(' ') || 'Coach'
-      const classStart = template.time_start.slice(0, 5)
-      const classEnd = template.time_end.slice(0, 5)
-      const coachId = Number(template.coach_id)
-      const weeklySlots = weeklyAvailability.filter((slot) => Number(slot.coach_id) === coachId
-        && Number(slot.weekday) === weekday)
-      const outsideWeeklyAvailability = weeklySlots.length > 0
-        && !weeklySlots.some((slot) => slot.time_start.slice(0, 5) <= classStart && slot.time_end.slice(0, 5) >= classEnd)
-
-      let reason: string | null = null
-      if (usedSessions.some((session) => Number(session.id) !== Number(existing?.id)
-        && Number(session.coach_id) === coachId
-        && session.date === date && session.status !== 'Cancelled'
-        && overlaps(classStart, classEnd, session.time_start, session.time_end))) {
-        reason = 'The coach already has an overlapping session.'
-      } else if (outsideWeeklyAvailability) {
-        reason = 'The class is outside the coach’s weekly availability.'
-      }
-
-      if (reason) {
-        conflicts.push({ date, branch, coach, reason })
-        continue
-      }
-
-      const payload = {
-        weekly_template_id: templateId,
-        date,
-        time_start: classStart,
-        time_end: classEnd,
-        branch_id: Number(template.branch_id),
-        coach_id: Number(template.coach_id),
-        status: 'Scheduled' as const,
-      }
-      if (existing) {
-        const { error } = await admin.from('class_schedule').update(payload).eq('id', existing.id)
-        if (error) return { created, conflicts, error: error.message }
-        Object.assign(existing, payload)
-      } else {
-        const { data, error } = await admin.from('class_schedule').insert(payload).select('id').single()
-        if (error) return { created, conflicts, error: error.message }
-        usedSessions.push({ ...payload, id: data.id })
-        created += 1
-      }
-    }
-  }
-
-  return { created, conflicts }
+  if (!currentUser) return { created: 0, updated: 0, cancelled: 0, conflicts: [], error: 'Please sign in to load the schedule.' }
+  if (currentUser.role !== 'head_coach') return { created: 0, updated: 0, cancelled: 0, conflicts: [] }
+  return syncWeeklySessions(startDate, endDate)
 }

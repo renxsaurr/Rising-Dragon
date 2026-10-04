@@ -29,7 +29,15 @@ export default function AvailabilityPanel({
   const [weeklyEnd, setWeeklyEnd] = useState('')
   const [editingWeeklyId, setEditingWeeklyId] = useState<number | null>(null)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const [saving, setSaving] = useState(false)
+  const [availabilityPage, setAvailabilityPage] = useState(1)
+  const pageSize = 5
+  const pageCount = Math.max(1, Math.ceil(weeklyEntries.length / pageSize))
+  const safePage = Math.min(availabilityPage, pageCount)
+  const visibleEntries = isAssistantCoach
+    ? weeklyEntries
+    : weeklyEntries.slice((safePage - 1) * pageSize, safePage * pageSize)
 
   const clearForm = () => {
     setEditingWeeklyId(null)
@@ -37,26 +45,31 @@ export default function AvailabilityPanel({
     setWeeklyStart('')
     setWeeklyEnd('')
     setError('')
+    setNotice('')
   }
 
   const handleWeeklySubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     setSaving(true)
     setError('')
+    setNotice('')
     const result = await saveWeeklyAvailability(editingWeeklyId, {
       weekday: Number(weekday), time_start: weeklyStart, time_end: weeklyEnd,
     })
     setSaving(false)
     if (result.error) { setError(result.error); return }
     clearForm()
+    if (result.message) setNotice(result.message)
     router.refresh()
   }
 
   const removeWeekly = async (id: number) => {
     setError('')
+    setNotice('')
     const result = await removeWeeklyAvailability(id)
     if (result.error) { setError(result.error); return }
     if (editingWeeklyId === id) clearForm()
+    if (result.message) setNotice(result.message)
     router.refresh()
   }
 
@@ -66,6 +79,7 @@ export default function AvailabilityPanel({
     setWeeklyStart(entry.time_start.slice(0, 5))
     setWeeklyEnd(entry.time_end.slice(0, 5))
     setError('')
+    setNotice('')
   }
 
   const inputClass = 'mt-1 block h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900'
@@ -73,7 +87,7 @@ export default function AvailabilityPanel({
   const labelClass = 'text-xs font-medium text-gray-600'
 
   return (
-    <section className="mt-6 rounded-2xl border border-gray-200 bg-white shadow-sm">
+    <section className={`${isAssistantCoach ? 'mt-6' : ''} rounded-2xl border border-gray-200 bg-white shadow-sm`}>
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 px-5 py-4">
         <div>
           <h2 className="text-base font-semibold text-gray-950">Coach availability</h2>
@@ -94,6 +108,7 @@ export default function AvailabilityPanel({
             </div>
           </div>
           {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
+          {notice && <p role="status" className="mt-3 rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700">{notice}</p>}
         </form>
       )}
 
@@ -103,7 +118,7 @@ export default function AvailabilityPanel({
           <p className="mt-3 rounded-xl border border-dashed border-gray-300 px-4 py-6 text-center text-sm text-gray-500">No weekly availability submitted yet.</p>
         ) : (
           <div className="mt-3 divide-y divide-gray-100 rounded-xl border border-gray-200">
-            {weeklyEntries.map((entry) => (
+            {visibleEntries.map((entry) => (
               <div key={entry.id} className="flex items-center justify-between gap-3 px-4 py-3">
                 <div>
                   {!isAssistantCoach && <p className="text-xs font-medium text-gray-500">{entry.coach?.name ?? 'Coach'}</p>}
@@ -116,6 +131,15 @@ export default function AvailabilityPanel({
                 </div>}
               </div>
             ))}
+          </div>
+        )}
+        {!isAssistantCoach && weeklyEntries.length > pageSize && (
+          <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={() => setAvailabilityPage(Math.max(1, safePage - 1))} disabled={safePage === 1} aria-label="Previous coach availability page" className="grid h-9 w-9 place-items-center rounded-lg bg-black text-lg font-semibold text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400">‹</button>
+              <span className="min-w-20 px-2 text-center text-xs font-semibold text-gray-700">Page {safePage} of {pageCount}</span>
+              <button type="button" onClick={() => setAvailabilityPage(Math.min(pageCount, safePage + 1))} disabled={safePage === pageCount} aria-label="Next coach availability page" className="grid h-9 w-9 place-items-center rounded-lg bg-black text-lg font-semibold text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400">›</button>
+            </div>
           </div>
         )}
         {error && !isAssistantCoach && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
