@@ -107,10 +107,10 @@ export default function DashboardShell({
     { label: isHeadCoach ? 'Students' : 'Student roster', href: '/students', icon: UsersIcon, show: true, soon: false },
     { label: 'Attendance', href: '/attendance', icon: CheckSquareIcon, show: true, soon: false },
     { label: 'Schedule', href: '/scheduling', icon: CalendarIcon, show: true, soon: false },
-    { label: 'Branches', href: '/branches', icon: BuildingIcon, show: isHeadCoach, soon: false },
   ]
 
   const reportItems = [
+    { label: 'Branches', href: '/branches', icon: BuildingIcon, show: isHeadCoach, soon: false },
     { label: 'Payments', href: '/payments', icon: CreditCardIcon, show: isHeadCoach, soon: true },
     { label: 'Promotions', href: '/promotions', icon: AwardIcon, show: isHeadCoach, soon: true },
   ]
