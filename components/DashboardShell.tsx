@@ -239,7 +239,7 @@ export default function DashboardShell({
       href: "/payments",
       icon: CreditCardIcon,
       show: isHeadCoach,
-      soon: true,
+      soon: false,
     },
     {
       label: "Promotions",
