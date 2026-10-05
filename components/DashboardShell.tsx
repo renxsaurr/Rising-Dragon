@@ -6,7 +6,6 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import GlobalSearch from "@/components/GlobalSearch";
-import HeaderNotifications from "@/components/HeaderNotifications";
 
 const GridIcon = () => (
   <svg
@@ -430,9 +429,8 @@ export default function DashboardShell({
           {currentUser && (
             <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
               <GlobalSearch canSearchStaff={isHeadCoach} />
-              <HeaderNotifications isHeadCoach={isHeadCoach} />
-              <div className="hidden min-w-0 flex-col border-l border-gray-200 pl-3 leading-tight md:flex">
-                <span className="block max-w-40 truncate text-[13px] font-semibold capitalize text-gray-900">
+              <div className="hidden min-w-0 max-w-56 flex-col border-l border-gray-200 pl-3 leading-tight md:flex">
+                <span className="block whitespace-normal break-words text-[13px] font-semibold capitalize text-gray-900">
                   {currentUser.name}
                 </span>
                 <span className="block text-[11px] text-gray-500">
@@ -444,7 +442,7 @@ export default function DashboardShell({
         </header>
         <main
           aria-busy={pendingHref ? true : undefined}
-          className={`no-scrollbar min-h-0 flex-1 overflow-y-auto px-8 pb-8 transition-opacity ${pendingHref ? "opacity-60" : ""}`}
+          className={`no-scrollbar min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-8 pb-8 transition-opacity ${pendingHref ? "opacity-60" : ""}`}
         >
           {children}
         </main>
