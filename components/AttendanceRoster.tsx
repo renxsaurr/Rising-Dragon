@@ -32,7 +32,6 @@ export default function AttendanceRoster({
   const router = useRouter()
   const [saved, setSaved] = useState<Record<number, Status>>(() => toStatusMap(initialAttendance))
   const [statuses, setStatuses] = useState<Record<number, Status>>(() => toStatusMap(initialAttendance))
-  const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -61,8 +60,6 @@ export default function AttendanceRoster({
   }, [dirty])
 
   const visibleStudents = students.filter((student) => {
-    const name = `${student.first_name} ${student.middle_name ?? ''} ${student.last_name}`.toLowerCase()
-    if (query && !name.includes(query.trim().toLowerCase())) return false
     if (filter === 'unmarked') return !statuses[student.id]
     if (filter === 'Present' || filter === 'Absent') return statuses[student.id] === filter
     return true
@@ -73,10 +70,10 @@ export default function AttendanceRoster({
     setError('')
   }
 
-  const markRemaining = (status: Status) => {
+  const markRemainingPresent = () => {
     setStatuses((current) => {
       const next = { ...current }
-      for (const student of students) if (!next[student.id]) next[student.id] = status
+      for (const student of students) if (!next[student.id]) next[student.id] = 'Present'
       return next
     })
     setError('')
@@ -97,76 +94,40 @@ export default function AttendanceRoster({
     router.refresh()
   }
 
-  const filters: { key: Filter; label: string; count: number }[] = [
-    { key: 'all', label: 'All', count: students.length },
-    { key: 'unmarked', label: 'Not marked', count: totals.unmarked },
-    { key: 'Present', label: 'Present', count: totals.present },
-    { key: 'Absent', label: 'Absent', count: totals.absent },
-  ]
-  const progress = students.length ? ((totals.present + totals.absent) / students.length) * 100 : 0
-
   return (
-    <section className="rounded-xl border border-gray-200 bg-surface">
-      <div className="border-b border-gray-100 px-5 py-4">
+    <section className="min-w-0 w-full max-w-full overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <div className="border-b border-gray-100 bg-white px-5 py-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-base font-semibold text-gray-950">{classLabel}</h2>
-            <p className="mt-0.5 text-sm text-gray-500">
-              <span className="font-medium text-emerald-700">{totals.present} present</span>
-              {' · '}<span className="font-medium text-red-700">{totals.absent} absent</span>
-              {' · '}{totals.unmarked} not marked
-            </p>
           </div>
-          {canMarkAttendance && students.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              <button onClick={() => markRemaining('Present')} disabled={totals.unmarked === 0} className="rounded-lg bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40">
-                ✓ Mark the rest present
-              </button>
-              <button onClick={() => markRemaining('Absent')} disabled={totals.unmarked === 0} className="rounded-lg border border-gray-200 px-3.5 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40">
-                Mark the rest absent
-              </button>
-            </div>
+          {canMarkAttendance && students.length > 0 && totals.unmarked > 0 && (
+            <button onClick={markRemainingPresent} className="text-xs font-semibold text-gray-700 underline decoration-gray-300 underline-offset-4 hover:text-black">
+              Mark remaining present
+            </button>
           )}
         </div>
 
-        <div className="mt-3 flex h-1.5 overflow-hidden rounded-full bg-gray-100" aria-hidden>
-          <div className="bg-emerald-500 transition-all" style={{ width: `${students.length ? (totals.present / students.length) * 100 : 0}%` }} />
-          <div className="bg-red-500 transition-all" style={{ width: `${students.length ? (totals.absent / students.length) * 100 : 0}%` }} />
-        </div>
-        <p className="sr-only">{Math.round(progress)}% of students marked</p>
-
         {students.length > 0 && (
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <div className="relative min-w-48 flex-1">
-              <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden><circle cx="11" cy="11" r="7" strokeWidth={2} /><path strokeLinecap="round" strokeWidth={2} d="M20 20l-3.5-3.5" /></svg>
-              <input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search student…"
-                aria-label="Search students"
-                className="h-9 w-full rounded-lg border border-gray-200 pl-9 pr-3 text-sm outline-none focus:border-gray-400"
-              />
-            </div>
-            <div className="flex rounded-lg bg-gray-100 p-0.5" role="tablist" aria-label="Filter students">
-              {filters.map((item) => (
-                <button
-                  key={item.key}
-                  role="tab"
-                  aria-selected={filter === item.key}
-                  onClick={() => setFilter(item.key)}
-                  className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${filter === item.key ? 'bg-white text-gray-950 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
-                >
-                  {item.label} <span className="tabular-nums text-gray-400">{item.count}</span>
-                </button>
-              ))}
-            </div>
+          <div className="mt-4 flex justify-end">
+            <label className="sr-only" htmlFor="attendance-filter">Filter students</label>
+            <select
+              id="attendance-filter"
+              value={filter}
+              onChange={(event) => setFilter(event.target.value as Filter)}
+              className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-gray-400"
+            >
+              <option value="all">All students ({students.length})</option>
+              <option value="unmarked">Not marked ({totals.unmarked})</option>
+              <option value="Present">Present ({totals.present})</option>
+              <option value="Absent">Absent ({totals.absent})</option>
+            </select>
           </div>
         )}
       </div>
 
       {!canMarkAttendance && (
-        <p className="border-b border-amber-100 bg-amber-50 px-5 py-2.5 text-xs text-amber-800">This class hasn&apos;t happened yet. You can mark attendance on or after the class day.</p>
+        <p className="border-b border-gray-200 bg-gray-50 px-5 py-2.5 text-xs text-black">This class hasn&apos;t happened yet. You can mark attendance on or after the class day.</p>
       )}
 
       {students.length === 0 ? (
@@ -174,21 +135,18 @@ export default function AttendanceRoster({
       ) : visibleStudents.length === 0 ? (
         <p className="px-5 py-12 text-center text-sm text-gray-500">No students match this filter.</p>
       ) : (
-        <ul className="divide-y divide-gray-100">
+        <ul className="max-h-[448px] min-w-0 divide-y divide-gray-100 overflow-x-hidden overflow-y-auto overscroll-contain bg-white">
           {visibleStudents.map((student) => {
             const fullName = [student.first_name, student.middle_name, student.last_name].filter(Boolean).join(' ')
             const status = statuses[student.id]
             const changed = status && status !== saved[student.id]
             return (
-              <li key={student.id} className={`flex items-center justify-between gap-3 px-5 py-3 transition-colors ${status === 'Present' ? 'bg-emerald-50/40' : status === 'Absent' ? 'bg-red-50/40' : ''}`}>
+              <li key={student.id} className="flex min-h-16 min-w-0 items-center justify-between gap-3 bg-white px-5 py-3 transition-colors">
                 <div className="flex min-w-0 items-center gap-3">
-                  <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-semibold ${status === 'Present' ? 'bg-emerald-100 text-emerald-800' : status === 'Absent' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-600'}`}>
-                    {student.first_name[0]}{student.last_name[0]}
-                  </span>
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-gray-900">
+                    <p className="break-words text-sm font-medium text-gray-900">
                       {fullName}
-                      {changed && <span className="ml-2 align-middle text-[10px] font-semibold uppercase tracking-wide text-amber-600">Unsaved</span>}
+                      {changed && <span className="ml-2 align-middle text-[10px] font-semibold uppercase tracking-wide text-red-600">Unsaved</span>}
                     </p>
                     <p className="mt-0.5 text-xs text-gray-500">{formatBeltLabel(student.belt_level)}</p>
                   </div>
@@ -198,7 +156,7 @@ export default function AttendanceRoster({
                     onClick={() => mark(student.id, 'Present')}
                     disabled={!canMarkAttendance}
                     aria-pressed={status === 'Present'}
-                    className={`h-9 rounded-lg px-3.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${status === 'Present' ? 'bg-emerald-600 text-white' : 'border border-gray-200 text-gray-600 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700'}`}
+                    className={`h-9 rounded-lg px-3.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${status === 'Present' ? 'bg-black text-white' : 'border border-gray-200 text-black hover:border-gray-400 hover:bg-gray-50'}`}
                   >
                     ✓ Present
                   </button>
@@ -218,12 +176,12 @@ export default function AttendanceRoster({
       )}
 
       {canMarkAttendance && students.length > 0 && (
-        <div className="sticky bottom-0 z-10 -mb-px flex flex-wrap items-center justify-between gap-3 rounded-b-xl border-t border-gray-200 bg-surface/95 px-5 py-3.5 backdrop-blur">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-b-xl border-t border-gray-200 bg-white px-5 py-3.5">
           <div aria-live="polite" className="text-sm">
             {error
               ? <span className="text-red-600">{error}</span>
               : dirty
-                ? <span className="font-medium text-amber-700">● {changedIds.length} unsaved change{changedIds.length === 1 ? '' : 's'}</span>
+              ? <span className="font-medium text-red-600">● {changedIds.length} unsaved change{changedIds.length === 1 ? '' : 's'}</span>
                 : <span className="text-gray-500">{totals.unmarked === 0 ? 'Everyone is marked. All saved.' : 'All changes saved.'}</span>}
           </div>
           <div className="flex gap-2">

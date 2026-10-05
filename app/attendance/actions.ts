@@ -9,8 +9,9 @@ export async function saveAttendance(scheduleId: number, records: { student_id: 
   const currentUser = await getCurrentUser()
   if (!currentUser) return { error: 'Please sign in to record attendance.' }
   if (!['head_coach', 'assistant_coach'].includes(currentUser.role)) return { error: 'You do not have permission to record attendance.' }
-  if (!Number.isInteger(scheduleId) || records.length === 0) return { error: 'Select a class and at least one student.' }
-  if (records.some((record) => !Number.isInteger(record.student_id) || !['Present', 'Absent'].includes(record.status))) {
+  if (!Number.isInteger(scheduleId) || !Array.isArray(records) || records.length === 0) return { error: 'Select a class and at least one student.' }
+  if (records.length > 200) return { error: 'Save attendance in groups of 200 students or fewer.' }
+  if (records.some((record) => !record || !Number.isInteger(record.student_id) || !['Present', 'Absent'].includes(record.status))) {
     return { error: 'Attendance values are invalid.' }
   }
 
@@ -28,12 +29,13 @@ export async function saveAttendance(scheduleId: number, records: { student_id: 
   }
 
   const studentIds = [...new Set(records.map((record) => record.student_id))]
+  if (studentIds.length !== records.length) return { error: 'A student can only be included once per save.' }
   const { data: students, error: studentsError } = await admin.from('student')
     .select('id')
     .eq('is_active', true)
     .eq('branch_id', schedule.branch_id)
     .in('id', studentIds)
-  if (studentsError) return { error: studentsError.message }
+  if (studentsError) return { error: 'Could not verify the class roster. Please try again.' }
   if ((students ?? []).length !== studentIds.length) return { error: 'One or more students do not belong to this class branch.' }
 
   const payload = records.map((record) => ({
@@ -43,7 +45,7 @@ export async function saveAttendance(scheduleId: number, records: { student_id: 
     status: record.status,
   }))
   const { error } = await admin.from('attendance').upsert(payload, { onConflict: 'student_id,schedule_id' })
-  if (error) return { error: error.message }
+  if (error) return { error: 'Attendance could not be saved. Please try again.' }
 
   revalidatePath('/attendance')
   return { success: true }

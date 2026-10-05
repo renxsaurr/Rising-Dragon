@@ -6,7 +6,7 @@ import AttendanceRoster from "@/components/AttendanceRoster";
 import AttendanceDatePicker from "@/components/AttendanceDatePicker";
 import { createClient } from "@/utils/supabase/server";
 import { getCurrentUser } from "@/utils/getCurrentUser";
-import { addDays, dateInTimeZone, formatTime } from "@/utils/dates";
+import { dateInTimeZone, formatTime } from "@/utils/dates";
 
 type ScheduleRow = {
   id: number;
@@ -25,12 +25,6 @@ type ScheduleRow = {
   } | null;
 };
 
-// Monday of the week containing isoDate
-function weekStart(isoDate: string) {
-  const day = new Date(`${isoDate}T00:00:00Z`).getUTCDay();
-  return addDays(isoDate, day === 0 ? -6 : 1 - day);
-}
-
 function fullName(
   person: {
     first_name: string | null;
@@ -42,39 +36,6 @@ function fullName(
     .filter(Boolean)
     .join(" ");
 }
-
-const ChevronLeft = () => (
-  <svg
-    className="h-4 w-4"
-    fill="none"
-    viewBox="0 0 24 24"
-    stroke="currentColor"
-    aria-hidden
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M15 19l-7-7 7-7"
-    />
-  </svg>
-);
-const ChevronRight = () => (
-  <svg
-    className="h-4 w-4"
-    fill="none"
-    viewBox="0 0 24 24"
-    stroke="currentColor"
-    aria-hidden
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M9 5l7 7-7 7"
-    />
-  </svg>
-);
 
 export default async function AttendancePage({
   searchParams,
@@ -95,19 +56,13 @@ export default async function AttendancePage({
   const supabase = await createClient(cookieStore);
   const isAssistant = currentUser.role === "assistant_coach";
 
-  const monday = weekStart(date);
-  const weekDates = Array.from({ length: 7 }, (_, index) =>
-    addDays(monday, index),
-  );
-
-  // one query for the whole week: feeds both the day strip counts and the selected day's sessions
+  // Only load sessions for the selected date; the date picker replaces the week strip.
   let scheduleQuery = supabase
     .from("class_schedule")
     .select(
       "id, date, time_start, time_end, branch_id, coach_id, status, branch:branch!class_schedule_branch_id_fkey(name), coach:user!class_schedule_coach_id_fkey(first_name, middle_name, last_name, role)",
     )
-    .gte("date", weekDates[0])
-    .lte("date", weekDates[6])
+    .eq("date", date)
     .neq("status", "Cancelled")
     .neq("status", "Draft")
     .order("time_start");
@@ -124,16 +79,7 @@ export default async function AttendancePage({
     );
   }
 
-  const { data: headCoachRows } = await supabase
-    .from("user")
-    .select("first_name, middle_name, last_name")
-    .eq("role", "head_coach")
-    .order("first_name");
-  const headCoachName =
-    (headCoachRows ?? []).map(fullName).filter(Boolean).join(", ") || "—";
-
-  const weekSchedules = (weekData ?? []) as unknown as ScheduleRow[];
-  const schedules = weekSchedules.filter((schedule) => schedule.date === date);
+  const schedules = (weekData ?? []) as unknown as ScheduleRow[];
   const selectedSchedule =
     schedules.find((schedule) => String(schedule.id) === requestedScheduleId) ??
     schedules[0] ??
@@ -158,7 +104,9 @@ export default async function AttendancePage({
             schedules.map((schedule) => schedule.id),
           ),
       ])
-    : [{ data: [] }, { data: [] }];
+    : [{ data: [], error: null }, { data: [], error: null }];
+  const progressError =
+    branchStudentsResult.error?.message ?? dayAttendanceResult.error?.message ?? "";
   const studentsPerBranch = new Map<number, number>();
   for (const row of branchStudentsResult.data ?? [])
     studentsPerBranch.set(
@@ -225,102 +173,21 @@ export default async function AttendancePage({
     month: "long",
     day: "numeric",
   });
-  const monthLabel = new Date(`${date}T12:00:00`).toLocaleDateString("en-US", {
-    month: "long",
-    year: "numeric",
-  });
-
   return (
     <DashboardShell title="Attendance" currentUser={currentUser}>
-      {/* 1 — choose a day */}
-      <section className="mb-5 rounded-xl border border-gray-200 bg-surface p-4">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Link
-              href={`/attendance?date=${addDays(monday, -7)}`}
-              aria-label="Previous week"
-              className="grid h-9 w-9 place-items-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
-            >
-              <ChevronLeft />
-            </Link>
-            <Link
-              href={`/attendance?date=${addDays(monday, 7)}`}
-              aria-label="Next week"
-              className="grid h-9 w-9 place-items-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
-            >
-              <ChevronRight />
-            </Link>
-            <h2 className="ml-1 text-base font-semibold text-gray-950">
-              {monthLabel}
-            </h2>
-          </div>
-          <div className="flex items-center gap-2">
-            {date !== today && (
-              <Link
-                href="/attendance"
-                className="h-9 rounded-lg bg-black px-3.5 text-sm font-semibold leading-9 text-white hover:bg-gray-800"
-              >
-                Today
-              </Link>
-            )}
-            <AttendanceDatePicker date={date} />
-          </div>
+      <section className="mb-5 flex flex-wrap items-center justify-between gap-3 bg-white py-1">
+        <div>
+          <h2 className="text-base font-semibold text-gray-950">{selectedDay}</h2>
         </div>
-
-        <div className="grid grid-cols-7 gap-1.5">
-          {weekDates.map((day) => {
-            const count = weekSchedules.filter(
-              (schedule) => schedule.date === day,
-            ).length;
-            const active = day === date;
-            const d = new Date(`${day}T12:00:00`);
-            return (
-              <Link
-                key={day}
-                href={`/attendance?date=${day}`}
-                aria-current={active ? "date" : undefined}
-                className={`flex flex-col items-center rounded-lg px-1 py-2.5 transition-colors ${active ? "bg-black text-white" : "text-gray-700 hover:bg-gray-50"}`}
-              >
-                <span
-                  className={`text-[11px] font-medium uppercase ${active ? "text-gray-400" : "text-gray-500"}`}
-                >
-                  {d.toLocaleDateString("en-US", { weekday: "short" })}
-                </span>
-                <span className="mt-0.5 flex items-center gap-1 text-lg font-semibold tabular-nums">
-                  {d.getDate()}
-                  {day === today && (
-                    <span
-                      className={`h-1.5 w-1.5 rounded-full ${active ? "bg-red-500" : "bg-red-600"}`}
-                      aria-label="today"
-                    />
-                  )}
-                </span>
-                <span
-                  className={`mt-0.5 text-[11px] ${count ? (active ? "text-white" : "text-gray-600") : active ? "text-gray-500" : "text-gray-300"}`}
-                >
-                  {count
-                    ? `${count} class${count === 1 ? "" : "es"}`
-                    : "No class"}
-                </span>
-              </Link>
-            );
-          })}
-        </div>
+        <AttendanceDatePicker date={date} />
       </section>
 
-      {/* 2 — choose a class */}
-      <div className="mb-3 flex items-baseline justify-between gap-3">
-        <h3 className="text-sm font-semibold text-gray-900">{selectedDay}</h3>
-        <Link
-          href={`/scheduling?date=${date}`}
-          className="text-xs font-medium text-gray-600 hover:text-red-600"
-        >
-          Open calendar →
-        </Link>
+      <div className="mb-3">
+          <h3 className="text-sm font-semibold text-black">Classes on this date</h3>
       </div>
 
       {schedules.length === 0 ? (
-        <div className="mb-5 rounded-xl border border-dashed border-gray-300 bg-surface px-5 py-12 text-center">
+        <div className="mb-5 rounded-xl border border-dashed border-gray-300 bg-white px-5 py-12 text-center">
           <p className="text-sm font-medium text-gray-800">
             No classes on this day
           </p>
@@ -331,6 +198,12 @@ export default async function AttendancePage({
           </p>
         </div>
       ) : (
+        <>
+        {progressError && (
+          <p role="alert" className="mb-3 rounded-lg bg-gray-50 px-4 py-3 text-sm text-black">
+            Class attendance totals could not be loaded. You can still open a class roster.
+          </p>
+        )}
         <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {schedules.map((schedule) => {
             const active = selectedSchedule?.id === schedule.id;
@@ -343,88 +216,60 @@ export default async function AttendancePage({
             const done = total > 0 && marked >= total;
             const upcoming = schedule.date > today;
             const assignedName = fullName(schedule.coach) || "Coach";
-            const assignedIsHead = schedule.coach?.role === "head_coach";
-            const classDate = new Date(
-              `${schedule.date}T12:00:00`,
-            ).toLocaleDateString("en-US", {
-              weekday: "short",
-              month: "short",
-              day: "numeric",
-            });
             return (
               <Link
                 key={schedule.id}
                 href={`/attendance?date=${date}&scheduleId=${schedule.id}`}
                 aria-current={active ? "true" : undefined}
-                className={`rounded-xl border p-4 transition-all ${active ? "border-black bg-surface shadow-sm ring-1 ring-black" : "border-gray-200 bg-surface hover:border-gray-300"}`}
+                className={`min-w-0 rounded-xl border bg-white p-4 transition-all ${active ? "border-black shadow-sm ring-1 ring-black" : "border-gray-200 hover:border-gray-300"}`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-gray-950">
+                    <p className="truncate text-sm font-semibold text-black">
                       {schedule.branch?.name ?? "Branch"}
                     </p>
-                    <p className="mt-0.5 truncate text-xs text-gray-500">
-                      {classDate} · {formatTime(schedule.time_start)}–
-                      {formatTime(schedule.time_end)}
+                    <p className="mt-0.5 truncate text-xs text-black">
+                      {formatTime(schedule.time_start)}–{formatTime(schedule.time_end)}
                     </p>
-                    <dl className="mt-2 space-y-0.5 text-xs">
-                      {!assignedIsHead && (
-                        <div className="flex gap-1.5">
-                          <dt className="shrink-0 text-gray-400">
-                            Assistant Coach:
-                          </dt>
-                          <dd className="truncate font-medium text-gray-700">
-                            {assignedName}
-                          </dd>
-                        </div>
-                      )}
-                      <div className="flex gap-1.5">
-                        <dt className="shrink-0 text-gray-400">Head Coach:</dt>
-                        <dd className="truncate font-medium text-gray-700">
-                          {assignedIsHead ? assignedName : headCoachName}
-                        </dd>
-                      </div>
-                    </dl>
+                    <p className="mt-1 break-words text-xs text-black">
+                      Coach: <span className="font-medium text-black">{assignedName}</span>
+                    </p>
                   </div>
                   {upcoming ? (
-                    <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+                    <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-black">
                       Upcoming
                     </span>
                   ) : done ? (
-                    <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                    <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-black">
                       ✓ Done
                     </span>
                   ) : (
-                    <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                    <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-black">
                       {marked ? "In progress" : "To do"}
                     </span>
                   )}
                 </div>
-                <div className="mt-3 flex items-center gap-2">
-                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
-                    <div
-                      className={`h-full rounded-full ${done ? "bg-emerald-500" : "bg-gray-900"}`}
-                      style={{
-                        width: `${total ? Math.min(100, (marked / total) * 100) : 0}%`,
-                      }}
-                    />
+                {!progressError && (
+                  <div className="mt-3 grid grid-cols-3 gap-2 border-t border-gray-100 pt-3">
+                    <div className="min-w-0 rounded-lg border border-gray-200 bg-white px-2.5 py-2">
+                      <p className="text-lg font-bold leading-none text-black">{presentCount}</p>
+                      <p className="mt-1 text-[11px] font-semibold text-black">Present</p>
+                    </div>
+                    <div className="min-w-0 rounded-lg border border-red-200 bg-white px-2.5 py-2">
+                      <p className="text-lg font-bold leading-none text-red-600">{absentCount}</p>
+                      <p className="mt-1 text-[11px] font-semibold text-black">Absent</p>
+                    </div>
+                    <div className="min-w-0 rounded-lg border border-gray-200 bg-white px-2.5 py-2">
+                      <p className="text-lg font-bold leading-none text-black">{marked}<span className="text-sm font-medium text-gray-500">/{total}</span></p>
+                      <p className="mt-1 text-[11px] font-semibold text-black">Marked <span className="font-normal text-gray-600">· {Math.max(total - marked, 0)} left</span></p>
+                    </div>
                   </div>
-                  <span className="text-[11px] tabular-nums text-gray-500">
-                    <span className="font-medium text-emerald-700">
-                      {presentCount} present
-                    </span>
-                    {" · "}
-                    <span className="font-medium text-red-700">
-                      {absentCount} absent
-                    </span>
-                    {" · "}
-                    {marked}/{total} marked
-                  </span>
-                </div>
+                )}
               </Link>
             );
           })}
         </div>
+        </>
       )}
 
       {/* 3 — mark the roster */}
@@ -437,7 +282,7 @@ export default async function AttendancePage({
         <AttendanceRoster
           key={selectedSchedule.id}
           scheduleId={Number(selectedSchedule.id)}
-          classLabel={`${selectedSchedule.branch?.name ?? "Branch"} · ${formatTime(selectedSchedule.time_start)}`}
+          classLabel={`${selectedSchedule.branch?.name ?? "Branch"} · ${formatTime(selectedSchedule.time_start)}–${formatTime(selectedSchedule.time_end)}`}
           students={students}
           initialAttendance={attendance}
           canMarkAttendance={canMarkAttendance}

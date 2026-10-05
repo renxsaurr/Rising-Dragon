@@ -4,7 +4,7 @@ import { cookies } from 'next/headers'
 import { createClient } from '@/utils/supabase/server'
 import { getCurrentUser } from '@/utils/getCurrentUser'
 import { getCoachBranchIdsForDate } from '@/utils/coach-access'
-import { addDays, dateInTimeZone, formatTimeRange } from '@/utils/dates'
+import { dateInTimeZone } from '@/utils/dates'
 
 type StudentMatch = {
   id: number
@@ -102,39 +102,4 @@ export async function searchDirectory(value: string) {
     }))
 
   return [...students, ...staff]
-}
-
-export async function getHeaderUpdates() {
-  const user = await getCurrentUser()
-  if (!user) return { updates: [], error: 'Please sign in to view updates.' }
-
-  const cookieStore = await cookies()
-  const supabase = await createClient(cookieStore)
-  const today = dateInTimeZone()
-  const throughDate = addDays(today, 7)
-
-  if (user.role === 'head_coach') return { updates: [], error: null }
-
-  const { data, error } = await supabase
-    .from('class_schedule')
-    .select('id, date, time_start, time_end, branch:branch!class_schedule_branch_id_fkey(name)')
-    .eq('coach_id', user.id)
-    .gte('date', today)
-    .lte('date', throughDate)
-    .neq('status', 'Cancelled')
-    .neq('status', 'Draft')
-    .order('date')
-    .order('time_start')
-    .limit(6)
-
-  if (error) return { updates: [], error: 'Could not load upcoming class updates.' }
-  return {
-    updates: (data ?? []).map((schedule) => ({
-      id: `schedule-${schedule.id}`,
-      title: `${firstRelation(schedule.branch)?.name ?? 'Branch'} class assignment`,
-      detail: `${new Date(`${schedule.date}T00:00:00`).toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric' })} · ${formatTimeRange(schedule.time_start, schedule.time_end)}`,
-      href: `/attendance?date=${schedule.date}&scheduleId=${schedule.id}`,
-    })),
-    error: null,
-  }
 }

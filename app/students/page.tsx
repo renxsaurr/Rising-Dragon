@@ -105,7 +105,6 @@ export default async function StudentsPage({
       requestedBelts.filter((belt) => Object.hasOwn(BELT_LABELS, belt)),
     ),
   ];
-
   let studentQuery = supabase
     .from("student")
     .select(
@@ -138,7 +137,7 @@ export default async function StudentsPage({
     );
   }
 
-  const total = students?.length ?? 0;
+  const total = students.length;
   const assistantHasNoSchedule =
     currentUser.role === "assistant_coach" &&
     (assignedBranchIds?.length ?? 0) === 0;
@@ -203,7 +202,7 @@ export default async function StudentsPage({
           </div>
         ) : (
           <>
-            <div className="hidden xl:block">
+            <div className="hidden max-h-[min(60vh,480px)] overflow-y-auto overscroll-contain xl:block">
               <table className="w-full table-fixed border-collapse text-left">
                 <colgroup>
                   {isHeadCoach ? (
@@ -224,7 +223,7 @@ export default async function StudentsPage({
                     </>
                   )}
                 </colgroup>
-                <thead className="border-b border-gray-200 bg-gray-50/70">
+                <thead className="sticky top-0 z-10 border-b border-gray-200 bg-gray-50">
                   <tr>
                     <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
                       Student
@@ -343,7 +342,7 @@ export default async function StudentsPage({
               </table>
             </div>
 
-            <div className="divide-y divide-gray-100 xl:hidden">
+            <div className="max-h-[min(60vh,480px)] divide-y divide-gray-100 overflow-y-auto overscroll-contain xl:hidden">
               {students?.map((student) => {
                 const fullName = [
                   student.first_name,

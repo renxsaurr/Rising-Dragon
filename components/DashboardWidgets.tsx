@@ -1,22 +1,23 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 
-export function Card({ title, chip, action, children, className = '', flush = false }: {
+export function Card({ title, chip, action, children, className = '', contentClassName = '', flush = false }: {
   title: ReactNode
   chip?: string
   action?: ReactNode
   children: ReactNode
   className?: string
+  contentClassName?: string
   flush?: boolean
 }) {
   return (
     <section className={`card ${className}`}>
-      <div className="flex items-center justify-between gap-3 px-5 pb-4 pt-5">
-        <h3 className="flex min-w-0 items-center gap-2.5 text-[15px] font-semibold text-gray-900">{title}</h3>
+      <div className="flex items-start justify-between gap-3 px-5 pb-4 pt-5">
+        <h3 className="flex min-w-0 items-center gap-2.5 text-[15px] font-semibold text-gray-950">{title}</h3>
         {chip && <span className="chip">{chip}</span>}
         {action}
       </div>
-      <div className={flush ? '' : 'px-5 pb-5'}>{children}</div>
+      <div className={`${flush ? '' : 'px-5 pb-5'} ${contentClassName}`}>{children}</div>
     </section>
   )
 }
@@ -123,7 +124,7 @@ const TONE_DOT: Record<StatusTone, string> = { green: 'bg-emerald-500', red: 'bg
 
 export function StatusDot({ tone, label }: { tone: StatusTone; label: string }) {
   return (
-    <span className="inline-flex items-center gap-2 text-[13px] text-gray-500">
+    <span className="inline-flex items-center gap-2 text-[13px] text-gray-800">
       <span className={`h-2.5 w-2.5 rounded-full ${TONE_DOT[tone]}`} />{label}
     </span>
   )
@@ -167,5 +168,5 @@ export function ClassTable({ rows, showDate = false }: { rows: ClassRow[]; showD
 }
 
 export function EmptyNote({ children }: { children: ReactNode }) {
-  return <p className="rounded-lg bg-gray-50 px-4 py-8 text-center text-sm text-gray-400">{children}</p>
+  return <p className="rounded-lg bg-gray-50 px-4 py-8 text-center text-sm text-gray-700">{children}</p>
 }

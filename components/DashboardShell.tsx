@@ -6,7 +6,6 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import GlobalSearch from "@/components/GlobalSearch";
-import HeaderNotifications from "@/components/HeaderNotifications";
 
 const GridIcon = () => (
   <svg
@@ -430,9 +429,8 @@ export default function DashboardShell({
           {currentUser && (
             <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
               <GlobalSearch canSearchStaff={isHeadCoach} />
-              <HeaderNotifications isHeadCoach={isHeadCoach} />
-              <div className="hidden min-w-0 flex-col border-l border-gray-200 pl-3 leading-tight md:flex">
-                <span className="block max-w-40 truncate text-[13px] font-semibold capitalize text-gray-900">
+              <div className="hidden min-w-0 max-w-56 flex-col border-l border-gray-200 pl-3 leading-tight md:flex">
+                <span className="block whitespace-normal break-words text-[13px] font-semibold capitalize text-gray-900">
                   {currentUser.name}
                 </span>
                 <span className="block text-[11px] text-gray-500">
