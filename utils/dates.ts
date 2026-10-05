@@ -27,3 +27,12 @@ export function addDays(isoDate: string, days: number) {
   date.setUTCDate(date.getUTCDate() + days)
   return date.toISOString().slice(0, 10)
 }
+
+// HH:MM:SS wall-clock time, comparable with class_schedule time_start / time_end
+export function timeInTimeZone(date = new Date(), timeZone = 'Asia/Manila') {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23', timeZone })
+      .formatToParts(date).map((part) => [part.type, part.value]),
+  )
+  return `${parts.hour}:${parts.minute}:${parts.second}`
+}
