@@ -1,142 +1,218 @@
-import { createClient } from '@/utils/supabase/server'
 import { cookies } from 'next/headers'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
+import { ArrowUpRight, CalendarDays, ChevronLeft, MapPin, Users } from 'lucide-react'
 import DashboardShell from '@/components/DashboardShell'
-import { getCurrentUser } from '@/utils/getCurrentUser'
 import EditBranchModal from '@/components/EditBranchModal'
-import { dateInTimeZone } from '@/utils/dates'
+import { Card, EmptyNote } from '@/components/DashboardWidgets'
+import { NeedsAttention, ReportKpis, ReportRangeLine } from '@/app/branches/_components/BranchReportSummary'
+import { createClient } from '@/utils/supabase/server'
+import { getCurrentUser } from '@/utils/getCurrentUser'
+import { dateInTimeZone, formatTimeRange, timeInTimeZone } from '@/utils/dates'
+import { BELT_COLORS, formatBeltLabel } from '@/utils/belts'
+import { getBranchReportWithComparison, resolveReportRange } from '@/utils/branch-reports'
+import { cardClass } from '@/utils/branch-report-format'
 
 export const dynamic = 'force-dynamic'
 
+// the only keys "Back to reports" may carry — a full back URL is never taken from the query
+const BACK_KEYS = ['range', 'from', 'to', 'branches', 'sort', 'dir']
 
-// [id] in the folder name makes this a dynamic route —
-// visiting /branches/3 makes params.id === "3" automatically
-export default async function BranchDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  const cookieStore = await cookies()
-  const supabase = await createClient(cookieStore)
+type ScheduleRow = {
+  id: number
+  date: string
+  time_start: string
+  time_end: string
+  status: string
+  coach: { first_name: string; middle_name: string | null; last_name: string } | null
+}
+
+type StudentRow = { id: number; first_name: string; middle_name: string | null; last_name: string; belt_level: string | null }
+
+const fullName = (person: { first_name: string; middle_name: string | null; last_name: string }) =>
+  [person.first_name, person.middle_name, person.last_name].filter(Boolean).join(' ')
+
+// same labels and colors as the dashboard's Today's classes
+function classStatus(schedule: ScheduleRow, now: string, hasAttendance: boolean) {
+  if (schedule.status === 'Cancelled') return { label: 'Cancelled', tone: 'bg-gray-100 text-gray-500' }
+  if (schedule.time_start <= now && now < schedule.time_end) return { label: 'In session', tone: 'bg-amber-50 text-amber-700' }
+  if (schedule.time_end <= now) {
+    return hasAttendance
+      ? { label: 'Attendance entered', tone: 'bg-emerald-50 text-emerald-700' }
+      : { label: 'Not recorded', tone: 'bg-red-50 text-red-700' }
+  }
+  return { label: 'Upcoming', tone: 'bg-gray-100 text-gray-600' }
+}
+
+export default async function BranchDetailPage({ params, searchParams }: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const currentUser = await getCurrentUser()
-
   // same role gate as the list page — Head Coach only
-  if (!currentUser || currentUser.role !== 'head_coach') {
-    redirect('/students')
+  if (!currentUser || currentUser.role !== 'head_coach') redirect('/students')
+
+  // /branches/abc, /branches/-1 or /branches/0 → 404 without touching the database
+  const { id } = await params
+  const branchId = /^\d+$/.test(id) ? Number(id) : NaN
+  if (!Number.isSafeInteger(branchId) || branchId <= 0) notFound()
+
+  const query = await searchParams
+  const param = (key: string) => {
+    const value = query[key]
+    return Array.isArray(value) ? value[0] : value
   }
 
-  // fetch just this one branch by the id from the URL
-  const { data: branch } = await supabase
+  const supabase = await createClient(await cookies())
+  const { data: branch, error: branchError } = await supabase
     .from('branch')
-    .select('*')
-    .eq('id', id)
-    .single()
+    .select('id, name, address, description, photo_url')
+    .eq('id', branchId)
+    .maybeSingle()
 
-  // if someone visits /branches/999 and it doesn't exist, show Next.js's built-in 404 page
+  if (branchError) {
+    return (
+      <DashboardShell title="Branch" currentUser={currentUser}>
+        <p role="alert" className="text-sm text-red-600">Could not load this branch: {branchError.message}</p>
+      </DashboardShell>
+    )
+  }
   if (!branch) notFound()
 
-          // students for this specific branch
-  const { data: students } = await supabase
-    .from('student')
-    .select('id, first_name, middle_name, last_name, belt_level', { count: 'exact' })
-    .eq('is_active', true)
-    .eq('branch_id', branch.id)
+  const today = dateInTimeZone()
+  const now = timeInTimeZone()
+  const reportRange = resolveReportRange(param('range'), param('from'), param('to'))
 
-  // today's schedule for this branch, including the assigned coach's name
-  // User:coach_id(name) is a Supabase join — pulls the coach's name from the User table
-  // via the coach_id foreign key on ClassSchedule
-  const { data: todayData } = await supabase
-    .from('class_schedule')
-    .select('time_start, time_end, coach_id, coach:user!class_schedule_coach_id_fkey(name)')
-    .eq('branch_id', branch.id)
-    .eq('date', dateInTimeZone())
-    .neq('status', 'Draft')
-    .neq('status', 'Cancelled')
-    .order('time_start')
-  const todaySchedule = todayData as unknown as { time_start: string; time_end: string; coach_id: number; coach: { name: string } | null }[] | null
+  const loadSchedule = async () => {
+    // Cancelled is shown (not linked); Draft never is
+    const { data, error } = await supabase
+      .from('class_schedule')
+      .select('id, date, time_start, time_end, status, coach:user!class_schedule_coach_id_fkey(first_name, middle_name, last_name)')
+      .eq('branch_id', branchId)
+      .eq('date', today)
+      .neq('status', 'Draft')
+      .order('time_start')
+    if (error) return { rows: [], marked: new Set<number>(), error: error.message }
+    const rows = (data ?? []) as unknown as ScheduleRow[]
+    const ids = rows.filter((row) => row.status !== 'Cancelled').map((row) => Number(row.id))
+    if (!ids.length) return { rows, marked: new Set<number>(), error: null }
+    const { data: attendance, error: attendanceError } = await supabase
+      .from('attendance').select('schedule_id').in('schedule_id', ids)
+    if (attendanceError) return { rows: [], marked: new Set<number>(), error: attendanceError.message }
+    return { rows, marked: new Set((attendance ?? []).map((row) => Number(row.schedule_id))), error: null }
+  }
+
+  // each section fails on its own, so one error never blanks the whole page
+  const [report, schedule, studentResult] = await Promise.all([
+    getBranchReportWithComparison({ start: reportRange.start, end: reportRange.end, branchIds: [branchId] }),
+    loadSchedule(),
+    supabase
+      .from('student')
+      .select('id, first_name, middle_name, last_name, belt_level')
+      .eq('is_active', true)
+      .eq('branch_id', branchId)
+      .order('last_name')
+      .order('first_name'),
+  ])
+  const students = (studentResult.data ?? []) as StudentRow[]
+
+  const fromReports = param('ref') === 'reports'
+  const backQuery = new URLSearchParams({ view: 'reports' })
+  for (const key of BACK_KEYS) {
+    const value = param(key)
+    if (value) backQuery.set(key, value)
+  }
+  const backHref = fromReports ? `/branches?${backQuery.toString().replace(/%2C/g, ',')}` : '/branches'
 
   return (
     <DashboardShell title={branch.name} currentUser={currentUser}>
-            {/* back link + edit button row */}
-            <div className="flex items-center justify-between">
-                <Link
-          href="/branches"
-          className="inline-flex items-center gap-1.5 text-[14px] font-medium text-gray-700 border border-gray-200 rounded-lg px-4 py-2 hover:bg-gray-50 hover:text-black transition-colors"
+      <div className="flex items-center justify-between gap-3">
+        <Link
+          href={backHref}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-4 py-2 text-[14px] font-medium text-gray-700 transition-colors hover:bg-gray-50 hover:text-black"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Back to Branches
+          <ChevronLeft className="h-4 w-4" aria-hidden />
+          {fromReports ? 'Back to reports' : 'Back to branches'}
         </Link>
-        <EditBranchModal branch={branch} />
+        <EditBranchModal branch={{ ...branch, address: branch.address ?? '' }} />
       </div>
 
-      {/* header banner — same gradient style as the card, just bigger */}
-      <div className="mt-4 mb-6 bg-gradient-to-br from-red-600 to-red-800 rounded-xl p-6 text-white">
-        <h1 className="text-xl font-bold">{branch.name}</h1>
-        <p className="text-white/80 text-[13px] mt-1">{branch.address}</p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                      {/* stat card 1 — students */}
-        <div className="bg-surface border border-gray-200/80 rounded-xl p-4 flex items-center gap-4">
-          <div className="w-11 h-11 rounded-full bg-red-50 flex items-center justify-center shrink-0">
-            <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-3.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a4 4 0 10-4-4" />
-            </svg>
-          </div>
-          <div>
-            <p className="text-[13px] text-gray-500">Students Enrolled</p>
-            <p className="text-2xl font-bold mt-0.5">{students?.length ?? 0}</p>
-          </div>
+      {/* banner — same photo / letter fallback as the branch cards */}
+      <section className={`mt-4 overflow-hidden border ${cardClass}`}>
+        {branch.photo_url
+          ? <img src={branch.photo_url} alt={branch.name} className="h-44 w-full object-cover" />
+          : <div className="flex h-44 items-center justify-center bg-gradient-to-br from-red-600 to-red-800 text-5xl font-bold text-white" aria-hidden>
+            {branch.name.charAt(0)}
+          </div>}
+        <div className="p-5">
+          <h1 className="text-xl font-semibold text-gray-950">{branch.name}</h1>
+          {branch.address && (
+            <p className="mt-1 flex items-start gap-1.5 text-sm text-gray-500">
+              <MapPin className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />{branch.address}
+            </p>
+          )}
+          {branch.description && <p className="mt-3 text-sm text-gray-600">{branch.description}</p>}
         </div>
+      </section>
 
-        {/* stat card 2 — classes today */}
-        <div className="bg-surface border border-gray-200/80 rounded-xl p-4 flex items-center gap-4">
-          <div className="w-11 h-11 rounded-full bg-red-50 flex items-center justify-center shrink-0">
-            <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </div>
-          <div>
-            <p className="text-[13px] text-gray-500">Classes Today</p>
-            <p className="text-2xl font-bold mt-0.5">{todaySchedule?.length ?? 0}</p>
-          </div>
-        </div>
-                {/* enrolled students list — spans both columns, mirrors Today's Schedule styling */}
-        <div className="md:col-span-2 bg-surface border border-gray-200/80 rounded-xl p-4">
-          <h3 className="font-semibold text-[14px] mb-3">Enrolled Students</h3>
-          {students && students.length > 0 ? (
-            <ul className="space-y-2">
-                            {students.map((s) => {
-                const fullName = [s.first_name, s.middle_name, s.last_name].filter(Boolean).join(' ')
-                return (
-                  <li key={s.id} className="flex justify-between text-[13px] border-b border-gray-50 pb-2 last:border-0">
-                    <span>{fullName}</span>
-                    <span className="text-gray-500">{s.belt_level ?? '—'}</span>
+      <section aria-label="Branch report" className="mt-6 space-y-4">
+        {report.current.error
+          ? <p role="alert" className="text-sm text-red-600">Could not load the branch report: {report.current.error}</p>
+          : report.current.data && <>
+            <ReportRangeLine range={report.current.data.range} comparison={report.comparison} />
+            <ReportKpis totals={report.current.data.totals} comparison={report.comparison} />
+            <NeedsAttention branches={report.current.data.branches} comparison={report.comparison} single />
+          </>}
+      </section>
+
+      <div className="mt-6 grid items-start gap-5 lg:grid-cols-2">
+        <Card title={<><CalendarDays className="h-4 w-4 text-gray-950" aria-hidden />Today’s schedule</>} chip={schedule.error ? undefined : String(schedule.rows.length)} flush className={cardClass}>
+          {schedule.error
+            ? <p role="alert" className="px-5 pb-5 text-sm text-red-600">Could not load today’s schedule: {schedule.error}</p>
+            : schedule.rows.length
+              ? <ul className="divide-y divide-gray-100 pb-1">
+                {schedule.rows.map((row) => {
+                  const status = classStatus(row, now, schedule.marked.has(Number(row.id)))
+                  const content = <>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium tabular-nums text-gray-900">{formatTimeRange(row.time_start, row.time_end)}</span>
+                      <span className="mt-0.5 block truncate text-xs text-gray-500">{row.coach ? fullName(row.coach) : 'Unassigned'}</span>
+                    </span>
+                    <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-medium ${status.tone}`}>{status.label}</span>
+                  </>
+                  return (
+                    <li key={row.id}>
+                      {row.status === 'Cancelled'
+                        ? <div className="flex items-center gap-3 px-5 py-3.5 opacity-70">{content}</div>
+                        : <Link href={`/attendance?date=${row.date}&scheduleId=${row.id}`} className="group/row flex items-center gap-3 px-5 py-3.5 transition-colors duration-200 hover:bg-red-600/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-red-500">
+                          {content}
+                          <ArrowUpRight className="h-4 w-4 shrink-0 text-gray-400 transition group-hover/row:text-gray-950" aria-hidden />
+                        </Link>}
+                    </li>
+                  )
+                })}
+              </ul>
+              : <div className="px-5 pb-5"><EmptyNote>No classes scheduled today.</EmptyNote></div>}
+        </Card>
+
+        <Card title={<><Users className="h-4 w-4 text-gray-950" aria-hidden />Active students</>} chip={studentResult.error ? undefined : String(students.length)} flush className={cardClass}>
+          {studentResult.error
+            ? <p role="alert" className="px-5 pb-5 text-sm text-red-600">Could not load students: {studentResult.error.message}</p>
+            : students.length
+              ? <ul className="max-h-[28rem] divide-y divide-gray-100 overflow-y-auto pb-1">
+                {students.map((student) => (
+                  <li key={student.id} className="flex items-center justify-between gap-3 px-5 py-2.5 transition-colors duration-200 hover:bg-red-600/5">
+                    <span className="min-w-0 truncate text-sm text-gray-900">{fullName(student)}</span>
+                    {student.belt_level
+                      ? <span className={`inline-flex shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${BELT_COLORS[student.belt_level] ?? 'bg-gray-100 text-gray-700'}`}>
+                        {formatBeltLabel(student.belt_level)}
+                      </span>
+                      : <span className="text-xs text-gray-400">—</span>}
                   </li>
-                )
-              })}
-            </ul>
-          ) : (
-            <p className="text-[13px] text-gray-400">No students enrolled yet.</p>
-          )}
-        </div>
-
-        {/* today's schedule list — spans both columns */}
-        <div className="md:col-span-2 bg-surface border border-gray-200/80 rounded-xl p-4">
-          <h3 className="font-semibold text-[14px] mb-3">Today's Schedule</h3>
-          {todaySchedule && todaySchedule.length > 0 ? (
-            <ul className="space-y-2">
-              {todaySchedule.map((slot, i) => (
-                <li key={i} className="flex justify-between text-[13px] border-b border-gray-50 pb-2 last:border-0">
-                  <span>{slot.time_start} – {slot.time_end}</span>
-                  <span className="text-gray-500">{slot.coach?.name ?? 'Unassigned'}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-[13px] text-gray-400">No classes scheduled today.</p>
-          )}
-        </div>
+                ))}
+              </ul>
+              : <div className="px-5 pb-5"><EmptyNote>No active students in this branch.</EmptyNote></div>}
+        </Card>
       </div>
     </DashboardShell>
   )

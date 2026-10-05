@@ -1,0 +1,28 @@
+/* Branch reports print layout. Every rule only matches a page that contains
+   [data-report-print], so other pages using DashboardShell print as before. */
+@media print {
+  html:has([data-report-print]) [data-shell='sidebar'],
+  html:has([data-report-print]) [data-shell='header'] {
+    display: none;
+  }
+
+  /* the app scrolls inside <main> (h-dvh + overflow); let the whole report flow onto pages */
+  html:has([data-report-print]) [data-shell='root'],
+  html:has([data-report-print]) [data-shell='content'],
+  html:has([data-report-print]) [data-shell='main'] {
+    display: block;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  html:has([data-report-print]) [data-shell='main'] {
+    padding: 0;
+  }
+
+  /* keep status colors, bars and badges instead of the browser's ink-saving gray */
+  [data-report-print] {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

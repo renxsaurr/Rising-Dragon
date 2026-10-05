@@ -369,8 +369,8 @@ export default function DashboardShell({
   );
 
   return (
-    <div className="flex h-dvh w-full overflow-hidden bg-white">
-      <aside className="flex h-full w-64 shrink-0 flex-col bg-black">
+    <div data-shell="root" className="flex h-dvh w-full overflow-hidden bg-white">
+      <aside data-shell="sidebar" className="flex h-full w-64 shrink-0 flex-col bg-black">
         <Link
           href="/dashboard"
           onClick={handleNavClick("/dashboard")}
@@ -420,8 +420,8 @@ export default function DashboardShell({
         </div>
       </aside>
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="flex shrink-0 items-center justify-between gap-3 px-4 pb-5 pt-6 sm:gap-4 sm:px-6 sm:pt-7 lg:px-8">
+      <div data-shell="content" className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <header data-shell="header" className="flex shrink-0 items-center justify-between gap-3 px-4 pb-5 pt-6 sm:gap-4 sm:px-6 sm:pt-7 lg:px-8">
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-[22px] font-semibold text-gray-900">
               {title}
@@ -443,8 +443,9 @@ export default function DashboardShell({
           )}
         </header>
         <main
+          data-shell="main"
           aria-busy={pendingHref ? true : undefined}
-          className={`no-scrollbar min-h-0 flex-1 overflow-y-auto px-8 pb-8 transition-opacity ${pendingHref ? "opacity-60" : ""}`}
+          className={`no-scrollbar relative min-h-0 flex-1 overflow-y-auto px-8 pb-8 transition-opacity ${pendingHref ? "opacity-60" : ""}`}
         >
           {children}
         </main>
