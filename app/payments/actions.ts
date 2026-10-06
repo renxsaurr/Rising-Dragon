@@ -2,33 +2,103 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/utils/getCurrentUser";
-import { retryPaymentReminder } from "@/utils/payment-reminders";
+import {
+  REMINDER_TYPES,
+  getPaymentReminderPreview,
+  getRetryReminderPreview,
+  retryFailedReminder,
+  sendReminderForPayment,
+  type ReminderPreviewResult,
+  type ReviewedReminder,
+  type SendReminderResult,
+} from "@/utils/payment-reminders";
 
-const RETRY_MESSAGES = {
-  Sent: "Reminder sent.",
-  Failed: "Sending failed again. Check the error and try later.",
-  Skipped: "Not sent: the payment is already paid or the student is inactive.",
-  Scheduled: "The reminder is still sending. Refresh the page in a minute.",
-} as const;
+export type ReminderActionResult =
+  | { success: true; message: string }
+  | { error: string; closed?: boolean };
 
-export async function retryReminder(reminderId: number) {
+async function requireHeadCoach(): Promise<
+  { error: string } | { userId: number }
+> {
   const currentUser = await getCurrentUser();
-  if (!currentUser) return { error: "Please sign in to retry reminders." };
+  if (!currentUser) return { error: "Please sign in to send reminders." };
   if (currentUser.role !== "head_coach")
-    return { error: "Only the Head Coach can retry reminders." };
+    return { error: "Only the Head Coach can send reminders." };
+  return { userId: Number(currentUser.id) };
+}
 
-  if (!Number.isSafeInteger(reminderId) || reminderId <= 0)
-    return { error: "Reminder not found." };
+const isValidId = (id: unknown): id is number =>
+  typeof id === "number" && Number.isSafeInteger(id) && id > 0;
 
-  const result = await retryPaymentReminder(reminderId, Number(currentUser.id));
+// Server actions can be called with any value, so check what the popup sent back.
+const isReviewed = (value: unknown): value is ReviewedReminder => {
+  const reviewed = value as Partial<ReviewedReminder> | null;
+  return (
+    typeof reviewed?.recipient === "string" &&
+    REMINDER_TYPES.some((type) => type === reviewed.reminderType)
+  );
+};
 
-  // The row may have changed even when an error came back, so always refresh.
-  revalidatePath("/payments");
-
-  if ("error" in result) return { error: result.error };
+function toActionResult(result: SendReminderResult): ReminderActionResult {
+  if ("error" in result) return result;
   return {
     success: true,
-    status: result.status,
-    message: RETRY_MESSAGES[result.status],
+    message: `"${result.reminderType}" reminder sent to ${result.recipient}.`,
   };
+}
+
+export async function getReminderPreview(
+  paymentId: number,
+): Promise<ReminderPreviewResult> {
+  const auth = await requireHeadCoach();
+  if ("error" in auth) return auth;
+  if (!isValidId(paymentId)) return { error: "Payment not found." };
+
+  return getPaymentReminderPreview(paymentId);
+}
+
+export async function getRetryPreview(
+  reminderId: number,
+): Promise<ReminderPreviewResult> {
+  const auth = await requireHeadCoach();
+  if ("error" in auth) return auth;
+  if (!isValidId(reminderId)) return { error: "Reminder not found." };
+
+  const result = await getRetryReminderPreview(reminderId);
+  // Loading the preview may close a failed reminder as Skipped, so refresh the list.
+  if ("closed" in result && result.closed) revalidatePath("/payments");
+  return result;
+}
+
+export async function sendPaymentReminder(
+  paymentId: number,
+  reviewed: ReviewedReminder,
+): Promise<ReminderActionResult> {
+  const auth = await requireHeadCoach();
+  if ("error" in auth) return auth;
+  if (!isValidId(paymentId)) return { error: "Payment not found." };
+  if (!isReviewed(reviewed))
+    return { error: "Review the reminder before sending it." };
+
+  const result = await sendReminderForPayment(paymentId, auth.userId, reviewed);
+
+  // A row may have been written even when an error came back, so always refresh.
+  revalidatePath("/payments");
+  return toActionResult(result);
+}
+
+export async function retryReminder(
+  reminderId: number,
+  reviewed: ReviewedReminder,
+): Promise<ReminderActionResult> {
+  const auth = await requireHeadCoach();
+  if ("error" in auth) return auth;
+  if (!isValidId(reminderId)) return { error: "Reminder not found." };
+  if (!isReviewed(reviewed))
+    return { error: "Review the reminder before sending it." };
+
+  const result = await retryFailedReminder(reminderId, auth.userId, reviewed);
+
+  revalidatePath("/payments");
+  return toActionResult(result);
 }

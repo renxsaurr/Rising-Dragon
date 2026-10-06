@@ -1,13 +1,17 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import DashboardShell from "@/components/DashboardShell";
-import RetryReminderButton from "@/components/RetryReminderButton";
+import RetryReminderButton from "./_components/RetryReminderButton";
+import SendReminderButton from "./_components/SendReminderButton";
 import { getCurrentUser } from "@/utils/getCurrentUser";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { addDays, dateInTimeZone } from "@/utils/dates";
+import { isValidEmail, normalizeEmail } from "@/utils/email";
 import {
-  REMINDER_WINDOWS,
+  REMINDER_TYPES,
+  failStuckReminders,
   formatAmount,
+  reminderTypeFor,
   type ReminderType,
 } from "@/utils/payment-reminders";
 
@@ -60,6 +64,7 @@ type ListRow = {
   studentName: string;
   isActive: boolean;
   hasEmail: boolean;
+  emailValid: boolean;
   amount: string;
   amountValue: number;
   dueDate: string;
@@ -132,23 +137,37 @@ const formatTimestamp = (timestamp: string) =>
     minute: "2-digit",
   });
 
-const typeOrder = (type: ReminderType) =>
-  REMINDER_WINDOWS.findIndex((window) => window.type === type);
+const typeOrder = (type: ReminderType) => REMINDER_TYPES.indexOf(type);
 
-/** The next reminder the daily job will send, using the same windows as the job. */
-function nextReminder(
-  dueDate: string,
-  reminders: PaymentReminderSummary[],
-  today: string,
-) {
-  const daysAfterDue = daysBetween(dueDate, today);
-  const createdTypes = new Set(reminders.map((reminder) => reminder.reminder_type));
-  const window = REMINDER_WINDOWS.find(
-    (window) => !createdTypes.has(window.type) && daysAfterDue <= window.lastDay,
+/** Whether the row's "Send reminder" button can be used, and why not. */
+function sendButtonState(row: ListRow, today: string) {
+  const reminderType = reminderTypeFor(row.dueDate, today);
+  if (!row.hasEmail)
+    return { reminderType, disabledReason: "No guardian email" };
+  if (!row.emailValid)
+    return { reminderType, disabledReason: "Invalid guardian email" };
+  if (!row.isActive)
+    return { reminderType, disabledReason: "Student is inactive" };
+
+  const existing = row.reminders.find(
+    (reminder) => reminder.reminder_type === reminderType,
   );
-  if (!window) return null;
-  const date = addDays(dueDate, window.dueOffset);
-  return { type: window.type, date: date < today ? today : date };
+  if (existing?.status === "Sent")
+    return {
+      reminderType,
+      disabledLabel: existing.sent_at
+        ? `Sent ${formatShortDate(existing.sent_at)}`
+        : "Sent",
+    };
+  if (existing?.status === "Failed")
+    return {
+      reminderType,
+      disabledReason: `${reminderType} failed. Use Retry in Reminder history.`,
+    };
+  if (existing?.status === "Scheduled")
+    return { reminderType, disabledLabel: "Sending…" };
+  // No row yet, or a Skipped one that Send may reuse.
+  return { reminderType };
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -161,36 +180,33 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function ReminderStatus({ row, today }: { row: ListRow; today: string }) {
-  const latest = [...row.reminders].sort(
-    (a, b) => typeOrder(b.reminder_type) - typeOrder(a.reminder_type),
-  )[0];
-  const next =
-    row.hasEmail && row.isActive
-      ? nextReminder(row.dueDate, row.reminders, today)
-      : null;
+function ReminderStatus({ row }: { row: ListRow }) {
+  const reminders = [...row.reminders].sort(
+    (a, b) => typeOrder(a.reminder_type) - typeOrder(b.reminder_type),
+  );
 
   return (
     <div className="flex flex-col items-start gap-1">
-      {latest && (
-        <span className="inline-flex flex-wrap items-center gap-1.5 text-[13px] text-gray-700">
-          {latest.reminder_type}
-          <StatusBadge status={latest.status} />
-          {latest.sent_at && (
-            <span className="text-gray-500">{formatShortDate(latest.sent_at)}</span>
+      {reminders.map((reminder) => (
+        <span
+          key={reminder.reminder_type}
+          className="inline-flex flex-wrap items-center gap-1.5 text-[13px] text-gray-700"
+        >
+          {reminder.reminder_type}
+          <StatusBadge status={reminder.status} />
+          {reminder.sent_at && (
+            <span className="text-gray-500">
+              {formatShortDate(reminder.sent_at)}
+            </span>
           )}
         </span>
-      )}
+      ))}
       {!row.hasEmail ? (
         <span className="inline-flex whitespace-nowrap rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20">
           No guardian email
         </span>
-      ) : next ? (
-        <span className="text-xs text-gray-500">
-          Next: {next.type} on {formatDate(next.date)}
-        </span>
-      ) : !latest ? (
-        <span className="text-xs text-gray-500">No reminders</span>
+      ) : reminders.length === 0 ? (
+        <span className="text-xs text-gray-500">No reminders yet</span>
       ) : null}
     </div>
   );
@@ -218,14 +234,15 @@ function PaymentTable({
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] border-collapse text-left">
+          <table className="w-full min-w-[780px] border-collapse text-left">
             <thead className="border-b border-gray-200 bg-gray-50/70">
               <tr>
                 <th className={`${TH} pl-5`}>Student</th>
                 <th className={TH}>Amount</th>
                 <th className={TH}>Due date</th>
                 {showDaysOverdue && <th className={TH}>Days overdue</th>}
-                <th className={`${TH} pr-5`}>Reminder status</th>
+                <th className={TH}>Reminder status</th>
+                <th className={`${TH} pr-5 text-right`}>Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -252,8 +269,14 @@ function PaymentTable({
                       {row.daysOverdue} day{row.daysOverdue === 1 ? "" : "s"}
                     </td>
                   )}
+                  <td className="px-3 py-4">
+                    <ReminderStatus row={row} />
+                  </td>
                   <td className="px-3 py-4 pr-5">
-                    <ReminderStatus row={row} today={today} />
+                    <SendReminderButton
+                      paymentId={row.id}
+                      {...sendButtonState(row, today)}
+                    />
                   </td>
                 </tr>
               ))}
@@ -330,7 +353,7 @@ function HistoryTable({
         <div className="px-5 py-6 text-center">
           <p className="text-sm font-medium text-gray-700">No reminders yet</p>
           <p className="mt-1 text-[13px] text-gray-500">
-            Reminder emails will appear here after the daily job runs.
+            Reminders appear here after the Head Coach sends them.
           </p>
         </div>
       ) : (
@@ -417,6 +440,9 @@ export default async function PaymentsPage({
   // so Row Level Security can't hide reminder rows from this page.
   const admin = createAdminClient();
   const today = dateInTimeZone();
+
+  // There is no daily job any more, so clean up interrupted sends whenever the page loads.
+  const stuckError = await failStuckReminders(admin);
   const dueSoonEnd = addDays(today, 7);
 
   const historySelect =
@@ -479,11 +505,13 @@ export default async function PaymentsPage({
 
   const rows: ListRow[] = payments.map((payment) => {
     const student = one(payment.student);
+    const email = normalizeEmail(student?.guardian_email);
     return {
       id: Number(payment.id),
       studentName: fullName(student),
       isActive: student?.is_active ?? false,
-      hasEmail: Boolean(student?.guardian_email?.trim()),
+      hasEmail: Boolean(email),
+      emailValid: isValidEmail(email),
       amount: formatAmount(payment.amount),
       amountValue: Number(payment.amount),
       dueDate: payment.due_date,
@@ -522,10 +550,16 @@ export default async function PaymentsPage({
   return (
     <DashboardShell title="Payments" currentUser={currentUser}>
       <p className="mb-4 text-[13px] text-gray-500">
-        Reminder emails go out automatically around 8 AM: 3 days before, on the
-        due date, and 3 days after if still unpaid. Paid payments are never
-        emailed.
+        The Head Coach reviews and sends each reminder by Gmail. Each payment
+        can get one Before due, one Due today and one After due reminder.
+        Sending an email never marks a payment as paid.
       </p>
+
+      {stuckError && (
+        <p role="alert" className="mb-4 text-[13px] text-red-600">
+          Could not check for interrupted reminders: {stuckError}
+        </p>
+      )}
 
       {failedCount > 0 && (
         <p className="mb-4 rounded-lg bg-red-50 px-4 py-2.5 text-[13px] text-red-700">

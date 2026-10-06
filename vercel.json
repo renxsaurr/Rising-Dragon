@@ -4,10 +4,6 @@
     {
       "path": "/api/cron/sync-weekly-sessions",
       "schedule": "0 16 * * *"
-    },
-    {
-      "path": "/api/cron/payment-reminders",
-      "schedule": "0 0 * * *"
     }
   ]
 }

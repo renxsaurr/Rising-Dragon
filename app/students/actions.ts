@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { getCurrentUser } from '@/utils/getCurrentUser'
+import { isValidEmail, normalizeEmail } from '@/utils/email'
 
 export type StudentFormData = {
   first_name: string
@@ -55,7 +56,7 @@ export async function saveStudent(studentId: number | null, input: StudentFormDa
     last_name: typeof input.last_name === 'string' ? input.last_name.trim() : '',
     guardian_name: typeof input.guardian_name === 'string' ? input.guardian_name.trim() : '',
     guardian_contact: typeof input.guardian_contact === 'string' ? input.guardian_contact.trim() || null : null,
-    guardian_email: typeof input.guardian_email === 'string' ? input.guardian_email.trim().toLowerCase() : '',
+    guardian_email: normalizeEmail(input.guardian_email),
     belt_level: typeof input.belt_level === 'string' ? input.belt_level : '',
     enrollment_date: typeof input.enrollment_date === 'string' ? input.enrollment_date : '',
     branch_id: Number(input.branch_id),
@@ -67,7 +68,7 @@ export async function saveStudent(studentId: number | null, input: StudentFormDa
   if ([payload.first_name, payload.middle_name, payload.last_name, payload.guardian_name].some((value) => value && value.length > 100)) {
     return { error: 'Names must be 100 characters or fewer.' }
   }
-  if (!/^\S+@\S+\.\S+$/.test(payload.guardian_email)) {
+  if (!isValidEmail(payload.guardian_email)) {
     return { error: 'Enter a valid guardian email address.' }
   }
   if (payload.guardian_email.length > 254) return { error: 'Guardian email must be 254 characters or fewer.' }
