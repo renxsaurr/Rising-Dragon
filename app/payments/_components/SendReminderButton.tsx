@@ -4,12 +4,13 @@ import { useCallback, useId, useState } from 'react'
 import ReminderReviewModal from './ReminderReviewModal'
 import type { ReminderType } from '@/utils/payment-reminders'
 
-// Shown on Overdue and Due soon rows. Opens the review popup; nothing is sent from here.
+// Shown on Unpaid payment rows. Opens the review popup; nothing is sent from here.
 export default function SendReminderButton({
   paymentId,
   reminderType,
   disabledLabel,
   disabledReason,
+  hint,
 }: {
   paymentId: number
   reminderType: ReminderType
@@ -17,6 +18,8 @@ export default function SendReminderButton({
   disabledLabel?: string
   /** Why the button can't be used, shown under it. */
   disabledReason?: string
+  /** Small gray note under the button in place of the reminder type. */
+  hint?: string
 }) {
   const [open, setOpen] = useState(false)
   const close = useCallback(() => setOpen(false), [])
@@ -38,7 +41,7 @@ export default function SendReminderButton({
         id={noteId}
         className={`max-w-[200px] text-right text-xs ${disabledReason ? 'text-amber-700' : 'text-gray-500'}`}
       >
-        {disabledReason ?? `${reminderType} reminder`}
+        {disabledReason ?? hint ?? `${reminderType} reminder`}
       </span>
 
       {/* Kept outside the disabled check so the result stays visible after the page refreshes. */}

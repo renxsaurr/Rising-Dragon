@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { createAdminClient } from '@/utils/supabase/admin'
-import { dateInTimeZone } from '@/utils/dates'
+import { addDays, dateInTimeZone } from '@/utils/dates'
 import { isValidEmail, normalizeEmail } from '@/utils/email'
 import { sendGmail } from '@/utils/gmail'
 
@@ -74,12 +74,34 @@ const errorMessage = (error: unknown, fallback: string) => (error instanceof Err
 const daysBetween = (from: string, to: string) =>
   Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000)
 
-/** The reminder type for today, from the real number of days until the due date. */
-export function reminderTypeFor(dueDate: string, today = dateInTimeZone()): ReminderType {
+// Reminder timing, in one place for the page and the server:
+// "Before due" opens 3 days before the due date, "Due today" on the due date, and
+// "After due" 3 days after it. The 1–2 days after the due date are a grace period.
+export const BEFORE_DUE_WINDOW_DAYS = 3
+export const AFTER_DUE_GRACE_DAYS = 3
+
+export type ReminderWindow =
+  | { open: true; type: ReminderType; opensOn: string }
+  | { open: false; type: null; nextType: ReminderType; opensOn: string }
+
+/** Which reminder can be sent today (Manila), or which one opens next and on what date. */
+export function reminderWindowFor(dueDate: string, today = dateInTimeZone()): ReminderWindow {
   const daysUntilDue = daysBetween(today, dueDate)
-  if (daysUntilDue > 0) return 'Before due'
-  return daysUntilDue === 0 ? 'Due today' : 'After due'
+  const beforeDueOpens = addDays(dueDate, -BEFORE_DUE_WINDOW_DAYS)
+  const afterDueOpens = addDays(dueDate, AFTER_DUE_GRACE_DAYS)
+  if (daysUntilDue > BEFORE_DUE_WINDOW_DAYS) return { open: false, type: null, nextType: 'Before due', opensOn: beforeDueOpens }
+  if (daysUntilDue > 0) return { open: true, type: 'Before due', opensOn: beforeDueOpens }
+  if (daysUntilDue === 0) return { open: true, type: 'Due today', opensOn: dueDate }
+  if (-daysUntilDue < AFTER_DUE_GRACE_DAYS) return { open: false, type: null, nextType: 'After due', opensOn: afterDueOpens }
+  return { open: true, type: 'After due', opensOn: afterDueOpens }
 }
+
+// '2026-10-06' → "Oct 6, 2026"
+const formatShortDate = (date: string) =>
+  new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })
+
+const opensLater = (timing: Extract<ReminderWindow, { open: false }>) =>
+  `The "${timing.nextType}" reminder opens on ${formatShortDate(timing.opensOn)}.`
 
 const guardianEmail = (payment: PaymentWithStudent) => normalizeEmail(payment.student?.guardian_email)
 
@@ -289,6 +311,15 @@ function toPreview(payment: PaymentWithStudent, recipient: string, type: Reminde
   }
 }
 
+/** Close a Failed reminder without sending it. Only a row that is still Failed is changed. */
+async function closeAsSkipped(admin: Admin, reminderId: number, reason: string) {
+  const { error } = await admin.from('payment_reminder')
+    .update({ status: 'Skipped', completed_at: nowIso(), sent_at: null, error_message: reason })
+    .eq('id', reminderId)
+    .eq('status', 'Failed')
+  if (error) throw new Error(error.message)
+}
+
 /** Move a Failed or Skipped row back to Scheduled. Only one click can win this update. */
 async function reclaim(admin: Admin, reminder: ExistingReminder, recipient: string, userId: number) {
   const { data, error } = await admin.from('payment_reminder')
@@ -350,7 +381,10 @@ export async function getPaymentReminderPreview(paymentId: number): Promise<Remi
     const problem = paymentProblem(payment)
     if (problem || !payment) return { error: problem ?? 'Payment not found.' }
 
-    const type = reminderTypeFor(payment.due_date)
+    const timing = reminderWindowFor(payment.due_date)
+    // Outside the timing windows nothing can be sent, so stop before any reminder row is touched.
+    if (!timing.open) return { error: opensLater(timing) }
+    const type = timing.type
     const blocked = blockedBy(await findReminder(admin, payment.id, type), type)
     if (blocked) return { error: blocked }
 
@@ -374,7 +408,9 @@ export async function sendReminderForPayment(
 
     const recipient = guardianEmail(payment)
     const today = dateInTimeZone()
-    const type = reminderTypeFor(payment.due_date, today)
+    const timing = reminderWindowFor(payment.due_date, today)
+    if (!timing.open) return { error: opensLater(timing) }
+    const type = timing.type
     if (reviewChanged(reviewed, recipient, type)) {
       return { error: 'The details changed since you reviewed them. Close this window and review again.' }
     }
@@ -434,12 +470,23 @@ async function prepareRetry(admin: Admin, reminderId: number): Promise<RetryCont
 
   const reason = noReminderNeeded(payment)
   if (reason) {
-    const { error: skipError } = await admin.from('payment_reminder')
-      .update({ status: 'Skipped', completed_at: nowIso(), sent_at: null, error_message: reason })
-      .eq('id', reminder.id)
-      .eq('status', 'Failed')
-    if (skipError) throw new Error(skipError.message)
+    await closeAsSkipped(admin, reminder.id, reason)
     return { error: `Not sent. ${reason} The reminder was closed.`, closed: true }
+  }
+
+  // Retry only while this reminder's own window is open, so the email wording still fits.
+  const timing = reminderWindowFor(payment.due_date)
+  if (!timing.open && timing.nextType === reminder.reminder_type) {
+    // Too early (an older row sent before these windows existed): keep it Failed for later.
+    return { error: `${opensLater(timing)} Retry it then.` }
+  }
+  if (timing.type !== reminder.reminder_type) {
+    const tooLate = `Too late to retry this ${reminder.reminder_type} reminder.`
+    await closeAsSkipped(admin, reminder.id, tooLate)
+    const next = timing.open
+      ? 'Send the current reminder from the payment list instead.'
+      : opensLater(timing)
+    return { error: `${tooLate} ${next}`, closed: true }
   }
 
   const recipient = guardianEmail(payment)

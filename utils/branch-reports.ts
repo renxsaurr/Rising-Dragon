@@ -3,9 +3,8 @@ import 'server-only'
 import { cookies } from 'next/headers'
 import { createClient } from '@/utils/supabase/server'
 import { addDays, dateInTimeZone } from '@/utils/dates'
+import { fetchAllRows } from '@/utils/fetch-all-rows'
 
-// Supabase caps each response (1000 rows by default), so report rows are read page by page
-const PAGE_SIZE = 1000
 const MAX_RANGE_DAYS = 366
 
 export type ReportRange = '7d' | '30d' | 'this-month' | 'last-month' | 'custom'
@@ -59,8 +58,6 @@ export type BranchReportResult =
   | { data: BranchReport; error: null }
   | { data: null; error: string }
 
-type PageResult<T> = { data: T[] | null; error: { message: string } | null }
-
 const emptyCounts = (): RawCounts => ({
   activeStudents: 0, newStudents: 0, classes: 0, cancelledClasses: 0,
   classesWithAttendance: 0, present: 0, absent: 0, unmarkedPastClasses: 0,
@@ -86,18 +83,6 @@ export function previousRange(start: string, end: string) {
   if (start > effectiveEnd) return null
   const prevEnd = addDays(start, -1)
   return { start: addDays(prevEnd, -(daysInRange(start, effectiveEnd) - 1)), end: prevEnd }
-}
-
-// keep requesting the next slice until a page comes back empty, so even a lower
-// server row cap can never silently cut the totals short
-async function fetchAllRows<T>(fetchPage: (from: number, to: number) => PromiseLike<PageResult<T>>) {
-  const rows: T[] = []
-  while (true) {
-    const { data, error } = await fetchPage(rows.length, rows.length + PAGE_SIZE - 1)
-    if (error) throw new Error(error.message)
-    if (!data?.length) return rows
-    rows.push(...data)
-  }
 }
 
 function finishCounts(counts: RawCounts): BranchCounts {
