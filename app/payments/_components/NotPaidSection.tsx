@@ -30,7 +30,6 @@ const emailProblem = (email: string) =>
 /** Active students with nothing paid for the shown month. Each row can send a reminder or record a payment. */
 export default function NotPaidSection({
   students,
-  monthLabel,
   showBranch,
   studentChoices,
   branchName,
@@ -38,8 +37,6 @@ export default function NotPaidSection({
   today,
 }: {
   students: NotPaidStudent[]
-  /** e.g. "October 2026" */
-  monthLabel: string
   showBranch: boolean
   /** The Add payment popup's student list. */
   studentChoices: StudentChoice[]
@@ -65,14 +62,8 @@ export default function NotPaidSection({
   }
 
   return (
-    <section className="mb-5 w-full min-w-0 overflow-hidden rounded-xl border border-amber-200 bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200 bg-amber-50 px-5 py-3">
-        <h2 className="text-sm font-semibold text-amber-900">Not paid yet — {monthLabel}</h2>
-        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-amber-800 ring-1 ring-inset ring-amber-200">
-          {students.length} student{students.length === 1 ? '' : 's'}
-        </span>
-      </div>
-
+    // The tab and the panel heading around it name the list, so no border or header here.
+    <div>
       <ul className="divide-y divide-gray-100">
         {visible.map((student) => {
           const choice: StudentChoice = {
@@ -158,6 +149,6 @@ export default function NotPaidSection({
       )}
       {reviewId !== null && <ReminderReviewModal target={{ kind: 'payment', id: reviewId }} onClose={closeReview} />}
       {notice && <Toast message={notice} onDismiss={clearNotice} />}
-    </section>
+    </div>
   )
 }

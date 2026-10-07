@@ -12,6 +12,13 @@ export type PaymentFilterKey = (typeof PAYMENT_FILTERS)[number]['key']
 export const isPaymentFilter = (value: unknown): value is PaymentFilterKey =>
   PAYMENT_FILTERS.some((filter) => filter.key === value)
 
+export const PAYMENT_TABS = ['notpaid', 'missed', 'records'] as const
+
+export type PaymentTab = (typeof PAYMENT_TABS)[number]
+
+export const isPaymentTab = (value: unknown): value is PaymentTab =>
+  PAYMENT_TABS.some((tab) => tab === value)
+
 /** Reminder history filters in the URL. Defaults ("all", page 1, empty search) are left out. */
 export type HistoryQuery = {
   hq?: string
@@ -26,18 +33,22 @@ export function paymentsHref({
   month,
   branch,
   filter,
+  tab,
   view,
   history,
 }: {
   month: string
   branch?: string
   filter?: PaymentFilterKey
+  /** Left out = the page picks its default tab. */
+  tab?: PaymentTab
   view?: 'history'
   history?: HistoryQuery
 }) {
   const params = new URLSearchParams({ month })
   if (branch && branch !== 'all') params.set('branch', branch)
   if (filter && filter !== 'all') params.set('filter', filter)
+  if (tab) params.set('tab', tab)
   if (view) params.set('view', view)
   if (view === 'history' && history) {
     if (history.hq) params.set('hq', history.hq)

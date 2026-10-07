@@ -2,6 +2,7 @@ import 'server-only'
 
 import { createAdminClient } from '@/utils/supabase/admin'
 import { addDays } from '@/utils/dates'
+import { TRACKING_START_MONTH } from '@/utils/academy-settings'
 import { normalizeEmail } from '@/utils/email'
 import { fetchAllRows } from '@/utils/fetch-all-rows'
 import { MAX_MONTHS, coveredMonths, type MonthlyCoverage, type PaymentType } from '@/utils/payment-fees'
@@ -104,6 +105,16 @@ export type NotPaidGroup = {
   students: NotPaidStudent[]
 }
 
+export type MissedStudent = {
+  studentId: number
+  name: string
+  /** belt_level as stored, e.g. 'low_yellow'. */
+  belt: string
+  branchName: string
+  /** 'YYYY-MM' months with no Paid record, oldest first. */
+  months: string[]
+}
+
 export type PaymentMonth = {
   rows: PaymentRecord[]
   /** "All branches" first, then every branch by name, even branches with no payments. */
@@ -114,6 +125,10 @@ export type PaymentMonth = {
   activeStudents: ActiveStudent[]
   /** Keyed like branches: 'all' and each branch id. */
   notPaid: Record<string, NotPaidGroup>
+  /** Past months with no payment, keyed like branches. Most missed months first, then by last name. */
+  missedMonths: Record<string, MissedStudent[]>
+  /** First month the missed-months check looked at, or null when there were no past months to check. */
+  missedSince: string | null
 }
 
 export type PaymentMonthResult = { data: PaymentMonth; error: null } | { data: null; error: string }
@@ -221,6 +236,37 @@ type RawNearbyMonthly = {
 
 const emptyNotPaid = (): NotPaidGroup => ({ activeCount: 0, notPaidCount: 0, students: [] })
 
+// '2026-10' → '2026-10-31'
+const monthEnd = (month: string) => addDays(`${shiftMonth(month, 1)}-01`, -1)
+
+/** Every 'YYYY-MM' from first to last, both included. Empty when first is after last. */
+function monthsFrom(first: string, last: string) {
+  const months: string[] = []
+  for (let month = first; month <= last; month = shiftMonth(month, 1)) months.push(month)
+  return months
+}
+
+const laterMonth = (a: string, b: string) => (a > b ? a : b)
+const earlierMonth = (a: string, b: string) => (a < b ? a : b)
+
+type PaidDue = { studentId: number; dueDate: string }
+type PaidCoverage = { studentId: number; coverageStart: string; quantity: number }
+
+/**
+ * The one "paid for the month" rule, used by "Not paid yet" and by the missed-months box:
+ * a Paid Monthly payment whose months include the month, or any Paid payment due inside it
+ * (Per session and older records). Unpaid records never count.
+ * Returns month → ids of the students who paid for it, for the given months only.
+ */
+function paidStudentsByMonth(months: string[], paidDue: PaidDue[], paidCoverage: PaidCoverage[]) {
+  const paid = new Map(months.map((month) => [month, new Set<number>()]))
+  for (const payment of paidDue) paid.get(payment.dueDate.slice(0, 7))?.add(payment.studentId)
+  for (const payment of paidCoverage) {
+    for (const month of coveredMonths(payment.coverageStart, payment.quantity)) paid.get(month)?.add(payment.studentId)
+  }
+  return paid
+}
+
 async function loadReminders(admin: Admin, paymentIds: number[]) {
   const chunks: number[][] = []
   for (let index = 0; index < paymentIds.length; index += REMINDER_CHUNK_SIZE) {
@@ -253,9 +299,22 @@ export async function loadPaymentMonth(admin: Admin, month: string, today: strin
   // Earlier unpaid payments that are already past due. When a future month is shown,
   // payments between today and that month are not overdue yet, so stop at today.
   const olderBefore = start < today ? start : today
+  // Missed months depend on today, not on the shown month, so the box is the same on every page:
+  // from the later of TRACKING_START_MONTH and 12 months before today's month, up to the month
+  // before today's month. The current and future months are never checked.
+  const todayMonth = today.slice(0, 7)
+  const missedFirst = TRACKING_START_MONTH
+    ? laterMonth(TRACKING_START_MONTH, shiftMonth(todayMonth, -12))
+    : shiftMonth(todayMonth, -12)
+  const missedMonthKeys = monthsFrom(missedFirst, shiftMonth(todayMonth, -1))
+  const missedLast = missedMonthKeys.at(-1)
+  // One Monthly query for the shown month and the whole missed range. A payment covers at most
+  // MAX_MONTHS months, so anything starting earlier than that can't reach the first month.
+  const coverageFrom = shiftMonth(missedMonthKeys.length ? earlierMonth(missedMonthKeys[0], month) : month, -(MAX_MONTHS - 1))
+  const coverageTo = missedLast && monthEnd(missedLast) > end ? monthEnd(missedLast) : end
 
   try {
-    const [branchResult, payments, olderOverdue, students, nearbyMonthly] = await Promise.all([
+    const [branchResult, payments, olderOverdue, students, nearbyMonthly, paidInRange] = await Promise.all([
       admin.from('branch').select('id, name').order('name'),
       fetchAllRows<RawPayment>((from, to) => admin.from('payment')
         .select(PAYMENT_SELECT)
@@ -277,15 +336,24 @@ export async function loadPaymentMonth(admin: Admin, month: string, today: strin
         .order('first_name')
         .order('id')
         .range(from, to)),
-      // Monthly payments (Paid or Unpaid) that could cover this month. A payment covers at most
-      // MAX_MONTHS months, so anything starting earlier than that can't reach it.
+      // Monthly payments (Paid or Unpaid) that could cover the shown month or a missed month.
       fetchAllRows<RawNearbyMonthly>((from, to) => admin.from('payment')
         .select('id, student_id, coverage_start, quantity, status, due_date, amount')
         .eq('payment_type', 'Monthly')
-        .gte('coverage_start', `${shiftMonth(month, -(MAX_MONTHS - 1))}-01`)
-        .lte('coverage_start', end)
+        .gte('coverage_start', `${coverageFrom}-01`)
+        .lte('coverage_start', coverageTo)
         .order('id')
         .range(from, to)),
+      // Paid payments due anywhere in the missed range (one query, not one per month).
+      missedLast
+        ? fetchAllRows<{ student_id: number; due_date: string }>((from, to) => admin.from('payment')
+            .select('student_id, due_date')
+            .eq('status', 'Paid')
+            .gte('due_date', `${missedMonthKeys[0]}-01`)
+            .lte('due_date', monthEnd(missedLast))
+            .order('id')
+            .range(from, to))
+        : Promise.resolve([]),
     ])
     if (branchResult.error) throw new Error(branchResult.error.message)
 
@@ -361,25 +429,33 @@ export async function loadPaymentMonth(admin: Admin, month: string, today: strin
       guardianEmail: normalizeEmail(student.guardian_email),
     }))
 
-    // Paid for the month = a Paid Monthly payment whose months include it, or any Paid payment
-    // due inside it (Per session and older records). Unpaid records never count as paid:
-    // the same two rules with Unpaid give the student's existing bill instead.
-    const paidStudentIds = new Set<number>()
+    const paidCoverage: PaidCoverage[] = nearbyMonthly
+      .filter((payment) => payment.status === 'Paid')
+      .map((payment) => ({
+        studentId: Number(payment.student_id),
+        coverageStart: payment.coverage_start,
+        quantity: Number(payment.quantity),
+      }))
+    const paidThisMonth: PaidDue[] = rows
+      .filter((row) => row.status === 'Paid' && row.studentId !== null)
+      .map((row) => ({ studentId: row.studentId as number, dueDate: row.dueDate }))
+    const paidStudentIds = paidStudentsByMonth([month], paidThisMonth, paidCoverage).get(month) ?? new Set<number>()
+
+    // The same two rules with Unpaid give the student's existing bill for this month.
     const unpaidBills = new Map<number, { id: number; dueDate: string; amount: number }>()
     const keepEarliest = (studentId: number, bill: { id: number; dueDate: string; amount: number }) => {
       const current = unpaidBills.get(studentId)
       if (!current || bill.dueDate < current.dueDate) unpaidBills.set(studentId, bill)
     }
     for (const row of rows) {
-      if (row.studentId === null) continue
-      if (row.status === 'Paid') paidStudentIds.add(row.studentId)
-      else keepEarliest(row.studentId, { id: row.id, dueDate: row.dueDate, amount: row.amount })
+      if (row.studentId !== null && row.status === 'Unpaid') {
+        keepEarliest(row.studentId, { id: row.id, dueDate: row.dueDate, amount: row.amount })
+      }
     }
     for (const payment of nearbyMonthly) {
+      if (payment.status !== 'Unpaid') continue
       if (!coveredMonths(payment.coverage_start, Number(payment.quantity)).includes(month)) continue
-      const studentId = Number(payment.student_id)
-      if (payment.status === 'Paid') paidStudentIds.add(studentId)
-      else keepEarliest(studentId, { id: Number(payment.id), dueDate: payment.due_date, amount: Number(payment.amount) })
+      keepEarliest(Number(payment.student_id), { id: Number(payment.id), dueDate: payment.due_date, amount: Number(payment.amount) })
     }
 
     // Reminders for bills that aren't in this month's rows (a Monthly bill due in an earlier month).
@@ -417,6 +493,36 @@ export async function loadPaymentMonth(admin: Admin, month: string, today: strin
       }
     }
 
+    // A missed month = the student is active now, was enrolled by that month's last day,
+    // and has no Paid record for it under the same rule.
+    const paidByMonth = paidStudentsByMonth(
+      missedMonthKeys,
+      paidInRange.map((payment) => ({ studentId: Number(payment.student_id), dueDate: payment.due_date })),
+      paidCoverage,
+    )
+    const missedMonths: Record<string, MissedStudent[]> = { all: [] }
+    for (const branch of branchList) missedMonths[String(branch.id)] = []
+    for (const student of activeStudents) {
+      const months = missedMonthKeys.filter(
+        (key) =>
+          (!student.enrollmentDate || student.enrollmentDate <= monthEnd(key)) &&
+          !paidByMonth.get(key)?.has(student.id),
+      )
+      if (months.length === 0) continue
+      const missed: MissedStudent = {
+        studentId: student.id,
+        name: student.name,
+        belt: student.beltLevel,
+        branchName: (student.branchId !== null && branchNames.get(student.branchId)) || 'No branch',
+        months,
+      }
+      missedMonths.all.push(missed)
+      if (student.branchId !== null) missedMonths[String(student.branchId)]?.push(missed)
+    }
+    // Most missed months first. Ties keep the student order (last name, then first name);
+    // Array.sort is stable, so the order from the query stays.
+    for (const list of Object.values(missedMonths)) list.sort((a, b) => b.months.length - a.months.length)
+
     return {
       data: {
         rows,
@@ -428,6 +534,8 @@ export async function loadPaymentMonth(admin: Admin, month: string, today: strin
         olderOverdue: olderByBranch,
         activeStudents,
         notPaid,
+        missedMonths,
+        missedSince: missedMonthKeys[0] ?? null,
       },
       error: null,
     }

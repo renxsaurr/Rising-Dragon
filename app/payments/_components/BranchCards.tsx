@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { paymentsHref, type PaymentFilterKey } from './payments-url'
+import { paymentsHref, type PaymentFilterKey, type PaymentTab } from './payments-url'
 import { formatAmount } from '@/utils/payment-reminders'
 import type { BranchPaymentStats, NotPaidGroup } from '@/utils/payment-records'
 
@@ -10,12 +10,15 @@ export default function BranchCards({
   selectedKey,
   month,
   filter,
+  tab,
 }: {
   branches: BranchPaymentStats[]
   notPaid: Record<string, NotPaidGroup>
   selectedKey: string
   month: string
   filter: PaymentFilterKey
+  /** The tab chosen in the URL, kept in the links. Left out = the page's default tab. */
+  tab?: PaymentTab
 }) {
   return (
     <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -27,7 +30,7 @@ export default function BranchCards({
         return (
           <Link
             key={branch.key}
-            href={paymentsHref({ month, branch: branch.key, filter })}
+            href={paymentsHref({ month, branch: branch.key, filter, tab })}
             scroll={false}
             aria-current={active ? 'true' : undefined}
             className={`min-w-0 rounded-xl border bg-white p-4 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${active ? 'border-black shadow-sm ring-1 ring-black' : 'border-gray-200 hover:border-gray-300'}`}
