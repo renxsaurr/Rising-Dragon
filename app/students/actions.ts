@@ -86,8 +86,9 @@ export async function saveStudent(studentId: number | null, input: StudentFormDa
     .from('branch')
     .select('id')
     .eq('id', payload.branch_id)
+    .eq('is_active', true)
     .maybeSingle()
-  if (branchError || !branch) return { error: 'Select a valid branch.' }
+  if (branchError || !branch) return { error: 'Select an active branch.' }
 
   if (studentId !== null) {
     const { data: existingStudent, error: existingError } = await admin

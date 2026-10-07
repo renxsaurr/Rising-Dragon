@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/utils/supabase/client'
 import { uploadBranchPhoto } from '@/utils/uploadBranchPhoto'
+import { archiveBranch, deleteUnusedBranch, reactivateBranch, updateBranch } from '@/app/branches/actions'
 
 type Branch = {
   id: number
@@ -11,6 +11,7 @@ type Branch = {
   address: string
   description?: string | null
   photo_url?: string | null
+  is_active: boolean
 }
 
 export default function EditBranchModal({ branch }: { branch: Branch }) {
@@ -30,44 +31,21 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(branch.photo_url ?? null)
 
-   const [deleting, setDeleting] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [changingStatus, setChangingStatus] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   const router = useRouter()
-  const supabase = createClient()
 
   const handleDelete = async () => {
     setError('')
     setDeleting(true)
-
-    // safety check — block delete if students or schedules still reference this branch
-    const { count: studentCount } = await supabase
-      .from('student')
-      .select('id', { count: 'exact', head: true })
-      .eq('branch_id', branch.id)
-
-    const { count: scheduleCount } = await supabase
-      .from('class_schedule')
-      .select('id', { count: 'exact', head: true })
-      .eq('branch_id', branch.id)
-
-    if ((studentCount ?? 0) > 0 || (scheduleCount ?? 0) > 0) {
-      setDeleting(false)
-      setError(
-        `Can't delete: this branch still has ${studentCount ?? 0} student(s) and ${scheduleCount ?? 0} schedule(s). Move or remove them first.`
-      )
-      return
-    }
-
-    const { error: deleteError } = await supabase
-      .from('branch')
-      .delete()
-      .eq('id', branch.id)
+    const result = await deleteUnusedBranch(branch.id)
 
     setDeleting(false)
 
-    if (deleteError) {
-      setError(deleteError.message)
+    if ('error' in result) {
+      setError(result.error)
       return
     }
 
@@ -75,10 +53,24 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
     router.refresh()
   }
 
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleStatusChange = async () => {
+    setError('')
+    if (branch.is_active && !window.confirm('Archive this branch after moving its active students and ending or reassigning upcoming schedules? Historical reports will remain available.')) return
+    setChangingStatus(true)
+    const result = branch.is_active ? await archiveBranch(branch.id) : await reactivateBranch(branch.id)
+    setChangingStatus(false)
+    if ('error' in result) {
+      setError(result.error)
+      return
+    }
+    setIsOpen(false)
+    router.refresh()
+  }
 
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    if (photoPreview?.startsWith('blob:')) URL.revokeObjectURL(photoPreview)
     setPhotoFile(file)
     setPhotoPreview(URL.createObjectURL(file))
   }
@@ -103,30 +95,29 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
     if (photoFile) {
       try {
         finalPhotoUrl = await uploadBranchPhoto(photoFile)
-      } catch (uploadErr: any) {
+      } catch (uploadErr) {
         setLoading(false)
-        setError('Photo upload failed: ' + uploadErr.message)
+        setError(uploadErr instanceof Error ? uploadErr.message : 'Photo upload failed.')
         return
       }
     }
 
-    const { error } = await supabase
-      .from('branch')
-      .update({
-        name,
-        address,
-        description: description || null,
-        photo_url: finalPhotoUrl,
-      })
-      .eq('id', branch.id)
+    const result = await updateBranch(branch.id, {
+      name,
+      address,
+      description: description || null,
+      photoUrl: finalPhotoUrl,
+    })
 
     setLoading(false)
 
-    if (error) {
-      setError(error.message)
+    if ('error' in result) {
+      setError(result.error)
       return
     }
 
+    setCurrentPhotoUrl(finalPhotoUrl)
+    setPhotoFile(null)
     setIsOpen(false)
     router.refresh()
   }
@@ -152,7 +143,7 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
             </button>
 
             <h2 className="text-[20px] font-semibold text-black mb-1">Edit Branch</h2>
-            <p className="text-[13px] text-gray-500 mb-6">Update this branch's details.</p>
+            <p className="text-[13px] text-gray-500 mb-6">Update the location details.</p>
 
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <div>
@@ -226,7 +217,7 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
                   </span>
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/jpeg,image/png,image/webp"
                     onChange={handlePhotoChange}
                     className="hidden"
                   />
@@ -250,16 +241,19 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
               </button>
             </form>
 
-                         {/* --- delete button (opens confirm popup) --- */}
-            <div className="mt-6 pt-5 border-t border-gray-100">
+            <div className="mt-6 flex flex-wrap gap-2 border-t border-gray-100 pt-5">
+              <button
+                onClick={handleStatusChange}
+                disabled={changingStatus}
+                className="h-9 px-4 rounded-lg border border-gray-200 bg-white text-[13px] font-semibold text-gray-800 transition-colors hover:bg-gray-50 disabled:opacity-60"
+              >
+                {changingStatus ? 'Updating…' : branch.is_active ? 'Archive branch' : 'Reactivate branch'}
+              </button>
               <button
                 onClick={() => setConfirmDelete(true)}
-                className="h-9 px-4 bg-white border border-red-200 text-red-600 hover:bg-red-50 rounded-lg text-[13px] font-semibold transition-colors"
-              >
-                Delete this branch
-              </button>
+                className="h-9 px-4 rounded-lg border border-red-200 bg-white text-[13px] font-semibold text-red-600 transition-colors hover:bg-red-50"
+              >Delete unused branch</button>
             </div>
-            {/* --- end delete button --- */}
 
             {/* --- delete confirmation popup --- */}
             {confirmDelete && (
@@ -269,10 +263,10 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
                     Danger Zone
                   </p>
                   <h3 className="text-[17px] font-semibold text-black mb-2">
-                    Delete "{branch.name}"?
+                    Delete &quot;{branch.name}&quot;?
                   </h3>
-                  <p className="text-[13px] text-gray-500 mb-5">
-                    This is permanent and can't be undone. Branches with students or schedules attached can't be deleted.
+                  <p className="mb-5 text-[13px] text-gray-500">
+                    This permanently removes the branch. Any student, staff, schedule, or report history reference will block deletion. Archive branches that have records.
                   </p>
 
                   {error && (

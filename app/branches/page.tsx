@@ -30,7 +30,7 @@ export default async function BranchesPage({
 
   const { data: branches, error } = await supabase
     .from('branch')
-    .select('id, name, address, description, photo_url')
+    .select('id, name, address, description, photo_url, is_active')
     .order('name')
 
   if (error) {
@@ -98,7 +98,7 @@ export default async function BranchesPage({
     address: branch.address ?? '',
     studentCount: studentsByBranch.get(Number(branch.id)) ?? 0,
     todayClasses: classesByBranch.get(Number(branch.id)) ?? 0,
-  }))
+  })).sort((a, b) => Number(b.is_active) - Number(a.is_active) || a.name.localeCompare(b.name))
   return (
     <DashboardShell title="Branches" currentUser={currentUser}>
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -139,8 +139,8 @@ export default async function BranchesPage({
           </div>
         : <>
           <div className="mb-5 mt-5">
-            <h2 className="text-xl font-semibold text-black">All branches</h2>
-            <p className="mt-1 text-sm text-gray-500">{branchRows.length} branch{branchRows.length === 1 ? '' : 'es'} · Manage branch details and view their students.</p>
+            <h2 className="text-xl font-semibold text-black">Branches</h2>
+            <p className="mt-1 text-sm text-gray-500">{branchRows.filter((branch) => branch.is_active).length} active · {branchRows.filter((branch) => !branch.is_active).length} archived. Closed branches stay available for historical reports.</p>
           </div>
           <BranchesView branches={branchesWithStats} />
         </>}

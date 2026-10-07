@@ -29,6 +29,25 @@ function generateTemporaryPassword() {
   return characters.join('')
 }
 
+async function isActiveHeadCoach(admin: ReturnType<typeof createAdminClient>, authId: string) {
+  const { data, error } = await admin.auth.admin.getUserById(authId)
+  if (error || !data.user) return false
+  return !data.user.banned_until || Date.parse(data.user.banned_until) <= Date.now()
+}
+
+async function hasAnotherActiveHeadCoach(admin: ReturnType<typeof createAdminClient>, exceptUserId: number) {
+  const { data: coaches, error } = await admin.from('user')
+    .select('id, auth_id')
+    .eq('role', 'head_coach')
+    .neq('id', exceptUserId)
+  if (error) return false
+
+  for (const coach of coaches ?? []) {
+    if (await isActiveHeadCoach(admin, coach.auth_id)) return true
+  }
+  return false
+}
+
 export async function createUser(input: {
   first_name: string
   middle_name: string
@@ -40,19 +59,24 @@ export async function createUser(input: {
   const access = await requireHeadCoach()
   if ('error' in access) return access
 
-  const first_name = input.first_name.trim()
-  const middle_name = input.middle_name.trim() || null
-  const last_name = input.last_name.trim()
+  if (!input || typeof input !== 'object') return { error: 'Staff details are invalid.' }
+  const first_name = typeof input.first_name === 'string' ? input.first_name.trim() : ''
+  const middle_name = typeof input.middle_name === 'string' ? input.middle_name.trim() || null : null
+  const last_name = typeof input.last_name === 'string' ? input.last_name.trim() : ''
   const name = [first_name, middle_name, last_name].filter(Boolean).join(' ')
-  const email = input.email.trim().toLowerCase()
-  const contact = input.contact.trim()
+  const email = typeof input.email === 'string' ? input.email.trim().toLowerCase() : ''
+  const contact = typeof input.contact === 'string' ? input.contact.trim() : ''
   if (!first_name || !last_name || !contact || !/^\S+@\S+\.\S+$/.test(email)) {
     return { error: 'Enter first and last name, a contact number, and a valid email address.' }
   }
-  if (input.primary_branch_id !== null && !Number.isInteger(input.primary_branch_id)) return { error: 'Select a valid primary branch.' }
+  if (input.primary_branch_id !== null && (!Number.isSafeInteger(input.primary_branch_id) || input.primary_branch_id <= 0)) return { error: 'Select a valid primary branch.' }
 
   const temporaryPassword = generateTemporaryPassword()
   const admin = createAdminClient()
+  if (input.primary_branch_id !== null) {
+    const { data: branch, error: branchError } = await admin.from('branch').select('id').eq('id', input.primary_branch_id).eq('is_active', true).maybeSingle()
+    if (branchError || !branch) return { error: 'Select an active primary branch.' }
+  }
   const { data: authResult, error: authError } = await admin.auth.admin.createUser({
     email,
     password: temporaryPassword,
@@ -89,16 +113,21 @@ export async function updateUser(userId: number, data: {
 }) {
   const access = await requireHeadCoach()
   if ('error' in access) return access
-  const first_name = data.first_name.trim()
-  const middle_name = data.middle_name.trim() || null
-  const last_name = data.last_name.trim()
-  const contact = data.contact.trim()
-  if (!Number.isInteger(userId) || !first_name || !last_name || !contact) {
+  if (!data || typeof data !== 'object') return { error: 'Staff details are invalid.' }
+  const first_name = typeof data.first_name === 'string' ? data.first_name.trim() : ''
+  const middle_name = typeof data.middle_name === 'string' ? data.middle_name.trim() || null : null
+  const last_name = typeof data.last_name === 'string' ? data.last_name.trim() : ''
+  const contact = typeof data.contact === 'string' ? data.contact.trim() : ''
+  if (!Number.isSafeInteger(userId) || userId <= 0 || !first_name || !last_name || !contact) {
     return { error: 'Enter first and last name and a contact number.' }
   }
-  if (data.primary_branch_id !== null && !Number.isInteger(data.primary_branch_id)) return { error: 'Select a valid primary branch.' }
+  if (data.primary_branch_id !== null && (!Number.isSafeInteger(data.primary_branch_id) || data.primary_branch_id <= 0)) return { error: 'Select a valid primary branch.' }
 
   const admin = createAdminClient()
+  if (data.primary_branch_id !== null) {
+    const { data: branch, error: branchError } = await admin.from('branch').select('id').eq('id', data.primary_branch_id).eq('is_active', true).maybeSingle()
+    if (branchError || !branch) return { error: 'Select an active primary branch.' }
+  }
   const { data: updatedUser, error } = await admin.from('user').update({
     first_name,
     middle_name,
@@ -116,7 +145,8 @@ export async function updateUser(userId: number, data: {
 export async function setUserActive(userId: number, active: boolean) {
   const access = await requireHeadCoach()
   if ('error' in access) return access
-  if (!Number.isInteger(userId)) return { error: 'User profile not found.' }
+  if (!Number.isSafeInteger(userId) || userId <= 0) return { error: 'User profile not found.' }
+  if (typeof active !== 'boolean') return { error: 'Account status is invalid.' }
   if (userId === access.currentUser.id) return { error: 'You cannot deactivate your own account.' }
 
   const admin = createAdminClient()
@@ -128,9 +158,7 @@ export async function setUserActive(userId: number, active: boolean) {
   if (lookupError || !target) return { error: 'User profile not found.' }
 
   if (!active && target.role === 'head_coach') {
-    const { count, error } = await admin.from('user').select('id', { count: 'exact', head: true }).eq('role', 'head_coach')
-    if (error) return { error: error.message }
-    if ((count ?? 0) <= 1) return { error: 'Keep at least one Head Coach account active.' }
+    if (!(await hasAnotherActiveHeadCoach(admin, userId))) return { error: 'Keep at least one active Head Coach account.' }
   }
 
   const { error } = await admin.auth.admin.updateUserById(target.auth_id, {

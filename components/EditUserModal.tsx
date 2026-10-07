@@ -17,13 +17,11 @@ type User = {
 
 type EditUserModalProps = {
   user: User
-  isSelf?: boolean
   branches: { id: number; name: string }[]
 }
 
 export default function EditUserModal({
   user,
-  isSelf = false,
   branches,
 }: EditUserModalProps) {
   const [isOpen, setIsOpen] = useState(false)
@@ -109,7 +107,7 @@ export default function EditUserModal({
           <section role="dialog" aria-modal="true" aria-labelledby={`edit-user-title-${user.id}`} className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl sm:p-7">
             <button type="button" onClick={closeModal} disabled={loading} aria-label="Close" className="absolute right-5 top-5 text-xl leading-none text-gray-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50">×</button>
             <h2 id={`edit-user-title-${user.id}`} className="text-lg font-semibold text-gray-950">Edit staff account</h2>
-            <p className="mb-5 mt-1 text-sm text-gray-500">Update this staff member's information and branch assignment.</p>
+            <p className="mb-5 mt-1 text-sm text-gray-500">Update this staff member’s information and branch assignment.</p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -137,8 +135,8 @@ export default function EditUserModal({
 
               <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5">
                 <p className="text-xs font-medium text-gray-700">Role</p>
-                <p className="mt-1 text-sm text-gray-900">{user.role === 'head_coach' ? 'Head Coach' : 'Assistant Coach'}</p>
-                <p className="mt-0.5 text-xs text-gray-500">Roles are assigned during staff account setup.</p>
+                <p className="mt-1.5 text-sm font-medium text-gray-950">{user.role === 'head_coach' ? 'Head Coach' : 'Assistant Coach'}</p>
+                <p className="mt-0.5 text-xs text-gray-500">The system uses one Head Coach role; other staff accounts are Assistant Coaches.</p>
               </div>
 
               {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

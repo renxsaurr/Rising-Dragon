@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/utils/supabase/client'
 import { uploadBranchPhoto } from '@/utils/uploadBranchPhoto'
+import { createBranch } from '@/app/branches/actions'
 
 export default function AddBranchModal() {
   const [isOpen, setIsOpen] = useState(false)
@@ -18,11 +18,11 @@ export default function AddBranchModal() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
 
   const router = useRouter()
-  const supabase = createClient()
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    if (photoPreview) URL.revokeObjectURL(photoPreview)
     setPhotoFile(file)
     setPhotoPreview(URL.createObjectURL(file))
   }
@@ -32,29 +32,23 @@ export default function AddBranchModal() {
     setError('')
     setLoading(true)
 
-    // -- upload photo first if one was picked --
     let photoUrl: string | null = null
     if (photoFile) {
       try {
         photoUrl = await uploadBranchPhoto(photoFile)
-      } catch (uploadErr: any) {
+      } catch (uploadErr) {
         setLoading(false)
-        setError('Photo upload failed: ' + uploadErr.message)
+        setError(uploadErr instanceof Error ? uploadErr.message : 'Photo upload failed.')
         return
       }
     }
 
-    const { error } = await supabase.from('branch').insert({
-      name,
-      address,
-      description: description || null,
-      photo_url: photoUrl,
-    })
+    const result = await createBranch({ name, address, description: description || null, photoUrl })
 
     setLoading(false)
 
-    if (error) {
-      setError(error.message)
+    if ('error' in result) {
+      setError(result.error)
       return
     }
 
@@ -88,7 +82,7 @@ export default function AddBranchModal() {
             </button>
 
             <h2 className="text-[20px] font-semibold text-black mb-1">Add Branch</h2>
-            <p className="text-[13px] text-gray-500 mb-6">Enter the new branch's details.</p>
+            <p className="text-[13px] text-gray-500 mb-6">Enter the new location details.</p>
 
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <div>
@@ -146,7 +140,7 @@ export default function AddBranchModal() {
 
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/webp"
                   onChange={handlePhotoChange}
                   className="w-full text-[13px] text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-[13px] file:font-semibold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200"
                 />

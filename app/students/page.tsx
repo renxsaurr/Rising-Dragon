@@ -74,7 +74,7 @@ export default async function StudentsPage({
     }
   }
 
-  let branchQuery = supabase.from("branch").select("id, name").order("name");
+  let branchQuery = supabase.from("branch").select("id, name").eq("is_active", true).order("name");
   if (assignedBranchIds?.length)
     branchQuery = branchQuery.in("id", assignedBranchIds);
   else if (assignedBranchIds) branchQuery = branchQuery.eq("id", -1);

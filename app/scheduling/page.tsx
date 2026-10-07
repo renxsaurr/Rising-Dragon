@@ -118,7 +118,7 @@ export default async function SchedulingPage({
     })()
   }
 
-  const branchesPromise = supabase.from('branch').select('id, name').order('name')
+  const branchesPromise = supabase.from('branch').select('id, name').eq('is_active', true).order('name')
   const coachesPromise = supabase.from('user')
     .select('id, first_name, middle_name, last_name, role, primary_branch_id, primary_branch:branch!user_primary_branch_id_fkey(name)')
     .in('role', ['head_coach', 'assistant_coach'])

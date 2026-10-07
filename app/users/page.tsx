@@ -28,6 +28,10 @@ function displayName(user: Pick<StaffUser, 'first_name' | 'middle_name' | 'last_
   return [user.first_name, user.middle_name, user.last_name].filter(Boolean).join(' ') || 'Unnamed user'
 }
 
+function isAuthUserActive(user: { banned_until?: string | null } | undefined) {
+  return Boolean(user && (!user.banned_until || Date.parse(user.banned_until) <= Date.now()))
+}
+
 export default async function UsersPage() {
   const currentUser = await getCurrentUser()
   if (!currentUser) redirect('/login')
@@ -35,15 +39,16 @@ export default async function UsersPage() {
 
   const cookieStore = await cookies()
   const supabase = await createClient(cookieStore)
-  const [{ data: userData, error }, { data: branches }] = await Promise.all([
+  const [{ data: userData, error }, { data: allBranches }] = await Promise.all([
     supabase.from('user')
       .select('id, auth_id, first_name, middle_name, last_name, contact, role, primary_branch_id')
       .order('first_name'),
-    supabase.from('branch').select('id, name').order('name'),
+    supabase.from('branch').select('id, name, is_active').order('name'),
   ])
 
   const users = userData as unknown as StaffUser[] | null
-  const branchNameById = new Map((branches ?? []).map((branch) => [Number(branch.id), branch.name]))
+  const branchNameById = new Map((allBranches ?? []).map((branch) => [Number(branch.id), branch.name]))
+  const branches = (allBranches ?? []).filter((branch) => branch.is_active)
 
   if (error) {
     return <DashboardShell title="Users & roles" currentUser={currentUser}><p role="alert" className="text-sm text-red-600">Could not load users: {error.message}</p></DashboardShell>
@@ -100,7 +105,7 @@ export default async function UsersPage() {
               <tbody className="divide-y divide-gray-100">
                 {users?.map((user) => {
                   const authUser = authById.get(user.auth_id)
-                  const active = Boolean(authUser && (!authUser.banned_until || Date.parse(authUser.banned_until) <= Date.now()))
+                  const active = isAuthUserActive(authUser)
                   const isSelf = user.id === currentUser.id
                   const name = displayName(user)
                   return (
@@ -112,7 +117,7 @@ export default async function UsersPage() {
                       <td className="px-5 py-4"><span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-950"><span className={`h-1.5 w-1.5 rounded-full ${active ? 'bg-emerald-500' : 'bg-gray-300'}`} />{authUser ? active ? 'Active' : 'Inactive' : 'Unavailable'}</span></td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-2">
-                          <EditUserModal user={user} isSelf={isSelf} branches={branches ?? []} />
+                          <EditUserModal user={user} branches={branches ?? []} />
                           <DeleteUserButton userId={user.id} userName={name} active={active} disabled={isSelf || !authUser} />
                         </div>
                       </td>
@@ -125,7 +130,7 @@ export default async function UsersPage() {
           <div className="divide-y divide-gray-100 xl:hidden">
             {users?.map((user) => {
               const authUser = authById.get(user.auth_id)
-              const active = Boolean(authUser && (!authUser.banned_until || Date.parse(authUser.banned_until) <= Date.now()))
+              const active = isAuthUserActive(authUser)
               const isSelf = user.id === currentUser.id
               const name = displayName(user)
               return (
@@ -143,7 +148,7 @@ export default async function UsersPage() {
                     <div><dt className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Contact</dt><dd className="mt-1 break-words text-sm font-medium text-gray-950">{user.contact || '—'}</dd></div>
                   </dl>
                   <div className="mt-3 flex justify-end gap-2 border-t border-gray-100 pt-2">
-                    <EditUserModal user={user} isSelf={isSelf} branches={branches ?? []} />
+                    <EditUserModal user={user} branches={branches ?? []} />
                     <DeleteUserButton userId={user.id} userName={name} active={active} disabled={isSelf || !authUser} />
                   </div>
                 </article>

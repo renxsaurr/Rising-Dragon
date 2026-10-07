@@ -9,6 +9,7 @@ type Branch = {
   address: string
   description?: string | null
   photo_url?: string | null
+  is_active: boolean
   studentCount: number
   todayClasses: number
 }
@@ -64,6 +65,7 @@ export default function BranchesView({ branches }: { branches: Branch[] }) {
                   <p className="text-[15px] font-semibold text-black group-hover:text-red-600 transition-colors">
                     {branch.name}
                   </p>
+                  {!branch.is_active && <span className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">Archived</span>}
                   <p className="text-[13px] text-gray-500 mt-0.5">{branch.address}</p>
                   <div className="flex gap-3 mt-2 text-[12px] text-gray-500">
                     <span>{branch.studentCount} students</span>
@@ -98,6 +100,7 @@ export default function BranchesView({ branches }: { branches: Branch[] }) {
                 <h3 className="font-semibold text-[14px] text-black group-hover:text-red-600 transition-colors">
                   {branch.name}
                 </h3>
+                {!branch.is_active && <span className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">Archived</span>}
                 <p className="text-[13px] text-gray-500">{branch.address}</p>
                 {branch.description && (
                   <p className="text-[12px] text-gray-400 mt-1 line-clamp-2">{branch.description}</p>

@@ -92,6 +92,12 @@ export async function saveSchedule(scheduleId: number | null, input: ScheduleInp
   if (!['Scheduled', 'Cancelled', 'Completed'].includes(status)) return { error: 'Select a valid schedule status.' }
 
   const admin = createAdminClient()
+  const { data: branch, error: branchError } = await admin.from('branch')
+    .select('id')
+    .eq('id', branch_id)
+    .eq('is_active', true)
+    .maybeSingle()
+  if (branchError || !branch) return { error: 'Select an active branch.' }
   if (!(await validateCoach(admin, coach_id))) return { error: 'Select an active coach account.' }
 
   if (status !== 'Cancelled') {
@@ -214,8 +220,8 @@ export async function saveWeeklyTemplate(id: number | null, input: WeeklyTemplat
   }
 
   const admin = createAdminClient()
-  const { data: branch } = await admin.from('branch').select('id').eq('id', input.branch_id).maybeSingle()
-  if (!branch) return { error: 'Select a valid branch.' }
+  const { data: branch, error: branchError } = await admin.from('branch').select('id').eq('id', input.branch_id).eq('is_active', true).maybeSingle()
+  if (branchError || !branch) return { error: 'Select an active branch.' }
   const { data: coach, error: coachError } = await admin.from('user')
     .select('id, auth_id, role')
     .eq('id', input.coach_id)

@@ -66,7 +66,7 @@ export default async function BranchDetailPage({ params, searchParams }: {
   const supabase = await createClient(await cookies())
   const { data: branch, error: branchError } = await supabase
     .from('branch')
-    .select('id, name, address, description, photo_url')
+    .select('id, name, address, description, photo_url, is_active')
     .eq('id', branchId)
     .maybeSingle()
 
@@ -145,7 +145,10 @@ export default async function BranchDetailPage({ params, searchParams }: {
             {branch.name.charAt(0)}
           </div>}
         <div className="p-5">
-          <h1 className="text-xl font-semibold text-gray-950">{branch.name}</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-xl font-semibold text-gray-950">{branch.name}</h1>
+            {!branch.is_active && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800">Archived</span>}
+          </div>
           {branch.address && (
             <p className="mt-1 flex items-start gap-1.5 text-sm text-gray-500">
               <MapPin className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />{branch.address}
