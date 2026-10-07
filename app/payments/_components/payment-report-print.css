@@ -1,0 +1,49 @@
+/* Payments print layout, same approach as Branch Reports: every shell rule only matches
+   a page that contains [data-payment-report], so other pages using DashboardShell print as before. */
+
+/* A4 portrait with room for the browser's own header/footer line. */
+@page {
+  size: A4 portrait;
+  margin: 14mm 12mm;
+}
+
+@media print {
+  html:has([data-payment-report]) [data-shell='sidebar'],
+  html:has([data-payment-report]) [data-shell='header'] {
+    display: none;
+  }
+
+  /* the app scrolls inside <main> (h-dvh + overflow); let the whole report flow onto pages */
+  html:has([data-payment-report]) [data-shell='root'],
+  html:has([data-payment-report]) [data-shell='content'],
+  html:has([data-payment-report]) [data-shell='main'] {
+    display: block;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  html:has([data-payment-report]) [data-shell='main'] {
+    padding: 0;
+  }
+
+  [data-payment-report] {
+    color: #000;
+  }
+
+  /* table headers repeat at the top of every page; a row never splits across pages */
+  [data-payment-report] thead {
+    display: table-header-group;
+  }
+
+  [data-payment-report] tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* a heading stays with the table or text after it */
+  [data-payment-report] h2 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+}
