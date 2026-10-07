@@ -1,18 +1,15 @@
 import { cookies } from 'next/headers'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowUpRight, CalendarDays, ChevronLeft, MapPin, Users } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, CalendarDays, ChevronLeft, MapPin, Users } from 'lucide-react'
 import DashboardShell from '@/components/DashboardShell'
 import EditBranchModal from '@/components/EditBranchModal'
 import { Card, EmptyNote } from '@/components/DashboardWidgets'
-import { NeedsAttention, ReportKpis, ReportRangeLine } from '@/app/branches/_components/BranchReportSummary'
-import BranchProgressChecks from '@/app/branches/_components/BranchProgressChecks'
+import PaginatedListItems from '@/components/PaginatedListItems'
 import { createClient } from '@/utils/supabase/server'
 import { getCurrentUser } from '@/utils/getCurrentUser'
 import { dateInTimeZone, formatTimeRange, timeInTimeZone } from '@/utils/dates'
 import { BELT_COLORS, formatBeltLabel } from '@/utils/belts'
-import { getBranchReportWithComparison, resolveReportRange } from '@/utils/branch-reports'
-import { cardClass } from '@/utils/branch-report-format'
 
 export const dynamic = 'force-dynamic'
 
@@ -82,8 +79,6 @@ export default async function BranchDetailPage({ params, searchParams }: {
 
   const today = dateInTimeZone()
   const now = timeInTimeZone()
-  const reportRange = resolveReportRange(param('range'), param('from'), param('to'))
-
   const loadSchedule = async () => {
     // Cancelled is shown (not linked); Draft never is
     const { data, error } = await supabase
@@ -121,8 +116,7 @@ export default async function BranchDetailPage({ params, searchParams }: {
   }
 
   // each section fails on its own, so one error never blanks the whole page
-  const [report, schedule, studentResult] = await Promise.all([
-    getBranchReportWithComparison({ start: reportRange.start, end: reportRange.end, branchIds: [branchId] }),
+  const [schedule, studentResult] = await Promise.all([
     loadSchedule(),
     supabase
       .from('student')
@@ -155,48 +149,21 @@ export default async function BranchDetailPage({ params, searchParams }: {
         <EditBranchModal branch={{ ...branch, address: branch.address ?? '' }} />
       </div>
 
-      {/* banner — same photo / letter fallback as the branch cards */}
-      <section className={`mt-4 overflow-hidden border ${cardClass}`}>
-        {branch.photo_url
-          ? <img src={branch.photo_url} alt={branch.name} className="h-44 w-full object-cover" />
-          : <div className="flex h-44 items-center justify-center bg-gradient-to-br from-red-600 to-red-800 text-5xl font-bold text-white" aria-hidden>
-            {branch.name.charAt(0)}
-          </div>}
-        <div className="p-5">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-semibold text-gray-950">{branch.name}</h1>
-            {!branch.is_active && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800">Archived</span>}
-          </div>
-          {branch.address && (
-            <p className="mt-1 flex items-start gap-1.5 text-sm text-gray-500">
-              <MapPin className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />{branch.address}
-            </p>
-          )}
-          {branch.description && <p className="mt-3 text-sm text-gray-600">{branch.description}</p>}
+      <section className="mt-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-base font-semibold text-gray-950">Branch details</h2>
+          {!branch.is_active && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800">Archived</span>}
         </div>
-      </section>
-
-      <section aria-label="Branch report" className="mt-6 space-y-4">
-        {report.current.error
-          ? <p role="alert" className="text-sm text-red-600">Could not load the branch report: {report.current.error}</p>
-          : report.current.data && <>
-            <ReportRangeLine range={report.current.data.range} comparison={report.comparison} />
-            <ReportKpis totals={report.current.data.totals} comparison={report.comparison} />
-            <NeedsAttention branches={report.current.data.branches} comparison={report.comparison} single />
-            <Card title="Student progress in this period" chip={String(report.current.data.totals.assessedStudents)} className={cardClass}>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div><p className="text-xs font-medium text-gray-600">Progress checks</p><p className="mt-1 text-xl font-semibold tabular-nums text-gray-950">{report.current.data.totals.progressEntries}</p></div>
-                <div><p className="text-xs font-medium text-gray-600">Students assessed</p><p className="mt-1 text-xl font-semibold tabular-nums text-gray-950">{report.current.data.totals.assessedStudents}</p></div>
-                <div><p className="text-xs font-medium text-gray-600">Ready for assessment</p><p className="mt-1 text-xl font-semibold tabular-nums text-gray-950">{report.current.data.totals.readyForAssessment}</p></div>
-              </div>
-              <p className="mt-3 text-xs text-gray-600">Latest coach recommendation per student. Readiness does not automatically promote a student.</p>
-            </Card>
-            <BranchProgressChecks checks={report.current.data.progressChecks} title="Latest progress checks for this branch" />
-          </>}
+        {branch.address && (
+          <p className="mt-2 flex items-start gap-1.5 text-sm text-gray-700">
+            <MapPin className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />{branch.address}
+          </p>
+        )}
+        {branch.description && <p className="mt-3 text-sm text-gray-700">{branch.description}</p>}
       </section>
 
       <div className="mt-6 grid items-start gap-5 lg:grid-cols-2">
-        <Card title={<><CalendarDays className="h-4 w-4 text-gray-950" aria-hidden />Today’s schedule</>} chip={schedule.error ? undefined : String(schedule.rows.length)} flush className={cardClass}>
+        <Card title={<><CalendarDays className="h-4 w-4 text-gray-950" aria-hidden />Today’s schedule</>} chip={schedule.error ? undefined : String(schedule.rows.length)} flush className="rounded-xl border border-gray-200 bg-white shadow-sm">
           {schedule.error
             ? <p role="alert" className="px-5 pb-5 text-sm text-red-600">Could not load today’s schedule: {schedule.error}</p>
             : schedule.rows.length
@@ -225,23 +192,27 @@ export default async function BranchDetailPage({ params, searchParams }: {
               : <div className="px-5 pb-5"><EmptyNote>No classes scheduled today.</EmptyNote></div>}
         </Card>
 
-        <Card title={<><Users className="h-4 w-4 text-gray-950" aria-hidden />Active students</>} chip={studentResult.error ? undefined : String(students.length)} flush className={cardClass}>
+        <Card title={<><Users className="h-4 w-4 text-gray-950" aria-hidden />Active students</>} chip={studentResult.error ? undefined : String(students.length)} flush className="rounded-xl border border-gray-200 bg-white shadow-sm">
           {studentResult.error
             ? <p role="alert" className="px-5 pb-5 text-sm text-red-600">Could not load students: {studentResult.error.message}</p>
             : students.length
-              ? <ul className="max-h-[28rem] divide-y divide-gray-100 overflow-y-auto pb-1">
+              ? <div className="divide-y divide-gray-100">
+                <PaginatedListItems itemLabel="students" pageSize={6} showSummary>
                 {students.map((student) => (
-                  <li key={student.id} className="flex items-center justify-between gap-3 px-5 py-2.5 transition-colors duration-200 hover:bg-red-600/5">
-                    <span className="min-w-0 truncate text-sm text-gray-900">{fullName(student)}</span>
+                  <div key={student.id} className="flex items-center justify-between gap-3 px-5 py-3">
+                    <span className="min-w-0 flex-1 break-words text-sm text-gray-900">{fullName(student)}</span>
                     {student.belt_level
                       ? <span className={`inline-flex shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${BELT_COLORS[student.belt_level] ?? 'bg-gray-100 text-gray-700'}`}>
                         {formatBeltLabel(student.belt_level)}
                       </span>
                       : <span className="text-xs text-gray-400">—</span>}
-                    <Link href={`/students/${student.id}/progress`} className="shrink-0 rounded-md px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-100 hover:text-black">Progress</Link>
-                  </li>
+                    <Link href={`/students/${student.id}/progress`} aria-label={`View ${fullName(student)} progress`} title="View student progress" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-600 transition-colors hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2">
+                      <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                    </Link>
+                  </div>
                 ))}
-              </ul>
+                </PaginatedListItems>
+              </div>
               : <div className="px-5 pb-5"><EmptyNote>No active students in this branch.</EmptyNote></div>}
         </Card>
       </div>

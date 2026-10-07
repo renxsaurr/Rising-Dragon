@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ArrowUpRight, TriangleAlert } from 'lucide-react'
+import { ArrowUpRight, CalendarDays, ClipboardCheck, TriangleAlert, UsersRound } from 'lucide-react'
 import { Card } from '@/components/DashboardWidgets'
 import type { BranchCounts, BranchReport, BranchReportRow, ReportComparison } from '@/utils/branch-reports'
 import { DROP_ALERT_POINTS, FAIR_RATE, LOW_DATA_MARKS, cardClass, formatRange, isLowData, marksOf, ratePercent } from '@/utils/branch-report-format'
@@ -73,35 +73,29 @@ function issueTone(rank: number) {
   return { dot: 'bg-gray-300', tag: 'Note', tagClass: 'bg-gray-100 text-gray-600' }
 }
 
-export function ReportRangeLine({ range, comparison }: { range: BranchReport['range']; comparison: ReportComparison | null }) {
-  const previousLabel = comparison && formatRange(comparison.start, comparison.end, false)
-  return (
-    <p className="text-sm text-gray-500">
-      Showing <span className="font-medium text-gray-900">{formatRange(range.start, range.end)}</span>
-      {range.endClampedToToday && ' (until today)'}
-      {previousLabel && <> · compared with {previousLabel}</>}
-    </p>
-  )
-}
-
 export function ReportKpis({ totals, comparison }: { totals: BranchCounts; comparison: ReportComparison | null }) {
   const previousLabel = comparison && formatRange(comparison.start, comparison.end, false)
   const kpis = [
-    { label: 'Active students', value: String(totals.activeStudents), change: null },
-    { label: 'Classes', value: String(totals.classes), change: kpiChange('classes', totals, comparison) },
-    { label: 'Attendance rate', value: totals.attendanceRate === null ? null : `${ratePercent(totals.attendanceRate)}%`, change: kpiChange('rate', totals, comparison) },
-    { label: 'Avg. present per class', value: totals.avgPresentPerClass === null ? null : totals.avgPresentPerClass.toFixed(1), change: kpiChange('avg', totals, comparison) },
+    { label: 'Active students', value: String(totals.activeStudents), change: null, Icon: UsersRound },
+    { label: 'Classes', value: String(totals.classes), change: kpiChange('classes', totals, comparison), Icon: CalendarDays },
+    { label: 'Attendance rate', value: totals.attendanceRate === null ? null : `${ratePercent(totals.attendanceRate)}%`, change: kpiChange('rate', totals, comparison), Icon: ClipboardCheck },
+    { label: 'Avg. present per class', value: totals.avgPresentPerClass === null ? null : totals.avgPresentPerClass.toFixed(1), change: kpiChange('avg', totals, comparison), Icon: UsersRound },
   ]
 
   return (
     <section aria-label="Key figures" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 print:grid-cols-4">
       {kpis.map((kpi) => (
-        <article key={kpi.label} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm shadow-gray-900/[0.03] sm:p-5 print:break-inside-avoid">
-          <p className="truncate text-sm font-medium text-gray-500">{kpi.label}</p>
-          {kpi.value === null
-            ? <p className="mt-3 text-sm font-medium text-gray-400">No attendance marked</p>
-            : <p className="mt-2 text-2xl font-semibold tracking-tight text-gray-950 tabular-nums sm:text-3xl">{kpi.value}</p>}
-          <div className="mt-3 border-t border-gray-100 pt-3 text-xs">
+        <article key={kpi.label} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm shadow-gray-900/[0.03] transition duration-200 hover:-translate-y-0.5 hover:shadow-md print:break-inside-avoid">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium leading-5 text-gray-900">{kpi.label}</p>
+              <p className="mt-3 text-3xl font-semibold tracking-tight text-gray-950 tabular-nums">{kpi.value ?? '—'}</p>
+            </div>
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gray-100 text-gray-950 ring-1 ring-inset ring-gray-200/80">
+              <kpi.Icon className="h-[18px] w-[18px]" aria-hidden />
+            </span>
+          </div>
+          <div className="mt-3 border-t border-gray-100 pt-3 text-xs leading-5">
             {kpi.change ? <>
               <p className={`font-medium ${kpi.change.className}`}>
                 {kpi.change.direction && <>
@@ -110,8 +104,8 @@ export function ReportKpis({ totals, comparison }: { totals: BranchCounts; compa
                 </>}
                 {kpi.change.value}
               </p>
-              {previousLabel && <p className="mt-0.5 truncate text-gray-400">vs {previousLabel}</p>}
-            </> : <p className="text-gray-500">As of today</p>}
+              {previousLabel && <p className="mt-0.5 text-gray-700">vs {previousLabel}</p>}
+            </> : <p className="text-gray-700">{kpi.value === null ? 'No attendance marked' : 'As of today'}</p>}
           </div>
         </article>
       ))}

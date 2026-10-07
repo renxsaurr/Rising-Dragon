@@ -45,7 +45,7 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
     setDeleting(false)
 
     if ('error' in result) {
-      setError(result.error)
+      setError(result.error ?? 'Branch could not be deleted.')
       return
     }
 
@@ -60,7 +60,7 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
     const result = branch.is_active ? await archiveBranch(branch.id) : await reactivateBranch(branch.id)
     setChangingStatus(false)
     if ('error' in result) {
-      setError(result.error)
+      setError(result.error ?? 'Branch status could not be changed.')
       return
     }
     setIsOpen(false)
@@ -112,7 +112,7 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
     setLoading(false)
 
     if ('error' in result) {
-      setError(result.error)
+      setError(result.error ?? 'Branch could not be updated.')
       return
     }
 
@@ -126,7 +126,7 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
     <>
       <button
         onClick={() => setIsOpen(true)}
-        className="bg-white hover:bg-gray-100 text-black border border-gray-200 text-[14px] font-semibold px-5 py-2.5 rounded-lg transition-colors"
+        className="bg-black hover:bg-gray-800 text-white text-[14px] font-semibold px-5 py-2.5 rounded-lg transition-colors"
       >
         Edit Branch
       </button>
@@ -222,6 +222,7 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
                     className="hidden"
                   />
                 </label>
+                <p className="mt-1.5 text-xs text-gray-600">For a sharp branch header, use the original photo at least 1600 px wide. Screenshots and chat-compressed copies may look blurry.</p>
               </div>
               {/* --- end photo field --- */}
 

@@ -7,6 +7,7 @@ import AddBranchModal from '@/components/AddBranchModal'
 import BranchesView from '@/components/BranchesView'
 import BranchReportFilters from '@/app/branches/_components/BranchReportFilters'
 import BranchReport from '@/app/branches/_components/BranchReport'
+import PrintReportButton from '@/app/branches/_components/PrintReportButton'
 import { getCurrentUser } from '@/utils/getCurrentUser'
 import { dateInTimeZone } from '@/utils/dates'
 import { getBranchReportWithComparison, resolveReportRange } from '@/utils/branch-reports'
@@ -106,7 +107,7 @@ export default async function BranchesPage({
           <Link href="/branches" aria-current={view === 'directory' ? 'page' : undefined} className={`rounded-lg px-4 py-2 text-sm font-medium ${view === 'directory' ? 'bg-black text-white' : 'text-gray-600 hover:bg-white'}`}>Directory</Link>
           <Link href="/branches?view=reports" aria-current={view === 'reports' ? 'page' : undefined} className={`rounded-lg px-4 py-2 text-sm font-medium ${view === 'reports' ? 'bg-black text-white' : 'text-gray-600 hover:bg-white'}`}>Branch reports</Link>
         </div>
-        {view === 'directory' && <AddBranchModal />}
+        {view === 'directory' ? <AddBranchModal /> : <PrintReportButton />}
       </div>
 
       {view === 'reports'
@@ -117,7 +118,7 @@ export default async function BranchesPage({
           </section>
           : <div data-report-print className="mt-3 space-y-5">
             <BranchReportFilters
-              key={`${reportRange.range}-${reportRange.start}-${reportRange.end}`}
+              key={`${reportRange.range}-${reportRange.start}-${reportRange.end}-${selectedBranchIds.join(',')}`}
               range={reportRange.range}
               start={reportRange.start}
               end={reportRange.end}

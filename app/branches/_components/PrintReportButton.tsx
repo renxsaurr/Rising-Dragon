@@ -29,9 +29,9 @@ export default function PrintReportButton() {
     <button
       type="button"
       onClick={() => window.print()}
-      className="btn-secondary group px-3 py-1.5 text-[13px] transition-colors duration-200 hover:border-red-200 hover:bg-red-600/5 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 print:hidden"
+      className="inline-flex h-10 items-center gap-2 rounded-lg bg-black px-4 text-sm font-medium text-white transition-colors hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 print:hidden"
     >
-      <Printer className="h-4 w-4 transition-colors duration-200 group-hover:text-red-600" aria-hidden />
+      <Printer className="h-4 w-4" aria-hidden />
       Print / Save PDF
     </button>
   )
