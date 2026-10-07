@@ -37,7 +37,8 @@ function statusNote(row: PaymentRecord) {
 }
 
 // "Monthly · Oct – Nov 2026", "Monthly · Oct 2026" or "6 sessions". Nothing for older records.
-function paymentDetail(row: PaymentRecord) {
+// Also used by the printed payment report, so both say the same thing.
+export function paymentDetail(row: PaymentRecord) {
   if (row.paymentType === 'Monthly' && row.coverageStart && row.quantity) {
     return `Monthly · ${formatCoverage(row.coverageStart, row.quantity)}`
   }

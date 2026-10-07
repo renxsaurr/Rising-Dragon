@@ -8,7 +8,9 @@ import MonthPicker from "./_components/MonthPicker";
 import NotPaidSection from "./_components/NotPaidSection";
 import PaymentFilter from "./_components/PaymentFilter";
 import PaymentRecordsTable from "./_components/PaymentRecordsTable";
+import PaymentReport from "./_components/PaymentReport";
 import PaymentTabs, { type TabItem } from "./_components/PaymentTabs";
+import PrintPaymentReportButton from "./_components/PrintPaymentReportButton";
 import ReminderHistoryView from "./_components/ReminderHistoryView";
 import {
   PAYMENT_FILTERS,
@@ -225,176 +227,207 @@ export default async function PaymentsPage({
     href: paymentsHref({ month, branch: selected.key, filter, tab: key }),
   }));
   const hasOlderOverdue = olderOverdue.count > 0 && olderOverdue.oldestMonth;
+  // For the printed report. selected.name is already "All branches" for the "all" card.
+  const generatedAt = new Date().toLocaleString("en-US", {
+    timeZone: "Asia/Manila",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const generatedBy = [currentUser.first_name, currentUser.last_name]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <DashboardShell title="Payments" currentUser={currentUser}>
-      {intro}
+      {/* Everything on screen. On paper only the report below is shown. */}
+      <div className="print:hidden">
+        {intro}
 
-      <div className="mb-5">
-        <MonthPicker month={month} branch={selected.key} filter={filter} tab={chosenTab} />
-      </div>
-
-      <BranchCards
-        branches={monthData.branches}
-        notPaid={trackingStarted ? monthData.notPaid : {}}
-        selectedKey={selected.key}
-        month={month}
-        filter={filter}
-        tab={chosenTab}
-      />
-
-      {/* Tab bar, with the actions on the right. On small screens the actions wrap below. */}
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <PaymentTabs tabs={tabs} active={activeTab} panelId="payments-tab-panel" />
-        <div className="flex flex-wrap items-center gap-3">
-          <AddPaymentButton
-            students={studentChoices}
-            branchName={selected.key === "all" ? undefined : selected.name}
-            month={month}
-            today={today}
-          />
-          <Link
-            href={paymentsHref({ ...query, view: "history" })}
-            scroll={false}
-            className="text-xs font-semibold text-gray-700 underline decoration-gray-300 underline-offset-4 hover:text-black"
-          >
-            Reminder history
-          </Link>
+        <div className="mb-5">
+          <MonthPicker month={month} branch={selected.key} filter={filter} tab={chosenTab} />
         </div>
-      </div>
 
-      {/* One compact alert area, only when there is something to say. */}
-      {(failedCount > 0 || hasOlderOverdue) && (
-        <div className="mb-3 space-y-1 rounded-lg bg-red-50 px-4 py-2.5 text-[13px] text-red-700">
-          {failedCount > 0 && (
-            <p>
-              {failedCount} reminder{failedCount === 1 ? "" : "s"} failed ·{" "}
-              <Link
-                href={paymentsHref({ ...query, view: "history", history: { hstatus: "Failed" } })}
-                scroll={false}
-                className="font-semibold underline underline-offset-2 hover:text-red-800"
-              >
-                Review
-              </Link>
-            </p>
-          )}
-          {hasOlderOverdue && olderOverdue.oldestMonth && (
-            <p>
-              {olderOverdue.count} unpaid payment
-              {olderOverdue.count === 1 ? " from earlier months is" : "s from earlier months are"} overdue ·{" "}
-              {formatAmount(olderOverdue.total)} ·{" "}
-              <Link
-                href={paymentsHref({
-                  month: olderOverdue.oldestMonth,
-                  branch: selected.key,
-                  filter: "overdue",
-                  tab: "records",
-                })}
-                scroll={false}
-                className="font-semibold underline underline-offset-2 hover:text-red-800"
-              >
-                View {formatMonth(olderOverdue.oldestMonth)}
-              </Link>
-            </p>
-          )}
-        </div>
-      )}
+        <BranchCards
+          branches={monthData.branches}
+          notPaid={trackingStarted ? monthData.notPaid : {}}
+          selectedKey={selected.key}
+          month={month}
+          filter={filter}
+          tab={chosenTab}
+        />
 
-      <section
-        id="payments-tab-panel"
-        role="tabpanel"
-        aria-labelledby={`payments-tab-${activeTab}`}
-        className="w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-gray-200 bg-white"
-      >
-        {activeTab === "notpaid" && (
-          <>
-            <div className="border-b border-gray-100 px-5 py-4">
-              <h2 className="text-base font-semibold text-gray-950">
-                Not paid yet — {monthLabel}
-                <span className="font-normal text-gray-500">{branchSuffix}</span>
-              </h2>
-              <p className="mt-0.5 text-[13px] text-gray-500">
-                Active students with no payment for {monthLabel}.
-              </p>
-            </div>
-            {notPaid.notPaidCount > 0 ? (
-              <NotPaidSection
-                students={notPaid.students}
-                showBranch={selected.key === "all"}
-                studentChoices={studentChoices}
-                branchName={selected.key === "all" ? undefined : selected.name}
-                month={month}
-                today={today}
-              />
-            ) : notPaid.activeCount > 0 ? (
-              <p className="px-5 py-6 text-[13px] font-medium text-emerald-700">
-                Everyone has paid for {monthLabel}.
-              </p>
-            ) : (
-              <p className="px-5 py-6 text-[13px] text-gray-500">No active students in this branch yet.</p>
-            )}
-          </>
-        )}
-
-        {activeTab === "missed" && (
-          <>
-            <div className="border-b border-gray-100 px-5 py-4">
-              <h2 className="text-base font-semibold text-gray-950">
-                Missed months
-                <span className="font-normal text-gray-500">{branchSuffix}</span>
-              </h2>
-              <p className="mt-0.5 text-[13px] text-gray-500">
-                Past months with no payment. The current month is under Not paid yet.
-              </p>
-            </div>
-            {missed.length > 0 ? (
-              <MissedMonthsList
-                students={missed}
-                showBranch={selected.key === "all"}
-                branch={selected.key}
-              />
-            ) : (
-              <p className="px-5 py-6 text-[13px] font-medium text-emerald-700">
-                No missed months since{" "}
-                {formatMonth(monthData.missedSince ?? TRACKING_START_MONTH ?? month)}.
-              </p>
-            )}
-          </>
-        )}
-
-        {activeTab === "records" && (
-          <>
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-4">
-              <h2 className="text-base font-semibold text-gray-950">
-                Payment records — {monthLabel}
-                <span className="font-normal text-gray-500"> · {selected.name}</span>
-              </h2>
-              <PaymentFilter
-                month={month}
-                branch={selected.key}
-                filter={filter}
-                counts={counts}
-                tab="records"
-              />
-            </div>
-            {!trackingStarted && TRACKING_START_MONTH && (
-              <p className="border-b border-gray-100 bg-gray-50 px-5 py-2.5 text-[13px] text-gray-500">
-                Payment tracking started in {formatMonth(TRACKING_START_MONTH)}.
-              </p>
-            )}
-            <PaymentRecordsTable
-              rows={visibleRows}
-              today={today}
-              showBranch={selected.key === "all"}
-              emptyText={
-                branchRows.length
-                  ? "No payments match this filter."
-                  : "No payments for this month yet."
-              }
+        {/* Tab bar, with the actions on the right. On small screens the actions wrap below. */}
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <PaymentTabs tabs={tabs} active={activeTab} panelId="payments-tab-panel" />
+          <div className="flex flex-wrap items-center gap-3">
+            <PrintPaymentReportButton
+              documentTitle={`Payment Report - ${monthLabel} - ${selected.name}`}
             />
-          </>
+            <AddPaymentButton
+              students={studentChoices}
+              branchName={selected.key === "all" ? undefined : selected.name}
+              month={month}
+              today={today}
+            />
+            <Link
+              href={paymentsHref({ ...query, view: "history" })}
+              scroll={false}
+              className="text-xs font-semibold text-gray-700 underline decoration-gray-300 underline-offset-4 hover:text-black"
+            >
+              Reminder history
+            </Link>
+          </div>
+        </div>
+
+        {/* One compact alert area, only when there is something to say. */}
+        {(failedCount > 0 || hasOlderOverdue) && (
+          <div className="mb-3 space-y-1 rounded-lg bg-red-50 px-4 py-2.5 text-[13px] text-red-700">
+            {failedCount > 0 && (
+              <p>
+                {failedCount} reminder{failedCount === 1 ? "" : "s"} failed ·{" "}
+                <Link
+                  href={paymentsHref({ ...query, view: "history", history: { hstatus: "Failed" } })}
+                  scroll={false}
+                  className="font-semibold underline underline-offset-2 hover:text-red-800"
+                >
+                  Review
+                </Link>
+              </p>
+            )}
+            {hasOlderOverdue && olderOverdue.oldestMonth && (
+              <p>
+                {olderOverdue.count} unpaid payment
+                {olderOverdue.count === 1 ? " from earlier months is" : "s from earlier months are"} overdue ·{" "}
+                {formatAmount(olderOverdue.total)} ·{" "}
+                <Link
+                  href={paymentsHref({
+                    month: olderOverdue.oldestMonth,
+                    branch: selected.key,
+                    filter: "overdue",
+                    tab: "records",
+                  })}
+                  scroll={false}
+                  className="font-semibold underline underline-offset-2 hover:text-red-800"
+                >
+                  View {formatMonth(olderOverdue.oldestMonth)}
+                </Link>
+              </p>
+            )}
+          </div>
         )}
-      </section>
+
+        <section
+          id="payments-tab-panel"
+          role="tabpanel"
+          aria-labelledby={`payments-tab-${activeTab}`}
+          className="w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-gray-200 bg-white"
+        >
+          {activeTab === "notpaid" && (
+            <>
+              <div className="border-b border-gray-100 px-5 py-4">
+                <h2 className="text-base font-semibold text-gray-950">
+                  Not paid yet — {monthLabel}
+                  <span className="font-normal text-gray-500">{branchSuffix}</span>
+                </h2>
+                <p className="mt-0.5 text-[13px] text-gray-500">
+                  Active students with no payment for {monthLabel}.
+                </p>
+              </div>
+              {notPaid.notPaidCount > 0 ? (
+                <NotPaidSection
+                  students={notPaid.students}
+                  showBranch={selected.key === "all"}
+                  studentChoices={studentChoices}
+                  branchName={selected.key === "all" ? undefined : selected.name}
+                  month={month}
+                  today={today}
+                />
+              ) : notPaid.activeCount > 0 ? (
+                <p className="px-5 py-6 text-[13px] font-medium text-emerald-700">
+                  Everyone has paid for {monthLabel}.
+                </p>
+              ) : (
+                <p className="px-5 py-6 text-[13px] text-gray-500">No active students in this branch yet.</p>
+              )}
+            </>
+          )}
+
+          {activeTab === "missed" && (
+            <>
+              <div className="border-b border-gray-100 px-5 py-4">
+                <h2 className="text-base font-semibold text-gray-950">
+                  Missed months
+                  <span className="font-normal text-gray-500">{branchSuffix}</span>
+                </h2>
+                <p className="mt-0.5 text-[13px] text-gray-500">
+                  Past months with no payment. The current month is under Not paid yet.
+                </p>
+              </div>
+              {missed.length > 0 ? (
+                <MissedMonthsList
+                  students={missed}
+                  showBranch={selected.key === "all"}
+                  branch={selected.key}
+                />
+              ) : (
+                <p className="px-5 py-6 text-[13px] font-medium text-emerald-700">
+                  No missed months since{" "}
+                  {formatMonth(monthData.missedSince ?? TRACKING_START_MONTH ?? month)}.
+                </p>
+              )}
+            </>
+          )}
+
+          {activeTab === "records" && (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-4">
+                <h2 className="text-base font-semibold text-gray-950">
+                  Payment records — {monthLabel}
+                  <span className="font-normal text-gray-500"> · {selected.name}</span>
+                </h2>
+                <PaymentFilter
+                  month={month}
+                  branch={selected.key}
+                  filter={filter}
+                  counts={counts}
+                  tab="records"
+                />
+              </div>
+              {!trackingStarted && TRACKING_START_MONTH && (
+                <p className="border-b border-gray-100 bg-gray-50 px-5 py-2.5 text-[13px] text-gray-500">
+                  Payment tracking started in {formatMonth(TRACKING_START_MONTH)}.
+                </p>
+              )}
+              <PaymentRecordsTable
+                rows={visibleRows}
+                today={today}
+                showBranch={selected.key === "all"}
+                emptyText={
+                  branchRows.length
+                    ? "No payments match this filter."
+                    : "No payments for this month yet."
+                }
+              />
+            </>
+          )}
+        </section>
+      </div>
+
+      <PaymentReport
+        monthLabel={monthLabel}
+        branchLabel={selected.name}
+        showBranch={selected.key === "all"}
+        generatedAt={generatedAt}
+        generatedBy={generatedBy}
+        stats={selected}
+        notPaid={notPaid}
+        trackingStarted={trackingStarted}
+        rows={branchRows}
+        missed={missed}
+      />
     </DashboardShell>
   );
 }
