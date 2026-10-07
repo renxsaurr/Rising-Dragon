@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { createAdminClient } from '@/utils/supabase/admin'
+
 import { dateInTimeZone } from '@/utils/dates'
 import { CONTACT_NUMBER, PAYMENT_DETAILS } from '@/utils/academy-settings'
 import { isValidEmail, normalizeEmail } from '@/utils/email'
@@ -21,6 +22,23 @@ const STUCK_AFTER_MINUTES = 10
 const NO_GUARDIAN_EMAIL = 'No guardian email. Add one on the Students page first.'
 const INVALID_GUARDIAN_EMAIL = 'This guardian email looks invalid. Fix it on the Students page first.'
 const ALREADY_SENDING = 'This reminder was already sent or is being sent. Refresh the page.'
+import { addDays, dateInTimeZone } from '@/utils/dates'
+
+export type ReminderType = 'Before due' | 'Due today' | 'After due'
+export type ReminderStatus = 'Scheduled' | 'Sent' | 'Failed' | 'Skipped'
+
+// Resend's free plan allows 100 emails a day. Stay under it.
+export const DAILY_EMAIL_LIMIT = 90
+const DELAY_BETWEEN_EMAILS_MS = 600
+const STUCK_AFTER_MINUTES = 60
+
+// Days from the due date (negative = before). Each reminder may still go out a few
+// days late in case the daily job missed a day. The windows never overlap.
+export const REMINDER_WINDOWS: { type: ReminderType; dueOffset: number; lastDay: number }[] = [
+  { type: 'Before due', dueOffset: -3, lastDay: -1 },
+  { type: 'Due today', dueOffset: 0, lastDay: 2 },
+  { type: 'After due', dueOffset: 3, lastDay: 6 },
+]
 
 type Admin = ReturnType<typeof createAdminClient>
 
@@ -32,6 +50,7 @@ type PaymentWithStudent = {
   payment_type: PaymentType | null
   quantity: number | null
   coverage_start: string | null
+
   student: {
     first_name: string | null
     middle_name: string | null
