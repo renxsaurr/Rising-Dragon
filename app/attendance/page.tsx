@@ -5,8 +5,9 @@ import DashboardShell from "@/components/DashboardShell";
 import AttendanceRoster from "@/components/AttendanceRoster";
 import AttendanceDatePicker from "@/components/AttendanceDatePicker";
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { getCurrentUser } from "@/utils/getCurrentUser";
-import { dateInTimeZone, formatTime } from "@/utils/dates";
+import { dateInTimeZone, formatTime, timeInTimeZone } from "@/utils/dates";
 
 type ScheduleRow = {
   id: number;
@@ -48,12 +49,14 @@ export default async function AttendancePage({
   const { date: requestedDate, scheduleId: requestedScheduleId } =
     await searchParams;
   const today = dateInTimeZone();
+  const currentTime = timeInTimeZone();
   const date =
     requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate)
       ? requestedDate
       : today;
   const cookieStore = await cookies();
   const supabase = await createClient(cookieStore);
+  const admin = createAdminClient();
   const isAssistant = currentUser.role === "assistant_coach";
 
   // Only load sessions for the selected date; the date picker replaces the week strip.
@@ -91,14 +94,15 @@ export default async function AttendancePage({
   ];
   const [branchStudentsResult, dayAttendanceResult] = schedules.length
     ? await Promise.all([
-        supabase
+        admin
           .from("student")
-          .select("branch_id")
+          .select("id, branch_id, enrollment_date")
           .eq("is_active", true)
+          .lte("enrollment_date", date)
           .in("branch_id", branchIds),
         supabase
           .from("attendance")
-          .select("schedule_id, status")
+          .select("schedule_id, student_id, status")
           .in(
             "schedule_id",
             schedules.map((schedule) => schedule.id),
@@ -107,18 +111,18 @@ export default async function AttendancePage({
     : [{ data: [], error: null }, { data: [], error: null }];
   const progressError =
     branchStudentsResult.error?.message ?? dayAttendanceResult.error?.message ?? "";
-  const studentsPerBranch = new Map<number, number>();
+  const activeStudentIdsPerBranch = new Map<number, Set<number>>();
   for (const row of branchStudentsResult.data ?? [])
-    studentsPerBranch.set(
-      Number(row.branch_id),
-      (studentsPerBranch.get(Number(row.branch_id)) ?? 0) + 1,
-    );
-  const markedPerSchedule = new Map<number, number>();
-  for (const row of dayAttendanceResult.data ?? [])
-    markedPerSchedule.set(
-      Number(row.schedule_id),
-      (markedPerSchedule.get(Number(row.schedule_id)) ?? 0) + 1,
-    );
+    activeStudentIdsPerBranch.set(Number(row.branch_id), new Set([
+      ...(activeStudentIdsPerBranch.get(Number(row.branch_id)) ?? []),
+      Number(row.id),
+    ]));
+  const markedStudentIdsPerSchedule = new Map<number, Set<number>>();
+  for (const row of (dayAttendanceResult.data ?? []) as { schedule_id: number; student_id: number; status: string }[])
+    markedStudentIdsPerSchedule.set(Number(row.schedule_id), new Set([
+      ...(markedStudentIdsPerSchedule.get(Number(row.schedule_id)) ?? []),
+      Number(row.student_id),
+    ]));
 
   const presentPerSchedule = new Map<number, number>();
   const absentPerSchedule = new Map<number, number>();
@@ -140,34 +144,51 @@ export default async function AttendancePage({
     middle_name: string | null;
     last_name: string;
     belt_level: string;
+    enrollment_date: string;
   }[] = [];
   let attendance: { student_id: number; status: "Present" | "Absent" }[] = [];
   let rosterError = "";
 
   if (selectedSchedule) {
     const [studentsResult, attendanceResult] = await Promise.all([
-      supabase
+      admin
         .from("student")
-        .select("id, first_name, middle_name, last_name, belt_level")
+        .select("id, first_name, middle_name, last_name, belt_level, enrollment_date")
         .eq("is_active", true)
         .eq("branch_id", selectedSchedule.branch_id)
+        .lte("enrollment_date", selectedSchedule.date)
         .order("last_name")
         .order("first_name"),
-      supabase
+      admin
         .from("attendance")
         .select("student_id, status")
         .eq("schedule_id", selectedSchedule.id),
     ]);
     if (studentsResult.error) rosterError = studentsResult.error.message;
-    else students = (studentsResult.data ?? []) as typeof students;
     if (attendanceResult.error)
       rosterError = rosterError || attendanceResult.error.message;
     else attendance = (attendanceResult.data ?? []) as typeof attendance;
+    if (!rosterError) {
+      const activeStudents = (studentsResult.data ?? []) as typeof students;
+      const activeIds = new Set(activeStudents.map((student) => Number(student.id)));
+      const historicalIds = [...new Set(attendance.map((row) => Number(row.student_id)))].filter((id) => !activeIds.has(id));
+      const historicalResult = historicalIds.length
+        ? await admin.from("student")
+            .select("id, first_name, middle_name, last_name, belt_level, enrollment_date")
+            .in("id", historicalIds)
+        : { data: [], error: null };
+      if (historicalResult.error) rosterError = historicalResult.error.message;
+      else {
+        students = [...activeStudents, ...((historicalResult.data ?? []) as typeof students)]
+          .sort((a, b) => a.last_name.localeCompare(b.last_name) || a.first_name.localeCompare(b.first_name));
+      }
+    }
   }
 
-  const canMarkAttendance = Boolean(
-    selectedSchedule && selectedSchedule.date <= today,
-  );
+  const canMarkAttendance = Boolean(selectedSchedule && (
+    selectedSchedule.date < today ||
+    (selectedSchedule.date === today && selectedSchedule.time_start <= currentTime)
+  ));
   const selectedDay = new Date(`${date}T12:00:00`).toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
@@ -207,14 +228,17 @@ export default async function AttendancePage({
         <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {schedules.map((schedule) => {
             const active = selectedSchedule?.id === schedule.id;
-            const total =
-              studentsPerBranch.get(Number(schedule.branch_id)) ?? 0;
-            const marked = markedPerSchedule.get(Number(schedule.id)) ?? 0;
+            const activeStudentIds = activeStudentIdsPerBranch.get(Number(schedule.branch_id)) ?? new Set<number>();
+            const markedStudentIds = markedStudentIdsPerSchedule.get(Number(schedule.id)) ?? new Set<number>();
+            const historicalMarkedCount = [...markedStudentIds].filter((studentId) => !activeStudentIds.has(studentId)).length;
+            const total = activeStudentIds.size + historicalMarkedCount;
+            const marked = markedStudentIds.size;
             const presentCount =
               presentPerSchedule.get(Number(schedule.id)) ?? 0;
             const absentCount = absentPerSchedule.get(Number(schedule.id)) ?? 0;
             const done = total > 0 && marked >= total;
-            const upcoming = schedule.date > today;
+            const upcoming = schedule.date > today ||
+              (schedule.date === today && schedule.time_start > currentTime);
             const assignedName = fullName(schedule.coach) || "Coach";
             return (
               <Link

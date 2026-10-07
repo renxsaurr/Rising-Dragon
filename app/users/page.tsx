@@ -7,6 +7,10 @@ import DashboardShell from '@/components/DashboardShell'
 import AddUserModal from '@/components/AddUserModal'
 import EditUserModal from '@/components/EditUserModal'
 import DeleteUserButton from '@/components/DeleteUserButton'
+import RowActionsMenu from '@/components/RowActionsMenu'
+import RowActionItem, { ROW_ACTION_CLASS } from '@/components/RowActionItem'
+import PaginatedTableRows from '@/components/PaginatedTableRows'
+import PaginatedListItems from '@/components/PaginatedListItems'
 
 const ROLE_LABELS: Record<string, string> = {
   head_coach: 'Head Coach',
@@ -91,7 +95,7 @@ export default async function UsersPage() {
         ) : (
           <>
           <div className="hidden xl:block">
-            <table className="w-full table-fixed text-left">
+            <table className="system-data-table w-full table-fixed text-left">
               <thead className="border-b border-gray-200 bg-gray-50/70">
                 <tr>
                   <th className="w-[15%] px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Name</th>
@@ -102,7 +106,7 @@ export default async function UsersPage() {
                   <th className="w-[21%] px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-500">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <PaginatedTableRows itemLabel="staff accounts" colSpan={6}>
                 {users?.map((user) => {
                   const authUser = authById.get(user.auth_id)
                   const active = isAuthUserActive(authUser)
@@ -116,18 +120,19 @@ export default async function UsersPage() {
                       <td className="px-5 py-4 text-sm font-medium text-gray-950">{branchNameById.get(Number(user.primary_branch_id)) ?? '—'}</td>
                       <td className="px-5 py-4"><span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-950"><span className={`h-1.5 w-1.5 rounded-full ${active ? 'bg-emerald-500' : 'bg-gray-300'}`} />{authUser ? active ? 'Active' : 'Inactive' : 'Unavailable'}</span></td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-2">
-                          <EditUserModal user={user} branches={branches ?? []} />
-                          <DeleteUserButton userId={user.id} userName={name} active={active} disabled={isSelf || !authUser} />
-                        </div>
+                        <div className="flex justify-end"><RowActionsMenu>
+                          <EditUserModal user={user} branches={branches ?? []} trigger={<RowActionItem>Edit staff account</RowActionItem>} />
+                          <DeleteUserButton userId={user.id} userName={name} active={active} disabled={isSelf || !authUser} trigger={<RowActionItem disabled={isSelf || !authUser} className={`${ROW_ACTION_CLASS} text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40`}>{active ? 'Deactivate account' : 'Reactivate account'}</RowActionItem>} />
+                        </RowActionsMenu></div>
                       </td>
                     </tr>
                   )
                 })}
-              </tbody>
+              </PaginatedTableRows>
             </table>
           </div>
           <div className="divide-y divide-gray-100 xl:hidden">
+            <PaginatedListItems itemLabel="staff accounts">
             {users?.map((user) => {
               const authUser = authById.get(user.auth_id)
               const active = isAuthUserActive(authUser)
@@ -147,13 +152,16 @@ export default async function UsersPage() {
                     <div><dt className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Primary branch</dt><dd className="mt-1 break-words text-sm font-medium text-gray-950">{branchNameById.get(Number(user.primary_branch_id)) ?? '—'}</dd></div>
                     <div><dt className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Contact</dt><dd className="mt-1 break-words text-sm font-medium text-gray-950">{user.contact || '—'}</dd></div>
                   </dl>
-                  <div className="mt-3 flex justify-end gap-2 border-t border-gray-100 pt-2">
-                    <EditUserModal user={user} branches={branches ?? []} />
-                    <DeleteUserButton userId={user.id} userName={name} active={active} disabled={isSelf || !authUser} />
+                  <div className="mt-3 flex justify-end border-t border-gray-100 pt-2">
+                    <RowActionsMenu>
+                      <EditUserModal user={user} branches={branches ?? []} trigger={<RowActionItem>Edit staff account</RowActionItem>} />
+                      <DeleteUserButton userId={user.id} userName={name} active={active} disabled={isSelf || !authUser} trigger={<RowActionItem disabled={isSelf || !authUser} className={`${ROW_ACTION_CLASS} text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40`}>{active ? 'Deactivate account' : 'Reactivate account'}</RowActionItem>} />
+                    </RowActionsMenu>
                   </div>
                 </article>
               )
             })}
+            </PaginatedListItems>
           </div>
           </>
         )}

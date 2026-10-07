@@ -1,14 +1,11 @@
-'use client'
-
-import { useState } from 'react'
 import Link from 'next/link'
 import { FOCUS_RING } from './ModalShell'
 import { paymentsHref } from './payments-url'
 import { formatCoverage } from '@/utils/payment-fees'
 import type { MissedStudent } from '@/utils/payment-records'
+import PaginatedTableRows from '@/components/PaginatedTableRows'
 
-const FIRST_ROWS = 10
-const TH = 'px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-500'
+const TH = 'px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-600'
 
 /** Students with past months that have no payment. Each month links to that month's Not paid yet list. */
 export default function MissedMonthsList({
@@ -21,13 +18,10 @@ export default function MissedMonthsList({
   /** The selected branch key, kept in the month links. */
   branch: string
 }) {
-  const [showAll, setShowAll] = useState(false)
-  const visible = showAll ? students : students.slice(0, FIRST_ROWS)
-
   return (
     <>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[560px] border-collapse text-left">
+        <table className="system-data-table w-full min-w-[560px] border-collapse text-left">
           <thead className="border-b border-gray-100 bg-gray-50">
             <tr>
               <th className={`${TH} pl-5`}>Student</th>
@@ -35,8 +29,8 @@ export default function MissedMonthsList({
               <th className={`${TH} pr-5 text-right`}>Total</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
-            {visible.map((student) => (
+          <PaginatedTableRows itemLabel="missed payment records" colSpan={3}>
+            {students.map((student) => (
               <tr key={student.studentId} className="align-top">
                 <td className="px-5 py-3">
                   <p className="break-words text-sm font-medium text-gray-900">{student.name}</p>
@@ -61,21 +55,9 @@ export default function MissedMonthsList({
                 </td>
               </tr>
             ))}
-          </tbody>
+          </PaginatedTableRows>
         </table>
       </div>
-      {students.length > FIRST_ROWS && (
-        <div className="border-t border-gray-100 px-5 py-2.5">
-          <button
-            type="button"
-            aria-expanded={showAll}
-            onClick={() => setShowAll((value) => !value)}
-            className={`rounded text-xs font-semibold text-gray-700 underline decoration-gray-300 underline-offset-4 hover:text-black ${FOCUS_RING}`}
-          >
-            {showAll ? 'Show less' : `Show all (${students.length})`}
-          </button>
-        </div>
-      )}
     </>
   )
 }

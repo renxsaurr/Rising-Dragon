@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useId, useState } from 'react'
+import { useCallback, useId, useState, type ReactNode } from 'react'
 import ReminderReviewModal from './ReminderReviewModal'
 import type { ReminderType } from '@/utils/payment-reminders'
 
@@ -11,6 +11,7 @@ export default function SendReminderButton({
   disabledLabel,
   disabledReason,
   hint,
+  trigger,
 }: {
   paymentId: number
   reminderType: ReminderType
@@ -20,6 +21,7 @@ export default function SendReminderButton({
   disabledReason?: string
   /** Small gray note under the button in place of the reminder type. */
   hint?: string
+  trigger?: ReactNode
 }) {
   const [open, setOpen] = useState(false)
   const close = useCallback(() => setOpen(false), [])
@@ -28,7 +30,12 @@ export default function SendReminderButton({
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <button
+      {trigger ? (
+        <div>
+          <div onClick={() => { if (!disabled) setOpen(true) }}>{trigger}</div>
+          {disabled && disabledReason && <span id={noteId} className="mt-1 block max-w-[190px] px-3 text-xs text-amber-700">{disabledReason}</span>}
+        </div>
+      ) : <button
         type="button"
         onClick={() => setOpen(true)}
         disabled={disabled}
@@ -36,7 +43,7 @@ export default function SendReminderButton({
         className="inline-flex items-center justify-center whitespace-nowrap rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 transition-colors hover:bg-red-600/5 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500 disabled:hover:bg-gray-50"
       >
         {disabledLabel ?? 'Send reminder'}
-      </button>
+      </button>}
       <span
         id={noteId}
         className={`max-w-[200px] text-right text-xs ${disabledReason ? 'text-amber-700' : 'text-gray-500'}`}

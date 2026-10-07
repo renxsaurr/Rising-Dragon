@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import PaginatedTableRows from '@/components/PaginatedTableRows'
 import type { ReactNode } from 'react'
 
 export function Card({ title, chip, action, children, className = '', contentClassName = '', flush = false }: {
@@ -135,7 +136,7 @@ export type ClassRow = { id: number; date: string; time: string; branch: string;
 export function ClassTable({ rows, showDate = false }: { rows: ClassRow[]; showDate?: boolean }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[560px]">
+      <table className="system-data-table w-full min-w-[560px]">
         <thead>
           <tr className="border-b border-gray-100">
             <th className="th w-14">No.</th>
@@ -145,7 +146,7 @@ export function ClassTable({ rows, showDate = false }: { rows: ClassRow[]; showD
             <th className="th">Status</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <PaginatedTableRows itemLabel="scheduled classes" colSpan={5}>
           {rows.map((row, index) => (
             <tr key={row.id} className="group">
               <td className="px-5 py-3 text-[13px] tabular-nums text-gray-500">{String(index + 1).padStart(2, '0')}</td>
@@ -161,7 +162,7 @@ export function ClassTable({ rows, showDate = false }: { rows: ClassRow[]; showD
               <td className="px-5 py-3"><StatusDot tone={row.status.tone} label={row.status.label} /></td>
             </tr>
           ))}
-        </tbody>
+        </PaginatedTableRows>
       </table>
     </div>
   )

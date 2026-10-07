@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { Pencil } from 'lucide-react'
 import { updateUser } from '@/app/users/actions'
@@ -18,11 +19,13 @@ type User = {
 type EditUserModalProps = {
   user: User
   branches: { id: number; name: string }[]
+  trigger?: ReactNode
 }
 
 export default function EditUserModal({
   user,
   branches,
+  trigger,
 }: EditUserModalProps) {
   const [isOpen, setIsOpen] = useState(false)
 
@@ -90,7 +93,7 @@ export default function EditUserModal({
   return (
     <>
       {/* EDIT ICON */}
-      <button
+      {trigger ? <div onClick={openModal}>{trigger}</div> : <button
         type="button"
         onClick={openModal}
         title="Edit user"
@@ -99,7 +102,7 @@ export default function EditUserModal({
       >
         <Pencil size={14} strokeWidth={2} />
         Edit
-      </button>
+      </button>}
 
       {/* EDIT MODAL */}
       {isOpen && (

@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Card, EmptyNote } from '@/components/DashboardWidgets'
 import type { BranchCounts, BranchReportRow } from '@/utils/branch-reports'
 import { FAIR_RATE, GOOD_RATE, LOW_DATA_MARKS, cardClass, dataTier, isLowData, ratePercent, rateStatus } from '@/utils/branch-report-format'
+import PaginatedTableRows from '@/components/PaginatedTableRows'
 
 const cell = 'px-3 py-3 text-right align-top text-sm tabular-nums text-gray-700 last:pr-5 print:px-1.5 print:py-2 print:text-xs'
 
@@ -41,7 +42,7 @@ function RateCell({ counts }: { counts: BranchCounts }) {
 function ReportRow({ name, counts, branchId, detailQuery = '' }: { name: string; counts: BranchCounts; branchId?: number; detailQuery?: string }) {
   const total = branchId === undefined
   return (
-    <tr className={`print:break-inside-avoid ${total ? 'border-t-2 border-gray-200 bg-gray-50/80 font-semibold' : 'transition-colors duration-200 hover:bg-red-600/5'}`}>
+    <tr className={`print:break-inside-avoid ${total ? 'border-t-2 border-gray-200 bg-gray-50/80 font-semibold' : 'transition-colors duration-200 hover:bg-gray-50'}`}>
       <th scope="row" className={`whitespace-nowrap py-3 pl-5 pr-3 text-left align-top text-sm text-gray-900 print:whitespace-normal print:py-2 print:pl-2 print:pr-1.5 print:text-xs ${total ? 'font-semibold' : 'font-medium'}`}>
         {total ? name : <Link href={`/branches/${branchId}?${detailQuery}`} className="hover:text-red-600 hover:underline">{name}</Link>}
       </th>
@@ -112,7 +113,7 @@ export default function BranchReportTable({ branches, totals, sort, dir, baseQue
         <div className="px-5 pb-4"><EmptyNote>No classes in this date range. Try a wider range.</EmptyNote></div>
       )}
       <div className="overflow-x-auto print:overflow-visible">
-        <table className="w-full min-w-[760px] lg:min-w-0 print:min-w-0">
+        <table className="system-data-table w-full min-w-[760px] lg:min-w-0 print:min-w-0">
           <thead>
             <tr className="border-b border-gray-100">
               <th scope="col" aria-sort={ariaSort('name')} className="th pl-5 pr-3 print:pl-2 print:pr-1.5">{sortLink('name', 'Branch')}</th>
@@ -125,11 +126,11 @@ export default function BranchReportTable({ branches, totals, sort, dir, baseQue
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <PaginatedTableRows itemLabel="branch report rows" colSpan={7} pinnedRows={1}>
             {rows.map((branch) => <ReportRow key={branch.branchId} branchId={branch.branchId} name={branch.branchName} counts={branch} detailQuery={detailQuery} />)}
             {/* totals always stay at the bottom, whatever the sort */}
             <ReportRow name="All branches" counts={totals} />
-          </tbody>
+          </PaginatedTableRows>
         </table>
       </div>
       <p className="px-5 py-3 text-[11px] text-gray-400">Rates under {LOW_DATA_MARKS} marks show “Low data” instead of a status.</p>

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { cookies } from "next/headers";
@@ -10,7 +11,10 @@ import { getCoachBranchIdsForDate } from "@/utils/coach-access";
 import { dateInTimeZone } from "@/utils/dates";
 import { redirect } from "next/navigation";
 import { BELT_COLORS, BELT_LABELS, formatBeltLabel } from "@/utils/belts";
-import { Pencil } from "lucide-react";
+import RowActionsMenu from "@/components/RowActionsMenu";
+import RowActionItem, { ROW_ACTION_CLASS } from "@/components/RowActionItem";
+import PaginatedTableRows from "@/components/PaginatedTableRows";
+import PaginatedListItems from "@/components/PaginatedListItems";
 
 type StudentRow = {
   id: number;
@@ -220,7 +224,7 @@ export default async function StudentsPage({
         ) : (
           <>
             <div className="hidden max-h-[min(60vh,480px)] overflow-y-auto overscroll-contain xl:block">
-              <table className="w-full table-fixed border-collapse text-left">
+              <table className="system-data-table w-full table-fixed border-collapse text-left">
                 <colgroup>
                   {isHeadCoach ? (
                     <>
@@ -234,9 +238,10 @@ export default async function StudentsPage({
                     </>
                   ) : (
                     <>
-                      <col className="w-[46%]" />
-                      <col className="w-[24%]" />
-                      <col className="w-[30%]" />
+                      <col className="w-[38%]" />
+                      <col className="w-[22%]" />
+                      <col className="w-[25%]" />
+                      <col className="w-[15%]" />
                     </>
                   )}
                 </colgroup>
@@ -267,9 +272,12 @@ export default async function StudentsPage({
                         </th>
                       </>
                     )}
+                    {!isHeadCoach && (
+                      <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-600">Actions</th>
+                    )}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <PaginatedTableRows itemLabel="students" colSpan={isHeadCoach ? 7 : 4}>
                   {students?.map((student) => {
                     const fullName = [
                       student.first_name,
@@ -289,7 +297,7 @@ export default async function StudentsPage({
                         className="transition-colors hover:bg-gray-50/70"
                       >
                         <td className="break-words px-5 py-4 text-sm font-medium text-gray-950">
-                          {fullName}
+                          <span className="block">{fullName}</span>
                         </td>
                         <td className="px-3 py-4 text-sm font-medium text-gray-950">
                           <span
@@ -324,42 +332,31 @@ export default async function StudentsPage({
                               })}
                             </td>
                             <td className="px-4 py-3">
-                              <div className="flex items-center justify-end gap-2">
-                                {student.is_active && (
-                                  <StudentModal
-                                    branches={branchOptionsForStudent(student)}
-                                    student={student}
-                                    trigger={
-                                      <button
-                                        type="button"
-                                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-900 transition-colors hover:bg-gray-50"
-                                      >
-                                        <Pencil size={14} strokeWidth={2} />
-                                        Edit
-                                      </button>
-                                    }
-                                  />
-                                )}
-                                {currentUser.role === "head_coach" && (
+                              <div className="flex justify-end">
+                                <RowActionsMenu>
+                                  <Link className={ROW_ACTION_CLASS} href={`/attendance/history?studentId=${student.id}`}>Attendance history</Link>
+                                  {student.is_active && <StudentModal branches={branchOptionsForStudent(student)} student={student} trigger={<RowActionItem>Edit student</RowActionItem>} />}
                                   <StudentStatusButton
                                     studentId={student.id}
                                     studentName={fullName}
                                     isActive={student.is_active}
-                                    className={`inline-flex items-center justify-center rounded-lg border bg-white px-3 py-2 text-xs font-medium transition-colors ${student.is_active ? "border-red-200 text-red-700 hover:bg-red-50" : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"}`}
+                                    className={`${ROW_ACTION_CLASS} ${student.is_active ? "text-red-700 hover:bg-red-50" : "text-emerald-700 hover:bg-emerald-50"}`}
                                   />
-                                )}
+                                </RowActionsMenu>
                               </div>
                             </td>
                           </>
                         )}
+                        {!isHeadCoach && <td className="px-4 py-3 text-right"><RowActionsMenu><Link className={ROW_ACTION_CLASS} href={`/attendance/history?studentId=${student.id}`}>Attendance history</Link></RowActionsMenu></td>}
                       </tr>
                     );
                   })}
-                </tbody>
+                </PaginatedTableRows>
               </table>
             </div>
 
-            <div className="max-h-[min(60vh,480px)] divide-y divide-gray-100 overflow-y-auto overscroll-contain xl:hidden">
+            <div className="divide-y divide-gray-100 overflow-hidden rounded-b-xl xl:hidden">
+              <PaginatedListItems itemLabel="students">
               {students?.map((student) => {
                 const fullName = [
                   student.first_name,
@@ -379,34 +376,21 @@ export default async function StudentsPage({
                     className="p-4 sm:p-5"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <p className="min-w-0 break-words text-sm font-medium text-gray-950">
-                        {fullName}
-                      </p>
+                      <div className="min-w-0">
+                        <p className="break-words text-sm font-medium text-gray-950">
+                          {fullName}
+                        </p>
+                      </div>
                       {isHeadCoach && (
                         <div className="flex shrink-0 items-center gap-2">
-                          {student.is_active && (
-                            <StudentModal
-                              branches={branchOptionsForStudent(student)}
-                              student={student}
-                              trigger={
-                                <button
-                                  type="button"
-                                  className="inline-flex items-center justify-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs font-medium text-gray-900 hover:bg-gray-50"
-                                >
-                                  <Pencil size={13} />
-                                  Edit
-                                </button>
-                              }
-                            />
-                          )}
-                          <StudentStatusButton
-                            studentId={student.id}
-                            studentName={fullName}
-                            isActive={student.is_active}
-                            className={`inline-flex items-center justify-center rounded-lg border bg-white px-2.5 py-2 text-xs font-medium ${student.is_active ? "border-red-200 text-red-700 hover:bg-red-50" : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"}`}
-                          />
+                          <RowActionsMenu>
+                            <Link className={ROW_ACTION_CLASS} href={`/attendance/history?studentId=${student.id}`}>Attendance history</Link>
+                            {student.is_active && <StudentModal branches={branchOptionsForStudent(student)} student={student} trigger={<RowActionItem>Edit student</RowActionItem>} />}
+                            <StudentStatusButton studentId={student.id} studentName={fullName} isActive={student.is_active} className={`${ROW_ACTION_CLASS} ${student.is_active ? "text-red-700 hover:bg-red-50" : "text-emerald-700 hover:bg-emerald-50"}`} />
+                          </RowActionsMenu>
                         </div>
                       )}
+                      {!isHeadCoach && <RowActionsMenu><Link className={ROW_ACTION_CLASS} href={`/attendance/history?studentId=${student.id}`}>Attendance history</Link></RowActionsMenu>}
                     </div>
 
                     <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
@@ -476,6 +460,7 @@ export default async function StudentsPage({
                   </div>
                 );
               })}
+              </PaginatedListItems>
             </div>
           </>
         )}

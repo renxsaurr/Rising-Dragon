@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { saveAttendance } from '@/app/attendance/actions'
 import { Toast } from '@/components/Toast'
 import { formatBeltLabel } from '@/utils/belts'
@@ -127,7 +128,7 @@ export default function AttendanceRoster({
       </div>
 
       {!canMarkAttendance && (
-        <p className="border-b border-gray-200 bg-gray-50 px-5 py-2.5 text-xs text-black">This class hasn&apos;t happened yet. You can mark attendance on or after the class day.</p>
+        <p className="border-b border-gray-200 bg-gray-50 px-5 py-2.5 text-xs text-black">Attendance can be recorded starting at the scheduled class time.</p>
       )}
 
       {students.length === 0 ? (
@@ -144,10 +145,18 @@ export default function AttendanceRoster({
               <li key={student.id} className="flex min-h-16 min-w-0 items-center justify-between gap-3 bg-white px-5 py-3 transition-colors">
                 <div className="flex min-w-0 items-center gap-3">
                   <div className="min-w-0">
-                    <p className="break-words text-sm font-medium text-gray-900">
+                    <Link
+                      href={`/attendance/history?studentId=${student.id}`}
+                      onClick={(event) => {
+                        if (dirty && !window.confirm('Attendance changes are unsaved. Leave this class without saving?')) {
+                          event.preventDefault()
+                        }
+                      }}
+                      className="block break-words text-sm font-medium text-gray-900 hover:underline"
+                    >
                       {fullName}
                       {changed && <span className="ml-2 align-middle text-[10px] font-semibold uppercase tracking-wide text-red-600">Unsaved</span>}
-                    </p>
+                    </Link>
                     <p className="mt-0.5 text-xs text-gray-500">{formatBeltLabel(student.belt_level)}</p>
                   </div>
                 </div>

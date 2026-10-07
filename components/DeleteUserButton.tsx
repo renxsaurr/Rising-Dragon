@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { setUserActive } from '@/app/users/actions'
 
@@ -9,11 +10,13 @@ export default function DeleteUserButton({
   userName,
   active,
   disabled = false,
+  trigger,
 }: {
   userId: number
   userName: string
   active: boolean
   disabled?: boolean
+  trigger?: ReactNode
 }) {
   const [loading, setLoading] = useState(false)
   const [isConfirmOpen, setIsConfirmOpen] = useState(false)
@@ -42,14 +45,14 @@ export default function DeleteUserButton({
 
   return (
     <>
-      <button
+      {trigger ? <div onClick={() => { if (!disabled && !loading) { setError(''); setIsConfirmOpen(true) } }}>{trigger}</div> : <button
         type="button"
         onClick={() => { setError(''); setIsConfirmOpen(true) }}
         disabled={disabled || loading}
         className={`inline-flex items-center justify-center rounded-lg border bg-white px-3 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${active ? 'border-red-200 text-red-700 hover:bg-red-50' : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50'}`}
       >
         {active ? 'Deactivate' : 'Reactivate'}
-      </button>
+      </button>}
 
       {isConfirmOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4">

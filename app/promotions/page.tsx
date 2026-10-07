@@ -5,6 +5,9 @@ import { createClient } from "@/utils/supabase/server";
 import { getCurrentUser } from "@/utils/getCurrentUser";
 import { BELT_COLORS, formatBeltLabel } from "@/utils/belts";
 import PromoteStudentModal from "@/components/PromoteStudentModal";
+import RowActionsMenu from "@/components/RowActionsMenu";
+import RowActionItem from "@/components/RowActionItem";
+import PaginatedTableRows from "@/components/PaginatedTableRows";
 
 export const dynamic = "force-dynamic";
 
@@ -89,7 +92,7 @@ export default async function PromotionsPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[480px] border-collapse text-left">
+            <table className="system-data-table w-full min-w-[480px] border-collapse text-left">
               <thead className="border-b border-gray-200 bg-gray-50/70">
                 <tr>
                   <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
@@ -101,12 +104,12 @@ export default async function PromotionsPage() {
                   <th className="px-3 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
                     Branch
                   </th>
-                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                    Action
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-600">
+                    Actions
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <PaginatedTableRows itemLabel="students" colSpan={4}>
                 {rows.map((student) => {
                   const fullName = [
                     student.first_name,
@@ -138,17 +141,15 @@ export default async function PromotionsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex justify-end">
-                          <PromoteStudentModal
-                            studentId={student.id}
-                            studentName={fullName}
-                            currentBelt={student.belt_level}
-                          />
+                          <RowActionsMenu>
+                            <PromoteStudentModal studentId={student.id} studentName={fullName} currentBelt={student.belt_level} trigger={<RowActionItem>Record promotion</RowActionItem>} />
+                          </RowActionsMenu>
                         </div>
                       </td>
                     </tr>
                   );
                 })}
-              </tbody>
+              </PaginatedTableRows>
             </table>
           </div>
         )}
@@ -186,7 +187,7 @@ export default async function PromotionsPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] border-collapse text-left">
+            <table className="system-data-table w-full min-w-[560px] border-collapse text-left">
               <thead className="border-b border-gray-200 bg-gray-50/70">
                 <tr>
                   <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
@@ -203,7 +204,7 @@ export default async function PromotionsPage() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <PaginatedTableRows itemLabel="promotion history" colSpan={4}>
                 {history.map((item) => {
                   const person = Array.isArray(item.student)
                     ? item.student[0]
@@ -246,7 +247,7 @@ export default async function PromotionsPage() {
                     </tr>
                   );
                 })}
-              </tbody>
+              </PaginatedTableRows>
             </table>
           </div>
         )}

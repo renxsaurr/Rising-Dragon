@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { BELT_COLORS, BELT_LABELS, formatBeltLabel } from "@/utils/belts";
 import { useRouter } from "next/navigation";
 import { promoteStudent } from "@/app/promotions/actions";
@@ -23,10 +24,12 @@ export default function PromoteStudentModal({
   studentId,
   studentName,
   currentBelt,
+  trigger,
 }: {
   studentId: number;
   studentName: string;
   currentBelt: string;
+  trigger?: ReactNode;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
@@ -104,13 +107,13 @@ export default function PromoteStudentModal({
 
   return (
     <>
-      <button
+      {trigger ? <div onClick={openModal}>{trigger}</div> : <button
         type="button"
         onClick={openModal}
         className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-900 transition-colors hover:bg-gray-50"
       >
         Promote
-      </button>
+      </button>}
 
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">

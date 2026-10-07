@@ -7,8 +7,11 @@ import RetryReminderButton from './RetryReminderButton'
 import { formatPeso } from '@/utils/payment-fees'
 import type { ReminderStatus } from '@/utils/payment-reminders'
 import type { HistoryRow } from '@/utils/reminder-history'
+import RowActionsMenu from '@/components/RowActionsMenu'
+import RowActionItem, { ROW_ACTION_CLASS } from '@/components/RowActionItem'
+import PaginatedTableRows from '@/components/PaginatedTableRows'
 
-const TH = 'px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-500'
+const TH = 'px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-600'
 
 const STATUS_BADGES: Record<ReminderStatus, { label: string; className: string }> = {
   Sent: { label: 'Sent', className: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20' },
@@ -108,7 +111,7 @@ export default function ReminderHistoryTable({ rows }: { rows: HistoryRow[] }) {
     <>
       {/* The table keeps its width and scrolls inside this box on small screens. */}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[900px] border-collapse text-left">
+        <table className="system-data-table w-full min-w-[900px] border-collapse text-left">
           <thead className="border-b border-gray-100 bg-gray-50">
             <tr>
               <th className={`${TH} pl-5`}>Date</th>
@@ -120,7 +123,7 @@ export default function ReminderHistoryTable({ rows }: { rows: HistoryRow[] }) {
               <th className={`${TH} pr-5`}><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <PaginatedTableRows itemLabel="reminder history" colSpan={7}>
             {rows.map((row) => {
               const time = rowTime(row)
               return (
@@ -161,12 +164,15 @@ export default function ReminderHistoryTable({ rows }: { rows: HistoryRow[] }) {
                   <td className="px-3 py-3"><StatusBadge status={row.status} /></td>
                   {/* Clicks here (Retry) must not also open the details. */}
                   <td className="px-3 py-3 pr-5 text-right" onClick={(event) => event.stopPropagation()}>
-                    {row.status === 'Failed' && <RetryReminderButton onRetry={() => setRetryId(row.id)} />}
+                    <div className="flex justify-end"><RowActionsMenu>
+                      <RowActionItem onClick={() => setDetailsId(row.id)}>View details</RowActionItem>
+                      {row.status === 'Failed' && <RetryReminderButton onRetry={() => setRetryId(row.id)} className={ROW_ACTION_CLASS} />}
+                    </RowActionsMenu></div>
                   </td>
                 </tr>
               )
             })}
-          </tbody>
+          </PaginatedTableRows>
         </table>
       </div>
 

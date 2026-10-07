@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { getCurrentUser } from '@/utils/getCurrentUser'
-import { dateInTimeZone } from '@/utils/dates'
+import { dateInTimeZone, timeInTimeZone } from '@/utils/dates'
 
 export async function saveAttendance(scheduleId: number, records: { student_id: number; status: 'Present' | 'Absent' }[]) {
   const currentUser = await getCurrentUser()
@@ -23,20 +23,36 @@ export async function saveAttendance(scheduleId: number, records: { student_id: 
   if (scheduleError || !schedule) return { error: 'Class session not found.' }
   if (schedule.status === 'Cancelled') return { error: 'Attendance cannot be recorded for a cancelled class.' }
   if (schedule.status === 'Draft') return { error: 'This class session is still a draft. The Head Coach must publish it before attendance can be recorded.' }
-  if (schedule.date > dateInTimeZone()) return { error: 'Attendance can only be recorded for today or a past class.' }
+  const today = dateInTimeZone()
+  if (schedule.date > today) return { error: 'Attendance can only be recorded for a class that has started.' }
+  if (schedule.date === today && schedule.time_start > timeInTimeZone()) {
+    return { error: 'Attendance can only be recorded once the class has started.' }
+  }
   if (currentUser.role === 'assistant_coach' && Number(schedule.coach_id) !== currentUser.id) {
     return { error: 'You can only mark attendance for your assigned classes.' }
   }
 
   const studentIds = [...new Set(records.map((record) => record.student_id))]
   if (studentIds.length !== records.length) return { error: 'A student can only be included once per save.' }
-  const { data: students, error: studentsError } = await admin.from('student')
+  const { data: activeStudents, error: studentsError } = await admin.from('student')
     .select('id')
     .eq('is_active', true)
     .eq('branch_id', schedule.branch_id)
+    .lte('enrollment_date', schedule.date)
     .in('id', studentIds)
   if (studentsError) return { error: 'Could not verify the class roster. Please try again.' }
-  if ((students ?? []).length !== studentIds.length) return { error: 'One or more students do not belong to this class branch.' }
+  const { data: existingMarks, error: marksError } = await admin.from('attendance')
+    .select('student_id')
+    .eq('schedule_id', scheduleId)
+    .in('student_id', studentIds)
+  if (marksError) return { error: 'Could not verify existing attendance. Please try again.' }
+  const allowedStudentIds = new Set([
+    ...(activeStudents ?? []).map((student) => Number(student.id)),
+    ...(existingMarks ?? []).map((mark) => Number(mark.student_id)),
+  ])
+  if (studentIds.some((studentId) => !allowedStudentIds.has(studentId))) {
+    return { error: 'One or more students do not belong to this class roster.' }
+  }
 
   const payload = records.map((record) => ({
     student_id: record.student_id,
@@ -48,5 +64,9 @@ export async function saveAttendance(scheduleId: number, records: { student_id: 
   if (error) return { error: 'Attendance could not be saved. Please try again.' }
 
   revalidatePath('/attendance')
+  revalidatePath('/attendance/history')
+  revalidatePath('/dashboard')
+  revalidatePath('/branches')
+  revalidatePath('/branches/[id]', 'page')
   return { success: true }
 }

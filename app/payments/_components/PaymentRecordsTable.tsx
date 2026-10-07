@@ -1,12 +1,15 @@
 import MarkPaidButton from './MarkPaidButton'
 import SendReminderButton from './SendReminderButton'
 import { sendButtonState } from './reminder-button-state'
+import RowActionsMenu from '@/components/RowActionsMenu'
+import RowActionItem, { ROW_ACTION_CLASS } from '@/components/RowActionItem'
+import PaginatedTableRows from '@/components/PaginatedTableRows'
 import { formatBeltLabel } from '@/utils/belts'
 import { formatCoverage } from '@/utils/payment-fees'
 import { REMINDER_TYPES, formatAmount } from '@/utils/payment-reminders'
 import type { PaymentKind, PaymentRecord } from '@/utils/payment-records'
 
-const TH = 'px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-500'
+const TH = 'px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-600'
 
 const KIND_BADGES: Record<PaymentKind, { label: string; className: string }> = {
   paid: { label: 'Paid', className: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20' },
@@ -92,7 +95,7 @@ export default function PaymentRecordsTable({
   return (
     // The table keeps its width and scrolls inside this box on small screens.
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[880px] border-collapse text-left">
+      <table className="system-data-table w-full min-w-[880px] border-collapse text-left">
         <thead className="border-b border-gray-100 bg-gray-50">
           <tr>
             <th className={`${TH} pl-5`}>Student</th>
@@ -103,9 +106,10 @@ export default function PaymentRecordsTable({
             <th className={`${TH} pr-5 text-right`}>Action</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <PaginatedTableRows itemLabel="payment records" colSpan={6}>
           {rows.map((row) => {
             const badge = KIND_BADGES[row.kind]
+            const reminderState = sendButtonState(row, today)
             return (
               <tr key={row.id} className="align-top">
                 <td className="px-5 py-3">
@@ -146,7 +150,8 @@ export default function PaymentRecordsTable({
                 </td>
                 <td className="px-3 py-3 pr-5">
                   {row.status === 'Unpaid' ? (
-                    <div className="flex flex-col items-end gap-2">
+                    <div className="flex justify-end">
+                      <RowActionsMenu>
                       <MarkPaidButton
                         payment={{
                           id: row.id,
@@ -155,17 +160,19 @@ export default function PaymentRecordsTable({
                           dueDate: formatDate(row.dueDate),
                         }}
                         today={today}
+                        trigger={<RowActionItem>Mark as paid</RowActionItem>}
                       />
-                      <SendReminderButton paymentId={row.id} {...sendButtonState(row, today)} />
+                      <SendReminderButton paymentId={row.id} {...reminderState} trigger={<RowActionItem disabled={Boolean(reminderState.disabledLabel || reminderState.disabledReason)} className={`${ROW_ACTION_CLASS} disabled:cursor-not-allowed disabled:text-gray-400`}>{reminderState.disabledLabel ?? 'Send reminder'}</RowActionItem>} />
+                      </RowActionsMenu>
                     </div>
                   ) : (
-                    <span className="block text-right text-sm text-gray-400">—</span>
+                    <span className="block text-right text-sm text-gray-500">—</span>
                   )}
                 </td>
               </tr>
             )
           })}
-        </tbody>
+        </PaginatedTableRows>
       </table>
     </div>
   )

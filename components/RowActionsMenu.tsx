@@ -76,9 +76,10 @@ export default function RowActionsMenu({ children }: { children: React.ReactNode
         ref={buttonRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
-        aria-label="Open row actions"
+        aria-label="Row actions"
+        aria-haspopup="true"
         aria-expanded={open}
-        className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-black transition-colors"
+        className={`flex h-9 w-9 items-center justify-center rounded-lg border transition-colors ${open ? 'border-gray-300 bg-gray-100 text-gray-950' : 'border-transparent text-gray-600 hover:border-gray-200 hover:bg-gray-50 hover:text-black'}`}
       >
         <DotsIcon />
       </button>
@@ -93,7 +94,7 @@ export default function RowActionsMenu({ children }: { children: React.ReactNode
               right: position?.right ?? 0,
               visibility: position ? 'visible' : 'hidden',
             }}
-            className="fixed z-[1000] w-40 rounded-xl border border-gray-200 bg-white py-1.5 shadow-xl"
+            className="fixed z-[1000] w-48 rounded-xl border border-gray-200 bg-white p-1.5 shadow-xl"
           >
             {children}
           </div>,
