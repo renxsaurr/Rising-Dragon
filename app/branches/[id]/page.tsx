@@ -6,6 +6,7 @@ import DashboardShell from '@/components/DashboardShell'
 import EditBranchModal from '@/components/EditBranchModal'
 import { Card, EmptyNote } from '@/components/DashboardWidgets'
 import { NeedsAttention, ReportKpis, ReportRangeLine } from '@/app/branches/_components/BranchReportSummary'
+import BranchProgressChecks from '@/app/branches/_components/BranchProgressChecks'
 import { createClient } from '@/utils/supabase/server'
 import { getCurrentUser } from '@/utils/getCurrentUser'
 import { dateInTimeZone, formatTimeRange, timeInTimeZone } from '@/utils/dates'
@@ -33,13 +34,13 @@ const fullName = (person: { first_name: string; middle_name: string | null; last
   [person.first_name, person.middle_name, person.last_name].filter(Boolean).join(' ')
 
 // same labels and colors as the dashboard's Today's classes
-function classStatus(schedule: ScheduleRow, now: string, hasAttendance: boolean) {
+function classStatus(schedule: ScheduleRow, now: string, attendance: { complete: boolean; marked: number }) {
   if (schedule.status === 'Cancelled') return { label: 'Cancelled', tone: 'bg-gray-100 text-gray-500' }
   if (schedule.time_start <= now && now < schedule.time_end) return { label: 'In session', tone: 'bg-amber-50 text-amber-700' }
   if (schedule.time_end <= now) {
-    return hasAttendance
-      ? { label: 'Attendance entered', tone: 'bg-emerald-50 text-emerald-700' }
-      : { label: 'Not recorded', tone: 'bg-red-50 text-red-700' }
+    if (attendance.complete) return { label: 'Attendance complete', tone: 'bg-emerald-50 text-emerald-700' }
+    if (attendance.marked) return { label: 'Attendance incomplete', tone: 'bg-amber-50 text-amber-700' }
+    return { label: 'Not recorded', tone: 'bg-red-50 text-red-700' }
   }
   return { label: 'Upcoming', tone: 'bg-gray-100 text-gray-600' }
 }
@@ -92,14 +93,31 @@ export default async function BranchDetailPage({ params, searchParams }: {
       .eq('date', today)
       .neq('status', 'Draft')
       .order('time_start')
-    if (error) return { rows: [], marked: new Set<number>(), error: error.message }
+    if (error) return { rows: [], attendance: new Map<number, { complete: boolean; marked: number }>(), error: error.message }
     const rows = (data ?? []) as unknown as ScheduleRow[]
     const ids = rows.filter((row) => row.status !== 'Cancelled').map((row) => Number(row.id))
-    if (!ids.length) return { rows, marked: new Set<number>(), error: null }
-    const { data: attendance, error: attendanceError } = await supabase
-      .from('attendance').select('schedule_id').in('schedule_id', ids)
-    if (attendanceError) return { rows: [], marked: new Set<number>(), error: attendanceError.message }
-    return { rows, marked: new Set((attendance ?? []).map((row) => Number(row.schedule_id))), error: null }
+    if (!ids.length) return { rows, attendance: new Map<number, { complete: boolean; marked: number }>(), error: null }
+    const [attendanceResult, rosterResult] = await Promise.all([
+      supabase.from('attendance').select('schedule_id, student_id').in('schedule_id', ids),
+      supabase.from('student').select('id, enrollment_date').eq('branch_id', branchId).eq('is_active', true).lte('enrollment_date', today),
+    ])
+    const attendanceError = attendanceResult.error ?? rosterResult.error
+    if (attendanceError) return { rows: [], attendance: new Map<number, { complete: boolean; marked: number }>(), error: attendanceError.message }
+    const markedBySchedule = new Map<number, Set<number>>()
+    for (const mark of attendanceResult.data ?? []) {
+      const key = Number(mark.schedule_id)
+      markedBySchedule.set(key, new Set([...(markedBySchedule.get(key) ?? []), Number(mark.student_id)]))
+    }
+    const attendance = new Map<number, { complete: boolean; marked: number }>()
+    for (const schedule of rows) {
+      const markedIds = markedBySchedule.get(Number(schedule.id)) ?? new Set<number>()
+      const expectedIds = new Set((rosterResult.data ?? [])
+        .filter((student) => student.enrollment_date <= schedule.date)
+        .map((student) => Number(student.id)))
+      for (const id of markedIds) expectedIds.add(id)
+      attendance.set(Number(schedule.id), { complete: expectedIds.size > 0 && markedIds.size >= expectedIds.size, marked: markedIds.size })
+    }
+    return { rows, attendance, error: null }
   }
 
   // each section fails on its own, so one error never blanks the whole page
@@ -165,6 +183,15 @@ export default async function BranchDetailPage({ params, searchParams }: {
             <ReportRangeLine range={report.current.data.range} comparison={report.comparison} />
             <ReportKpis totals={report.current.data.totals} comparison={report.comparison} />
             <NeedsAttention branches={report.current.data.branches} comparison={report.comparison} single />
+            <Card title="Student progress in this period" chip={String(report.current.data.totals.assessedStudents)} className={cardClass}>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div><p className="text-xs font-medium text-gray-600">Progress checks</p><p className="mt-1 text-xl font-semibold tabular-nums text-gray-950">{report.current.data.totals.progressEntries}</p></div>
+                <div><p className="text-xs font-medium text-gray-600">Students assessed</p><p className="mt-1 text-xl font-semibold tabular-nums text-gray-950">{report.current.data.totals.assessedStudents}</p></div>
+                <div><p className="text-xs font-medium text-gray-600">Ready for assessment</p><p className="mt-1 text-xl font-semibold tabular-nums text-gray-950">{report.current.data.totals.readyForAssessment}</p></div>
+              </div>
+              <p className="mt-3 text-xs text-gray-600">Latest coach recommendation per student. Readiness does not automatically promote a student.</p>
+            </Card>
+            <BranchProgressChecks checks={report.current.data.progressChecks} title="Latest progress checks for this branch" />
           </>}
       </section>
 
@@ -175,7 +202,7 @@ export default async function BranchDetailPage({ params, searchParams }: {
             : schedule.rows.length
               ? <ul className="divide-y divide-gray-100 pb-1">
                 {schedule.rows.map((row) => {
-                  const status = classStatus(row, now, schedule.marked.has(Number(row.id)))
+                  const status = classStatus(row, now, schedule.attendance.get(Number(row.id)) ?? { complete: false, marked: 0 })
                   const content = <>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium tabular-nums text-gray-900">{formatTimeRange(row.time_start, row.time_end)}</span>
@@ -211,6 +238,7 @@ export default async function BranchDetailPage({ params, searchParams }: {
                         {formatBeltLabel(student.belt_level)}
                       </span>
                       : <span className="text-xs text-gray-400">—</span>}
+                    <Link href={`/students/${student.id}/progress`} className="shrink-0 rounded-md px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-100 hover:text-black">Progress</Link>
                   </li>
                 ))}
               </ul>

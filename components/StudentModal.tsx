@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { saveStudent } from "@/app/students/actions";
 import { BELT_LABELS, } from "@/utils/belts";
@@ -121,8 +122,16 @@ export default function StudentModal({
         </button>
       )}
 
-      {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+      {isOpen && typeof document !== "undefined" && createPortal(
+        <div
+          className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/50 px-4 py-6"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setIsOpen(false);
+              resetForm();
+            }
+          }}
+        >
           <div className="bg-white rounded-2xl w-full max-w-lg p-7 relative max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => {
@@ -309,7 +318,8 @@ export default function StudentModal({
               </button>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );

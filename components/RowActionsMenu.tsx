@@ -13,6 +13,7 @@ const DotsIcon = () => (
 
 export default function RowActionsMenu({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
+  const [hasOpened, setHasOpened] = useState(false)
   const [position, setPosition] = useState<{ top: number; right: number } | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -75,7 +76,10 @@ export default function RowActionsMenu({ children }: { children: React.ReactNode
       <button
         ref={buttonRef}
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          setHasOpened(true)
+          setOpen((v) => !v)
+        }}
         aria-label="Row actions"
         aria-haspopup="true"
         aria-expanded={open}
@@ -84,7 +88,7 @@ export default function RowActionsMenu({ children }: { children: React.ReactNode
         <DotsIcon />
       </button>
 
-      {open && (
+      {hasOpened && (
         createPortal(
           <div
             ref={menuRef}
@@ -92,8 +96,10 @@ export default function RowActionsMenu({ children }: { children: React.ReactNode
             style={{
               top: position?.top ?? 0,
               right: position?.right ?? 0,
-              visibility: position ? 'visible' : 'hidden',
+              visibility: open && position ? 'visible' : 'hidden',
+              pointerEvents: open && position ? 'auto' : 'none',
             }}
+            aria-hidden={!open}
             className="fixed z-[1000] w-48 rounded-xl border border-gray-200 bg-white p-1.5 shadow-xl"
           >
             {children}

@@ -13,7 +13,7 @@ type CardState =
 const formatDate = (date: string) =>
   new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })
 
-// "Paid Oct 1, 2026 · ₱900.00 · Monthly Oct – Nov 2026 · GCash"
+// "Paid Oct 1, 2026 · ₱900.00 · Monthly Oct – Nov 2026 · Online"
 function paymentLine(payment: StudentPayment) {
   const when = payment.status === 'Paid' && payment.paidDate
     ? `Paid ${formatDate(payment.paidDate)}`

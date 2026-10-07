@@ -6,6 +6,12 @@ import { getCurrentUser } from "@/utils/getCurrentUser";
 import { dateInTimeZone } from "@/utils/dates";
 import { BELT_LABELS } from "@/utils/belts";
 
+function isValidDate(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
 export async function promoteStudent(
   studentId: number,
   newBelt: string,
@@ -20,7 +26,7 @@ export async function promoteStudent(
     return { error: "Student record not found." };
   if (!Object.hasOwn(BELT_LABELS, newBelt))
     return { error: "Select a valid belt." };
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(promotionDate))
+  if (!isValidDate(promotionDate))
     return { error: "Select the promotion date." };
   if (promotionDate > dateInTimeZone())
     return { error: "Promotion date cannot be in the future." };
@@ -56,5 +62,7 @@ export async function promoteStudent(
   revalidatePath("/promotions");
   revalidatePath("/students");
   revalidatePath("/dashboard");
+  revalidatePath("/branches");
+  revalidatePath("/branches/[id]", "page");
   return { success: true };
 }

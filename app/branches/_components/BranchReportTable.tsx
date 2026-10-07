@@ -4,16 +4,14 @@ import type { BranchCounts, BranchReportRow } from '@/utils/branch-reports'
 import { FAIR_RATE, GOOD_RATE, LOW_DATA_MARKS, cardClass, dataTier, isLowData, ratePercent, rateStatus } from '@/utils/branch-report-format'
 import PaginatedTableRows from '@/components/PaginatedTableRows'
 
-const cell = 'px-3 py-3 text-right align-top text-sm tabular-nums text-gray-700 last:pr-5 print:px-1.5 print:py-2 print:text-xs'
+const cell = 'px-3 py-3 text-left align-top text-sm tabular-nums text-gray-700 last:pr-5 print:px-1.5 print:py-2 print:text-xs'
 
 // byReliability: reliable branches first, then Low data, then no marks — in both directions
 const COLUMNS: { key: string; label: string; tip: string; value: (counts: BranchCounts) => number | null; byReliability?: boolean }[] = [
-  { key: 'active', label: 'Active students', tip: 'Students who are active today; this does not change with the date range.', value: (counts) => counts.activeStudents },
-  { key: 'new', label: 'New students', tip: 'Students whose enrollment date falls inside the date range.', value: (counts) => counts.newStudents },
-  { key: 'classes', label: 'Classes', tip: 'Scheduled or completed classes in the date range, not counting cancelled or draft classes. Cancelled classes are shown underneath.', value: (counts) => counts.classes },
-  { key: 'present', label: 'Present / Absent', tip: 'Attendance records marked Present and Absent in the counted classes. Sorts by present.', value: (counts) => counts.present },
-  { key: 'rate', label: 'Attendance rate', tip: `Present divided by all marked records. Good is ${GOOD_RATE}%+, Fair ${FAIR_RATE}–${GOOD_RATE - 1}%, Low below ${FAIR_RATE}%.`, value: (counts) => counts.attendanceRate, byReliability: true },
-  { key: 'avg', label: 'Avg. present per class', tip: 'Present records divided by the classes that have attendance marked.', value: (counts) => counts.avgPresentPerClass, byReliability: true },
+  { key: 'active', label: 'Students', tip: 'Active students today. The sub-label shows new enrollments in the selected period.', value: (counts) => counts.activeStudents },
+  { key: 'classes', label: 'Classes', tip: 'Scheduled or completed classes in the selected period. Cancelled classes and incomplete attendance are shown underneath.', value: (counts) => counts.classes },
+  { key: 'rate', label: 'Attendance', tip: `Present divided by all marked records. Good is ${GOOD_RATE}%+, Fair ${FAIR_RATE}–${GOOD_RATE - 1}%, Low below ${FAIR_RATE}%. Students without an attendance record are not counted.`, value: (counts) => counts.attendanceRate, byReliability: true },
+  { key: 'assessed', label: 'Student progress', tip: 'Coach progress checks recorded in this period. Ready for assessment is only a coach recommendation.', value: (counts) => counts.assessedStudents },
 ]
 
 const byName = (a: BranchReportRow, b: BranchReportRow) => a.branchName.localeCompare(b.branchName)
@@ -24,17 +22,10 @@ function RateCell({ counts }: { counts: BranchCounts }) {
   const lowData = isLowData(counts)
   const status = rateStatus(counts.attendanceRate)
   return (
-    <span className="flex items-center justify-end gap-1.5">
-      {/* the mini bar only fits from xl up */}
-      <span className="hidden h-1.5 w-10 overflow-hidden rounded-full bg-gray-100 xl:block" aria-hidden>
-        <span className={`block h-full rounded-full ${lowData ? 'bg-gray-300' : status.bar}`} style={{ width: `${value}%` }} />
-      </span>
-      <span className={`w-9 text-right ${lowData ? 'text-gray-400' : ''}`}>{value}%</span>
-      {lowData
-        ? <span className="w-[3.25rem] whitespace-nowrap text-left text-[11px] font-normal text-gray-400">Low data</span>
-        : <span className={`inline-flex w-[3.25rem] items-center gap-1 text-[11px] font-medium ${status.text}`}>
-          <span className={`h-2 w-2 shrink-0 rounded-full ${status.dot}`} aria-hidden />{status.label}
-        </span>}
+    <span className="block">
+      <span className={`block font-semibold ${lowData ? 'text-gray-500' : 'text-gray-900'}`}>{value}%</span>
+      <span className={`mt-0.5 block text-xs font-normal ${lowData ? 'text-gray-500' : status.text}`}>{lowData ? 'Low data' : status.label}</span>
+      <span className="mt-0.5 block text-xs font-normal text-gray-500">{counts.present} present · {counts.absent} absent</span>
     </span>
   )
 }
@@ -46,23 +37,25 @@ function ReportRow({ name, counts, branchId, detailQuery = '' }: { name: string;
       <th scope="row" className={`whitespace-nowrap py-3 pl-5 pr-3 text-left align-top text-sm text-gray-900 print:whitespace-normal print:py-2 print:pl-2 print:pr-1.5 print:text-xs ${total ? 'font-semibold' : 'font-medium'}`}>
         {total ? name : <Link href={`/branches/${branchId}?${detailQuery}`} className="hover:text-red-600 hover:underline">{name}</Link>}
       </th>
-      <td className={cell}>{counts.activeStudents}</td>
-      <td className={cell}>{counts.newStudents}</td>
       <td className={cell}>
-        {counts.classes}
+        <span className="block font-semibold text-gray-900">{counts.activeStudents} active</span>
+        <span className="mt-0.5 block text-xs font-normal text-gray-500">{counts.newStudents} new in period</span>
+      </td>
+      <td className={cell}>
+        <span className="block font-semibold text-gray-900">{counts.classes}</span>
+        <span className="mt-0.5 block text-xs font-normal text-gray-500">classes</span>
         {counts.cancelledClasses > 0 && (
           <span className="block text-[11px] font-normal text-gray-400">{counts.cancelledClasses} cancelled</span>
         )}
-        {counts.unmarkedPastClasses > 0 && (
-          <span className="block text-[11px] font-normal text-amber-600">{counts.unmarkedPastClasses} past not marked</span>
+        {counts.incompletePastClasses > 0 && (
+          <span className="block text-[11px] font-normal text-amber-700">{counts.incompletePastClasses} not fully marked · {counts.unmarkedStudentMarks} attendance marks missing</span>
         )}
-      </td>
-      <td className={`${cell} whitespace-nowrap`}>
-        {counts.present} <span className="text-gray-300">/</span> {counts.absent}
       </td>
       <td className={cell}><RateCell counts={counts} /></td>
       <td className={cell}>
-        {counts.avgPresentPerClass === null ? <span className="font-normal text-gray-400">—</span> : counts.avgPresentPerClass.toFixed(1)}
+        <span className="block font-semibold text-gray-900">{counts.assessedStudents} assessed</span>
+        <span className="mt-0.5 block text-xs font-normal text-gray-500">{counts.progressEntries} checks</span>
+        <span className="mt-0.5 block text-xs font-normal text-gray-500">{counts.readyForAssessment} recommended for assessment</span>
       </td>
     </tr>
   )
@@ -113,27 +106,26 @@ export default function BranchReportTable({ branches, totals, sort, dir, baseQue
         <div className="px-5 pb-4"><EmptyNote>No classes in this date range. Try a wider range.</EmptyNote></div>
       )}
       <div className="overflow-x-auto print:overflow-visible">
-        <table className="system-data-table w-full min-w-[760px] lg:min-w-0 print:min-w-0">
+        <table className="system-data-table w-full min-w-[720px] print:min-w-0">
           <thead>
             <tr className="border-b border-gray-100">
               <th scope="col" aria-sort={ariaSort('name')} className="th pl-5 pr-3 print:pl-2 print:pr-1.5">{sortLink('name', 'Branch')}</th>
               {COLUMNS.map((item) => (
-                <th key={item.key} scope="col" aria-sort={ariaSort(item.key)} className="th px-3 text-right last:pr-5 print:px-1.5">
+                <th key={item.key} scope="col" aria-sort={ariaSort(item.key)} title={item.tip} className="th px-3 text-left last:pr-5 print:px-1.5">
                   {sortLink(item.key, item.label)}
-                  <span title={item.tip} aria-hidden className="ml-1 cursor-help text-gray-300 hover:text-gray-500 print:hidden">ⓘ</span>
                   <span className="sr-only">: {item.tip}</span>
                 </th>
               ))}
             </tr>
           </thead>
-          <PaginatedTableRows itemLabel="branch report rows" colSpan={7} pinnedRows={1}>
+          <PaginatedTableRows itemLabel="branch report rows" colSpan={5} pinnedRows={1}>
             {rows.map((branch) => <ReportRow key={branch.branchId} branchId={branch.branchId} name={branch.branchName} counts={branch} detailQuery={detailQuery} />)}
             {/* totals always stay at the bottom, whatever the sort */}
             <ReportRow name="All branches" counts={totals} />
           </PaginatedTableRows>
         </table>
       </div>
-      <p className="px-5 py-3 text-[11px] text-gray-400">Rates under {LOW_DATA_MARKS} marks show “Low data” instead of a status.</p>
+      <p className="px-5 py-3 text-xs text-gray-500">Rates with fewer than {LOW_DATA_MARKS} attendance marks are labeled “Low data.”</p>
     </Card>
   )
 }

@@ -2,6 +2,8 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import DashboardShell from "@/components/DashboardShell";
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
+import { fetchAllRows } from "@/utils/fetch-all-rows";
 import { getCurrentUser } from "@/utils/getCurrentUser";
 import { BELT_COLORS, formatBeltLabel } from "@/utils/belts";
 import PromoteStudentModal from "@/components/PromoteStudentModal";
@@ -47,25 +49,45 @@ export default async function PromotionsPage() {
     branch: { name: string } | null;
   }[];
 
-  const { data: historyData, error: historyError } = await supabase
-    .from("promotion")
-    .select(
-      "id, old_belt, new_belt, date, created_at, student:student!promotion_student_id_fkey(first_name, middle_name, last_name)",
-    )
-    .order("date", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(50);
-
-  const history = (historyData ?? []) as unknown as {
+  const admin = createAdminClient();
+  let history: {
     id: number;
     old_belt: string;
     new_belt: string;
     date: string;
+    created_at: string;
+    coach_id: number;
     student:
       | { first_name: string; middle_name: string | null; last_name: string }
       | { first_name: string; middle_name: string | null; last_name: string }[]
       | null;
-  }[];
+  }[] = [];
+  let historyError: string | null = null;
+  try {
+    history = await fetchAllRows((from, to) => admin
+      .from("promotion")
+      .select(
+        "id, old_belt, new_belt, date, created_at, coach_id, student:student!promotion_student_id_fkey(first_name, middle_name, last_name)",
+      )
+      .order("date", { ascending: false })
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(from, to));
+  } catch (error) {
+    historyError = error instanceof Error ? error.message : "Could not load promotion history.";
+  }
+
+  const coachIds = [...new Set(history.map((item) => Number(item.coach_id)))];
+  const coachNames = new Map<number, string>();
+  for (let start = 0; start < coachIds.length; start += 200) {
+    const coachChunk = coachIds.slice(start, start + 200);
+    const { data: coachRows } = await admin.from("user")
+      .select("id, first_name, middle_name, last_name")
+      .in("id", coachChunk);
+    for (const coach of coachRows ?? []) {
+      coachNames.set(Number(coach.id), [coach.first_name, coach.middle_name, coach.last_name].filter(Boolean).join(" "));
+    }
+  }
 
   const total = rows.length;
 
@@ -174,7 +196,7 @@ export default async function PromotionsPage() {
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
         {historyError ? (
           <p role="alert" className="px-5 py-6 text-sm text-red-600">
-            Could not load promotion history: {historyError.message}
+            Could not load promotion history: {historyError}
           </p>
         ) : history.length === 0 ? (
           <div className="px-6 py-16 text-center">
@@ -202,9 +224,12 @@ export default async function PromotionsPage() {
                   <th className="px-3 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
                     Date of promotion
                   </th>
+                  <th className="px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
+                    Recorded by
+                  </th>
                 </tr>
               </thead>
-              <PaginatedTableRows itemLabel="promotion history" colSpan={4}>
+              <PaginatedTableRows itemLabel="promotion history" colSpan={5}>
                 {history.map((item) => {
                   const person = Array.isArray(item.student)
                     ? item.student[0]
@@ -243,6 +268,9 @@ export default async function PromotionsPage() {
                           "en-US",
                           { month: "short", day: "numeric", year: "numeric" },
                         )}
+                      </td>
+                      <td className="px-4 py-4 text-sm font-medium text-gray-950">
+                        {coachNames.get(Number(item.coach_id)) || "Unknown coach"}
                       </td>
                     </tr>
                   );

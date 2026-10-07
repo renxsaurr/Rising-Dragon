@@ -223,7 +223,7 @@ export default async function StudentsPage({
           </div>
         ) : (
           <>
-            <div className="hidden max-h-[min(60vh,480px)] overflow-y-auto overscroll-contain xl:block">
+            <div className="hidden xl:block">
               <table className="system-data-table w-full table-fixed border-collapse text-left">
                 <colgroup>
                   {isHeadCoach ? (
@@ -245,7 +245,7 @@ export default async function StudentsPage({
                     </>
                   )}
                 </colgroup>
-                <thead className="sticky top-0 z-10 border-b border-gray-200 bg-gray-50">
+                <thead className="border-b border-gray-200 bg-gray-50">
                   <tr>
                     <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
                       Student
@@ -277,7 +277,7 @@ export default async function StudentsPage({
                     )}
                   </tr>
                 </thead>
-                <PaginatedTableRows itemLabel="students" colSpan={isHeadCoach ? 7 : 4}>
+                <PaginatedTableRows itemLabel="students" pageSize={6} colSpan={isHeadCoach ? 7 : 4}>
                   {students?.map((student) => {
                     const fullName = [
                       student.first_name,
@@ -335,6 +335,7 @@ export default async function StudentsPage({
                               <div className="flex justify-end">
                                 <RowActionsMenu>
                                   <Link className={ROW_ACTION_CLASS} href={`/attendance/history?studentId=${student.id}`}>Attendance history</Link>
+                                  <Link className={ROW_ACTION_CLASS} href={`/students/${student.id}/progress`}>Student progress</Link>
                                   {student.is_active && <StudentModal branches={branchOptionsForStudent(student)} student={student} trigger={<RowActionItem>Edit student</RowActionItem>} />}
                                   <StudentStatusButton
                                     studentId={student.id}
@@ -347,7 +348,7 @@ export default async function StudentsPage({
                             </td>
                           </>
                         )}
-                        {!isHeadCoach && <td className="px-4 py-3 text-right"><RowActionsMenu><Link className={ROW_ACTION_CLASS} href={`/attendance/history?studentId=${student.id}`}>Attendance history</Link></RowActionsMenu></td>}
+                        {!isHeadCoach && <td className="px-4 py-3 text-right"><RowActionsMenu><Link className={ROW_ACTION_CLASS} href={`/attendance/history?studentId=${student.id}`}>Attendance history</Link><Link className={ROW_ACTION_CLASS} href={`/students/${student.id}/progress`}>Student progress</Link></RowActionsMenu></td>}
                       </tr>
                     );
                   })}
@@ -356,7 +357,7 @@ export default async function StudentsPage({
             </div>
 
             <div className="divide-y divide-gray-100 overflow-hidden rounded-b-xl xl:hidden">
-              <PaginatedListItems itemLabel="students">
+              <PaginatedListItems itemLabel="students" pageSize={6}>
               {students?.map((student) => {
                 const fullName = [
                   student.first_name,
@@ -385,12 +386,13 @@ export default async function StudentsPage({
                         <div className="flex shrink-0 items-center gap-2">
                           <RowActionsMenu>
                             <Link className={ROW_ACTION_CLASS} href={`/attendance/history?studentId=${student.id}`}>Attendance history</Link>
+                            <Link className={ROW_ACTION_CLASS} href={`/students/${student.id}/progress`}>Student progress</Link>
                             {student.is_active && <StudentModal branches={branchOptionsForStudent(student)} student={student} trigger={<RowActionItem>Edit student</RowActionItem>} />}
                             <StudentStatusButton studentId={student.id} studentName={fullName} isActive={student.is_active} className={`${ROW_ACTION_CLASS} ${student.is_active ? "text-red-700 hover:bg-red-50" : "text-emerald-700 hover:bg-emerald-50"}`} />
                           </RowActionsMenu>
                         </div>
                       )}
-                      {!isHeadCoach && <RowActionsMenu><Link className={ROW_ACTION_CLASS} href={`/attendance/history?studentId=${student.id}`}>Attendance history</Link></RowActionsMenu>}
+                      {!isHeadCoach && <RowActionsMenu><Link className={ROW_ACTION_CLASS} href={`/attendance/history?studentId=${student.id}`}>Attendance history</Link><Link className={ROW_ACTION_CLASS} href={`/students/${student.id}/progress`}>Student progress</Link></RowActionsMenu>}
                     </div>
 
                     <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">

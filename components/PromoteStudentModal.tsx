@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { BELT_COLORS, BELT_LABELS, formatBeltLabel } from "@/utils/belts";
 import { useRouter } from "next/navigation";
 import { promoteStudent } from "@/app/promotions/actions";
@@ -115,11 +116,17 @@ export default function PromoteStudentModal({
         Promote
       </button>}
 
-      {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+      {isOpen && typeof document !== "undefined" && createPortal(
+        <div
+          className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/45 p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !saving) closeModal();
+          }}
+        >
           <section
             role="dialog"
             aria-modal="true"
+            aria-labelledby="promote-student-title"
             className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl sm:p-7"
           >
             <button
@@ -133,7 +140,7 @@ export default function PromoteStudentModal({
 
             {!isConfirming ? (
               <>
-                <h2 className="text-lg font-semibold text-gray-950">
+                <h2 id="promote-student-title" className="text-lg font-semibold text-gray-950">
                   Promote student
                 </h2>
                 <p className="mb-5 mt-1 text-sm text-gray-500">{studentName}</p>
@@ -218,7 +225,7 @@ export default function PromoteStudentModal({
               </>
             ) : (
               <>
-                <h2 className="text-lg font-semibold text-gray-950">
+                <h2 id="promote-student-title" className="text-lg font-semibold text-gray-950">
                   Confirm promotion?
                 </h2>
                 <p className="mb-5 mt-1 text-sm text-gray-600">
@@ -297,7 +304,8 @@ export default function PromoteStudentModal({
               </>
             )}
           </section>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );

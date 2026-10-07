@@ -1,5 +1,5 @@
-// The only payment methods the Payments page accepts. Used by the server action and the popup.
-export const PAYMENT_METHODS = ['Cash', 'GCash', 'Bank transfer'] as const
+// The payment categories confirmed for the academy. Used by the server actions and forms.
+export const PAYMENT_METHODS = ['Cash', 'Online', 'Card'] as const
 
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number]
 

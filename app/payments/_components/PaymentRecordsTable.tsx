@@ -27,7 +27,7 @@ const formatDayMonth = (date: string) =>
 const formatSentDate = (timestamp: string) =>
   new Date(timestamp).toLocaleDateString('en-US', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric' })
 
-// "5 days overdue", "Due in 2 days", "Paid Oct 1 · GCash"
+// "5 days overdue", "Due in 2 days", "Paid Oct 1 · Online"
 function statusNote(row: PaymentRecord) {
   if (row.status === 'Paid') {
     return [row.paidDate ? `Paid ${formatDayMonth(row.paidDate)}` : 'Paid', row.method].filter(Boolean).join(' · ')

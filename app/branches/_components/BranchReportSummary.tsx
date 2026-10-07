@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { ArrowUpRight, CircleCheck, TriangleAlert } from 'lucide-react'
+import { ArrowUpRight, TriangleAlert } from 'lucide-react'
 import { Card } from '@/components/DashboardWidgets'
 import type { BranchCounts, BranchReport, BranchReportRow, ReportComparison } from '@/utils/branch-reports'
 import { DROP_ALERT_POINTS, FAIR_RATE, LOW_DATA_MARKS, cardClass, formatRange, isLowData, marksOf, ratePercent } from '@/utils/branch-report-format'
@@ -58,7 +58,7 @@ function findIssues(branches: BranchReportRow[], previous: BranchReport | null):
         if (drop >= DROP_ALERT_POINTS) add(1, drop, `attendance rate fell ${drop} pts (${ratePercent(before.attendanceRate)}% → ${rate}%)`)
       }
     }
-    if (branch.unmarkedPastClasses) add(2, branch.unmarkedPastClasses, `${count(branch.unmarkedPastClasses, 'past class', 'past classes')} not marked`)
+    if (branch.incompletePastClasses) add(2, branch.incompletePastClasses, `${count(branch.incompletePastClasses, 'past class', 'past classes')} not fully marked · ${count(branch.unmarkedStudentMarks, 'attendance mark', 'attendance marks')} missing`)
     if (branch.cancelledClasses) add(3, branch.cancelledClasses, `${count(branch.cancelledClasses, 'class', 'classes')} cancelled`)
     if (branch.classes > 0 && marks < LOW_DATA_MARKS) {
       add(4, LOW_DATA_MARKS - marks, marks ? `only ${count(marks, 'attendance mark', 'attendance marks')}, too few for a reliable rate` : 'no attendance marked yet')
@@ -127,9 +127,10 @@ export function NeedsAttention({ branches, comparison, detailQuery = '', single 
   single?: boolean
 }) {
   const issues = findIssues(branches, comparison?.report ?? null)
+  if (issues.length === 0) return null
   return (
     <Card title={<><TriangleAlert className="h-4 w-4 text-gray-950" aria-hidden />Needs attention</>} chip={issues.length ? String(issues.length) : undefined} className={`${cardClass} print:break-inside-avoid`}>
-      {issues.length ? <>
+      <>
         <ul className="-mt-1 divide-y divide-gray-100">
           {issues.slice(0, MAX_ISSUES).map((issue) => {
             const tone = issueTone(issue.rank)
@@ -157,11 +158,7 @@ export function NeedsAttention({ branches, comparison, detailQuery = '', single 
         {issues.length > MAX_ISSUES && (
           <p className="mt-2 text-xs text-gray-400">+ {issues.length - MAX_ISSUES} more. Pick fewer branches to see them.</p>
         )}
-      </> : (
-        <p className="flex items-center gap-2 rounded-lg bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
-          <CircleCheck className="h-4 w-4 shrink-0" aria-hidden />Nothing needs attention for this period.
-        </p>
-      )}
+      </>
     </Card>
   )
 }
