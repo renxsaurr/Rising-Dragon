@@ -1,11 +1,15 @@
 import 'server-only'
 
 import { createAdminClient } from '@/utils/supabase/admin'
-import { addDays, dateInTimeZone } from '@/utils/dates'
+import { dateInTimeZone } from '@/utils/dates'
+import { CONTACT_NUMBER, PAYMENT_DETAILS } from '@/utils/academy-settings'
 import { isValidEmail, normalizeEmail } from '@/utils/email'
 import { sendGmail } from '@/utils/gmail'
+import { formatCoverage, type PaymentType } from '@/utils/payment-fees'
+import { reminderWindowFor, type ReminderType, type ReminderWindow } from '@/utils/reminder-timing'
 
-export type ReminderType = 'Before due' | 'Due today' | 'After due'
+// Kept here too so existing imports from this file keep working.
+export { reminderWindowFor, type ReminderType, type ReminderWindow } from '@/utils/reminder-timing'
 export type ReminderStatus = 'Scheduled' | 'Sent' | 'Failed' | 'Skipped'
 
 // Each type can be sent once per payment (UNIQUE payment_id + reminder_type), so at most 3.
@@ -25,6 +29,9 @@ type PaymentWithStudent = {
   amount: number | string
   due_date: string
   status: string
+  payment_type: PaymentType | null
+  quantity: number | null
+  coverage_start: string | null
   student: {
     first_name: string | null
     middle_name: string | null
@@ -36,7 +43,7 @@ type PaymentWithStudent = {
 }
 
 // payment has only one link to student, so no foreign key hint is needed.
-const PAYMENT_SELECT = 'id, amount, due_date, status, student:student(first_name, middle_name, last_name, guardian_name, guardian_email, is_active)'
+const PAYMENT_SELECT = 'id, amount, due_date, status, payment_type, quantity, coverage_start, student:student(first_name, middle_name, last_name, guardian_name, guardian_email, is_active)'
 
 type ExistingReminder = {
   id: number
@@ -74,28 +81,6 @@ const errorMessage = (error: unknown, fallback: string) => (error instanceof Err
 const daysBetween = (from: string, to: string) =>
   Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000)
 
-// Reminder timing, in one place for the page and the server:
-// "Before due" opens 3 days before the due date, "Due today" on the due date, and
-// "After due" 3 days after it. The 1–2 days after the due date are a grace period.
-export const BEFORE_DUE_WINDOW_DAYS = 3
-export const AFTER_DUE_GRACE_DAYS = 3
-
-export type ReminderWindow =
-  | { open: true; type: ReminderType; opensOn: string }
-  | { open: false; type: null; nextType: ReminderType; opensOn: string }
-
-/** Which reminder can be sent today (Manila), or which one opens next and on what date. */
-export function reminderWindowFor(dueDate: string, today = dateInTimeZone()): ReminderWindow {
-  const daysUntilDue = daysBetween(today, dueDate)
-  const beforeDueOpens = addDays(dueDate, -BEFORE_DUE_WINDOW_DAYS)
-  const afterDueOpens = addDays(dueDate, AFTER_DUE_GRACE_DAYS)
-  if (daysUntilDue > BEFORE_DUE_WINDOW_DAYS) return { open: false, type: null, nextType: 'Before due', opensOn: beforeDueOpens }
-  if (daysUntilDue > 0) return { open: true, type: 'Before due', opensOn: beforeDueOpens }
-  if (daysUntilDue === 0) return { open: true, type: 'Due today', opensOn: dueDate }
-  if (-daysUntilDue < AFTER_DUE_GRACE_DAYS) return { open: false, type: null, nextType: 'After due', opensOn: afterDueOpens }
-  return { open: true, type: 'After due', opensOn: afterDueOpens }
-}
-
 // '2026-10-06' → "Oct 6, 2026"
 const formatShortDate = (date: string) =>
   new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })
@@ -125,6 +110,8 @@ const escapeHtml = (value: string) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
 
+const ACADEMY = 'Rising Dragon Taekwondo'
+
 type EmailTone = 'soon' | 'urgent'
 
 const LABEL_COLORS: Record<EmailTone, { color: string; background: string }> = {
@@ -132,39 +119,90 @@ const LABEL_COLORS: Record<EmailTone, { color: string; background: string }> = {
   urgent: { color: '#b91c1c', background: '#fee2e2' },
 }
 
-// Wording is based on the real number of days on the send date, so a reminder
-// sent late (catch-up days) still says the right thing.
-function emailWording(daysUntilDue: number, student: string, amount: string, dueDate: string) {
-  if (daysUntilDue > 1) {
-    return {
-      label: `Due in ${daysUntilDue} days`,
-      tone: 'soon' as EmailTone,
-      subject: `Payment reminder: ${amount} due on ${dueDate}`,
-      message: `This is a friendly reminder that ${student}'s payment of ${amount} is due on ${dueDate}, in ${daysUntilDue} days.`,
-    }
+// The small colored label at the top of the email, from the real days until the due date.
+function emailLabel(daysUntilDue: number): { label: string; tone: EmailTone } {
+  if (daysUntilDue > 1) return { label: `Due in ${daysUntilDue} days`, tone: 'soon' }
+  if (daysUntilDue === 1) return { label: 'Due tomorrow', tone: 'soon' }
+  if (daysUntilDue === 0) return { label: 'Due today', tone: 'urgent' }
+  return { label: 'Overdue', tone: 'urgent' }
+}
+
+// '2026-10-01' → "October 2026"
+const formatLongMonth = (date: string) =>
+  new Date(`${date.slice(0, 7)}-01T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'long', year: 'numeric' })
+
+type FeeDetails = Pick<PaymentWithStudent, 'payment_type' | 'quantity' | 'coverage_start'>
+
+// "October 2026" for one month, "Oct – Nov 2026" for several.
+const monthsCovered = (coverageStart: string, quantity: number) =>
+  quantity === 1 ? formatLongMonth(coverageStart) : formatCoverage(coverageStart, quantity)
+
+const sessions = (quantity: number) => `${quantity} session${quantity === 1 ? '' : 's'}`
+
+/** For the subject: "October 2026 Monthly Fee", "Oct – Nov 2026 Monthly Fee", "Training Fee (6 sessions)" or "Payment". */
+function feeTitle(fee: FeeDetails) {
+  if (fee.payment_type === 'Monthly' && fee.coverage_start && fee.quantity) {
+    return `${monthsCovered(fee.coverage_start, fee.quantity)} Monthly Fee`
   }
-  if (daysUntilDue === 1) {
-    return {
-      label: 'Due tomorrow',
-      tone: 'soon' as EmailTone,
-      subject: `Payment due tomorrow: ${amount}`,
-      message: `This is a friendly reminder that ${student}'s payment of ${amount} is due tomorrow, ${dueDate}.`,
-    }
+  if (fee.payment_type === 'Per session' && fee.quantity) return `Training Fee (${sessions(fee.quantity)})`
+  return 'Payment'
+}
+
+/** For the sentence: "monthly training fee for October 2026", "training fee for 6 sessions" or "payment". */
+function feePhrase(fee: FeeDetails) {
+  if (fee.payment_type === 'Monthly' && fee.coverage_start && fee.quantity) {
+    return `monthly training fee for ${monthsCovered(fee.coverage_start, fee.quantity)}`
   }
-  if (daysUntilDue === 0) {
-    return {
-      label: 'Due today',
-      tone: 'urgent' as EmailTone,
-      subject: `Payment due today: ${amount}`,
-      message: `${student}'s payment of ${amount} is due today, ${dueDate}.`,
-    }
-  }
-  const daysLate = -daysUntilDue
+  if (fee.payment_type === 'Per session' && fee.quantity) return `training fee for ${sessions(fee.quantity)}`
+  return 'payment'
+}
+
+type LetterValues = {
+  guardian: string | null
+  student: string
+  amount: string
+  dueDate: string
+  today: string
+  phrase: string
+  paymentDetails: string | null
+  contact: string | null
+  sender: string | null
+}
+
+type Letter = {
+  greeting: string
+  opening: string
+  main: string
+  paymentDetails: string | null
+  questions: string
+  thanks: string
+  signOff: string
+  sender: string | null
+  role: string
+}
+
+/**
+ * The letter's sentences. Called with escaped values for the HTML and plain values for the text
+ * version, so both always say the same thing. It never says the payment was marked paid.
+ */
+function writeLetter(daysUntilDue: number, v: LetterValues): Letter {
+  const what = `the ${v.phrase} for ${v.student}, in the amount of ${v.amount},`
+  const main =
+    daysUntilDue > 0
+      ? `This is a kind reminder that ${what} is due on ${v.dueDate}.`
+      : daysUntilDue === 0
+        ? `This is a kind reminder that ${what} is due today, ${v.dueDate}.`
+        : `This is a kind reminder that ${what} was due on ${v.dueDate} and remains unpaid as of ${v.today}. We kindly ask that it be settled at your earliest convenience.`
   return {
-    label: 'Overdue',
-    tone: 'urgent' as EmailTone,
-    subject: `Overdue payment: ${amount} was due on ${dueDate}`,
-    message: `${student}'s payment of ${amount} was due on ${dueDate}, ${daysLate} day${daysLate === 1 ? '' : 's'} ago, and is still unpaid.`,
+    greeting: v.guardian ? `Dear ${v.guardian},` : 'Dear Parent/Guardian,',
+    opening: `Greetings from ${ACADEMY}!`,
+    main,
+    paymentDetails: v.paymentDetails ? `Payment may be made through ${v.paymentDetails}.` : null,
+    questions: `If you have already settled this payment, please disregard this message, and thank you. For any questions or concerns, you may reply to this email${v.contact ? ` or contact us at ${v.contact}` : ''}.`,
+    thanks: "Thank you for your continued trust and support in your child's training.",
+    signOff: 'Respectfully,',
+    sender: v.sender,
+    role: `Head Coach, ${ACADEMY}`,
   }
 }
 
@@ -174,18 +212,16 @@ const detailRow = (label: string, value: string, isLast = false) =>
     <td style="padding:10px 16px;font-size:14px;font-weight:bold;color:#111827;${isLast ? '' : 'border-bottom:1px solid #e5e7eb;'}">${value}</td>
   </tr>`
 
+const PARAGRAPH = 'margin:0 0 14px;font-size:15px;line-height:1.6;color:#374151;'
+
+/** Every value passed in here is already escaped. */
 function buildEmailHtml(
   daysUntilDue: number,
-  values: { guardian: string | undefined; student: string; amount: string; dueDate: string },
+  letter: Letter,
+  details: { student: string; title: string; amount: string; dueDate: string },
 ) {
-  // Every value from the database is escaped before it goes into the HTML.
-  const guardian = values.guardian ? escapeHtml(values.guardian) : ''
-  const student = escapeHtml(values.student)
-  const amount = escapeHtml(values.amount)
-  const dueDate = escapeHtml(values.dueDate)
-  const wording = emailWording(daysUntilDue, student, amount, dueDate)
-  const colors = LABEL_COLORS[wording.tone]
-
+  const { label, tone } = emailLabel(daysUntilDue)
+  const colors = LABEL_COLORS[tone]
   return `<!doctype html>
 <html>
 <body style="margin:0;padding:0;background-color:#f3f4f6;">
@@ -200,25 +236,31 @@ function buildEmailHtml(
             <td style="background-color:#dc2626;height:3px;line-height:3px;font-size:0;">&nbsp;</td>
           </tr>
           <tr>
-            <td style="padding:28px 28px 8px;">
-              <span style="display:inline-block;padding:4px 10px;border-radius:999px;background-color:${colors.background};color:${colors.color};font-size:12px;font-weight:bold;">${wording.label}</span>
-              <p style="margin:20px 0 8px;font-size:16px;">${guardian ? `Hi ${guardian},` : 'Hello,'}</p>
-              <p style="margin:0;font-size:15px;line-height:1.6;color:#374151;">${wording.message}</p>
+            <td style="padding:28px 28px 4px;">
+              <span style="display:inline-block;padding:4px 10px;border-radius:999px;background-color:${colors.background};color:${colors.color};font-size:12px;font-weight:bold;">${label}</span>
+              <p style="margin:20px 0 14px;font-size:15px;color:#111827;">${letter.greeting}</p>
+              <p style="${PARAGRAPH}">${letter.opening}</p>
+              <p style="${PARAGRAPH}">${letter.main}</p>
+              ${letter.paymentDetails ? `<p style="${PARAGRAPH}">${letter.paymentDetails}</p>` : ''}
             </td>
           </tr>
           <tr>
-            <td style="padding:16px 28px;">
+            <td style="padding:4px 28px 16px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;">
-                ${detailRow('Student', student)}
-                ${detailRow('Amount', amount)}
-                ${detailRow('Due date', dueDate, true)}
+                ${detailRow('Student', details.student)}
+                ${detailRow('For', details.title)}
+                ${detailRow('Amount', details.amount)}
+                ${detailRow('Due date', details.dueDate, true)}
               </table>
             </td>
           </tr>
           <tr>
-            <td style="padding:8px 28px 28px;font-size:14px;line-height:1.6;color:#374151;">
-              <p style="margin:0 0 8px;">Already paid? Please ignore this email.</p>
-              <p style="margin:0;">Questions? Reply to this email or talk to your coach.</p>
+            <td style="padding:8px 28px 28px;">
+              <p style="${PARAGRAPH}">${letter.questions}</p>
+              <p style="${PARAGRAPH}">${letter.thanks}</p>
+              <p style="margin:0;font-size:15px;color:#374151;">${letter.signOff}</p>
+              ${letter.sender ? `<p style="margin:12px 0 0;font-size:15px;font-weight:bold;color:#111827;">${letter.sender}</p>` : ''}
+              <p style="margin:${letter.sender ? '2px' : '12px'} 0 0;font-size:14px;color:#6b7280;">${letter.role}</p>
             </td>
           </tr>
           <tr>
@@ -232,30 +274,75 @@ function buildEmailHtml(
 </html>`
 }
 
-function buildEmail(payment: PaymentWithStudent, today: string) {
-  const student = studentName(payment)
-  const amount = formatAmount(payment.amount)
-  const dueDate = formatDueDate(payment.due_date)
-  const guardian = payment.student?.guardian_name?.trim()
-  const daysUntilDue = daysBetween(today, payment.due_date)
-  const wording = emailWording(daysUntilDue, student, amount, dueDate)
-  const text = [
-    guardian ? `Hi ${guardian},` : 'Hello,',
+function buildEmailText(letter: Letter) {
+  return [
+    letter.greeting,
     '',
-    wording.message,
-    'If you have already paid, please ignore this email.',
+    letter.opening,
     '',
-    'Thank you,',
-    'Rising Dragon Taekwondo',
+    letter.main,
+    ...(letter.paymentDetails ? ['', letter.paymentDetails] : []),
+    '',
+    letter.questions,
+    '',
+    letter.thanks,
+    '',
+    letter.signOff,
+    ...(letter.sender ? [letter.sender] : []),
+    letter.role,
   ].join('\n')
-  const html = buildEmailHtml(daysUntilDue, { guardian, student, amount, dueDate })
-  return { subject: wording.subject, text, html }
+}
+
+function buildEmail(payment: PaymentWithStudent, today: string, senderName: string | null) {
+  const daysUntilDue = daysBetween(today, payment.due_date)
+  const plain: LetterValues = {
+    guardian: payment.student?.guardian_name?.trim() || null,
+    student: studentName(payment),
+    amount: formatAmount(payment.amount),
+    dueDate: formatShortDate(payment.due_date),
+    today: formatShortDate(today),
+    phrase: feePhrase(payment),
+    paymentDetails: PAYMENT_DETAILS,
+    contact: CONTACT_NUMBER,
+    sender: senderName,
+  }
+  // Every value from the database or settings is escaped before it goes into the HTML.
+  const escape = (value: string | null) => (value === null ? null : escapeHtml(value))
+  const escaped: LetterValues = {
+    guardian: escape(plain.guardian),
+    student: escapeHtml(plain.student),
+    amount: escapeHtml(plain.amount),
+    dueDate: escapeHtml(plain.dueDate),
+    today: escapeHtml(plain.today),
+    phrase: escapeHtml(plain.phrase),
+    paymentDetails: escape(plain.paymentDetails),
+    contact: escape(plain.contact),
+    sender: escape(plain.sender),
+  }
+  const title = feeTitle(payment)
+  return {
+    subject: `Payment Reminder – ${title} – ${plain.student}`,
+    text: buildEmailText(writeLetter(daysUntilDue, plain)),
+    html: buildEmailHtml(daysUntilDue, writeLetter(daysUntilDue, escaped), {
+      student: escaped.student,
+      title: escapeHtml(title),
+      amount: escaped.amount,
+      dueDate: escaped.dueDate,
+    }),
+  }
 }
 
 async function loadPayment(admin: Admin, paymentId: number) {
   const { data, error } = await admin.from('payment').select(PAYMENT_SELECT).eq('id', paymentId).maybeSingle()
   if (error) throw new Error(`Could not load the payment: ${error.message}`)
   return data as unknown as PaymentWithStudent | null
+}
+
+/** "First Last" of the Head Coach sending, for the letter's signature. null when it can't be found. */
+async function loadSenderName(admin: Admin, userId: number) {
+  const { data } = await admin.from('user').select('first_name, last_name').eq('id', userId).maybeSingle()
+  const name = [data?.first_name, data?.last_name].filter(Boolean).join(' ').trim()
+  return name || null
 }
 
 // Paid or inactive: no reminder is needed at all.
@@ -299,7 +386,7 @@ function reviewChanged(reviewed: ReviewedReminder, recipient: string, type: Remi
   return normalizeEmail(reviewed.recipient) !== recipient || reviewed.reminderType !== type
 }
 
-function toPreview(payment: PaymentWithStudent, recipient: string, type: ReminderType): ReminderPreview {
+function toPreview(payment: PaymentWithStudent, recipient: string, type: ReminderType, senderName: string | null): ReminderPreview {
   return {
     studentName: studentName(payment),
     guardianName: payment.student?.guardian_name?.trim() || null,
@@ -307,7 +394,7 @@ function toPreview(payment: PaymentWithStudent, recipient: string, type: Reminde
     amount: formatAmount(payment.amount),
     dueDate: formatDueDate(payment.due_date),
     reminderType: type,
-    ...buildEmail(payment, dateInTimeZone()),
+    ...buildEmail(payment, dateInTimeZone(), senderName),
   }
 }
 
@@ -349,8 +436,9 @@ async function deliver(
   payment: PaymentWithStudent,
   recipient: string,
   type: ReminderType,
+  senderName: string | null,
 ): Promise<SendReminderResult> {
-  const result = await sendGmail({ to: recipient, ...buildEmail(payment, dateInTimeZone()) })
+  const result = await sendGmail({ to: recipient, ...buildEmail(payment, dateInTimeZone(), senderName) })
 
   // completed_at is always set when an attempt finishes; sent_at only when it was Sent.
   const finish = async (values: { status: 'Sent' | 'Failed'; sent_at: string | null; error_message: string | null; provider_message_id: string | null }) => {
@@ -374,7 +462,7 @@ async function deliver(
 }
 
 /** Popup data for "Send reminder". The type comes from today's real days until due. */
-export async function getPaymentReminderPreview(paymentId: number): Promise<ReminderPreviewResult> {
+export async function getPaymentReminderPreview(paymentId: number, userId: number): Promise<ReminderPreviewResult> {
   const admin = createAdminClient()
   try {
     const payment = await loadPayment(admin, paymentId)
@@ -388,7 +476,7 @@ export async function getPaymentReminderPreview(paymentId: number): Promise<Remi
     const blocked = blockedBy(await findReminder(admin, payment.id, type), type)
     if (blocked) return { error: blocked }
 
-    return { preview: toPreview(payment, guardianEmail(payment), type) }
+    return { preview: toPreview(payment, guardianEmail(payment), type, await loadSenderName(admin, userId)) }
   } catch (error) {
     return { error: errorMessage(error, 'Could not load the reminder preview.') }
   }
@@ -414,6 +502,7 @@ export async function sendReminderForPayment(
     if (reviewChanged(reviewed, recipient, type)) {
       return { error: 'The details changed since you reviewed them. Close this window and review again.' }
     }
+    const senderName = await loadSenderName(admin, userId)
 
     const existing = await findReminder(admin, payment.id, type)
     const blocked = blockedBy(existing, type)
@@ -446,7 +535,7 @@ export async function sendReminderForPayment(
       reminderId = Number(data.id)
     }
 
-    return await deliver(admin, reminderId, payment, recipient, type)
+    return await deliver(admin, reminderId, payment, recipient, type, senderName)
   } catch (error) {
     return { error: errorMessage(error, 'Could not send the reminder.') }
   }
@@ -496,12 +585,14 @@ async function prepareRetry(admin: Admin, reminderId: number): Promise<RetryCont
 }
 
 /** Popup data for "Retry". Keeps the failed row's type; wording uses today's real days. */
-export async function getRetryReminderPreview(reminderId: number): Promise<ReminderPreviewResult> {
+export async function getRetryReminderPreview(reminderId: number, userId: number): Promise<ReminderPreviewResult> {
   const admin = createAdminClient()
   try {
     const context = await prepareRetry(admin, reminderId)
     if ('error' in context) return context
-    return { preview: toPreview(context.payment, context.recipient, context.reminder.reminder_type) }
+    return {
+      preview: toPreview(context.payment, context.recipient, context.reminder.reminder_type, await loadSenderName(admin, userId)),
+    }
   } catch (error) {
     return { error: errorMessage(error, 'Could not load the reminder preview.') }
   }
@@ -524,7 +615,7 @@ export async function retryFailedReminder(
     if (!(await reclaim(admin, reminder, recipient, userId))) {
       return { error: 'This reminder is already being retried. Refresh the page.' }
     }
-    return await deliver(admin, Number(reminder.id), payment, recipient, reminder.reminder_type)
+    return await deliver(admin, Number(reminder.id), payment, recipient, reminder.reminder_type, await loadSenderName(admin, userId))
   } catch (error) {
     return { error: errorMessage(error, 'Could not retry the reminder.') }
   }

@@ -74,6 +74,16 @@ export type ActiveStudent = {
   branchId: number | null
   beltLevel: string
   enrollmentDate: string | null
+  /** Trimmed and lowercased. '' when missing. */
+  guardianEmail: string
+}
+
+/** This month's Unpaid bill for a student. Reminders go out for it instead of a new bill. */
+export type ExistingBill = {
+  id: number
+  dueDate: string
+  amount: number
+  reminders: ReminderSummary[]
 }
 
 export type NotPaidStudent = {
@@ -82,6 +92,8 @@ export type NotPaidStudent = {
   beltLevel: string
   branchName: string
   enrollmentDate: string | null
+  guardianEmail: string
+  existingUnpaid: ExistingBill | null
 }
 
 export type NotPaidGroup = {
@@ -194,9 +206,18 @@ type RawActiveStudent = {
   branch_id: number | null
   belt_level: string | null
   enrollment_date: string | null
+  guardian_email: string | null
 }
 
-type RawPaidMonthly = { student_id: number; coverage_start: string; quantity: number }
+type RawNearbyMonthly = {
+  id: number
+  student_id: number
+  coverage_start: string
+  quantity: number
+  status: PaymentStatus
+  due_date: string
+  amount: number | string
+}
 
 const emptyNotPaid = (): NotPaidGroup => ({ activeCount: 0, notPaidCount: 0, students: [] })
 
@@ -234,7 +255,7 @@ export async function loadPaymentMonth(admin: Admin, month: string, today: strin
   const olderBefore = start < today ? start : today
 
   try {
-    const [branchResult, payments, olderOverdue, students, paidMonthly] = await Promise.all([
+    const [branchResult, payments, olderOverdue, students, nearbyMonthly] = await Promise.all([
       admin.from('branch').select('id, name').order('name'),
       fetchAllRows<RawPayment>((from, to) => admin.from('payment')
         .select(PAYMENT_SELECT)
@@ -250,17 +271,16 @@ export async function loadPaymentMonth(admin: Admin, month: string, today: strin
         .order('id')
         .range(from, to)),
       fetchAllRows<RawActiveStudent>((from, to) => admin.from('student')
-        .select('id, first_name, middle_name, last_name, branch_id, belt_level, enrollment_date')
+        .select('id, first_name, middle_name, last_name, branch_id, belt_level, enrollment_date, guardian_email')
         .eq('is_active', true)
         .order('last_name')
         .order('first_name')
         .order('id')
         .range(from, to)),
-      // Paid Monthly payments that could cover this month. A payment covers at most
+      // Monthly payments (Paid or Unpaid) that could cover this month. A payment covers at most
       // MAX_MONTHS months, so anything starting earlier than that can't reach it.
-      fetchAllRows<RawPaidMonthly>((from, to) => admin.from('payment')
-        .select('student_id, coverage_start, quantity')
-        .eq('status', 'Paid')
+      fetchAllRows<RawNearbyMonthly>((from, to) => admin.from('payment')
+        .select('id, student_id, coverage_start, quantity, status, due_date, amount')
         .eq('payment_type', 'Monthly')
         .gte('coverage_start', `${shiftMonth(month, -(MAX_MONTHS - 1))}-01`)
         .lte('coverage_start', end)
@@ -338,18 +358,40 @@ export async function loadPaymentMonth(admin: Admin, month: string, today: strin
       branchId: student.branch_id == null ? null : Number(student.branch_id),
       beltLevel: student.belt_level ?? '',
       enrollmentDate: student.enrollment_date,
+      guardianEmail: normalizeEmail(student.guardian_email),
     }))
 
     // Paid for the month = a Paid Monthly payment whose months include it, or any Paid payment
-    // due inside it (Per session and older records). Unpaid records never count.
+    // due inside it (Per session and older records). Unpaid records never count as paid:
+    // the same two rules with Unpaid give the student's existing bill instead.
     const paidStudentIds = new Set<number>()
-    for (const row of rows) {
-      if (row.status === 'Paid' && row.studentId !== null) paidStudentIds.add(row.studentId)
+    const unpaidBills = new Map<number, { id: number; dueDate: string; amount: number }>()
+    const keepEarliest = (studentId: number, bill: { id: number; dueDate: string; amount: number }) => {
+      const current = unpaidBills.get(studentId)
+      if (!current || bill.dueDate < current.dueDate) unpaidBills.set(studentId, bill)
     }
-    for (const payment of paidMonthly) {
-      if (coveredMonths(payment.coverage_start, Number(payment.quantity)).includes(month)) {
-        paidStudentIds.add(Number(payment.student_id))
-      }
+    for (const row of rows) {
+      if (row.studentId === null) continue
+      if (row.status === 'Paid') paidStudentIds.add(row.studentId)
+      else keepEarliest(row.studentId, { id: row.id, dueDate: row.dueDate, amount: row.amount })
+    }
+    for (const payment of nearbyMonthly) {
+      if (!coveredMonths(payment.coverage_start, Number(payment.quantity)).includes(month)) continue
+      const studentId = Number(payment.student_id)
+      if (payment.status === 'Paid') paidStudentIds.add(studentId)
+      else keepEarliest(studentId, { id: Number(payment.id), dueDate: payment.due_date, amount: Number(payment.amount) })
+    }
+
+    // Reminders for bills that aren't in this month's rows (a Monthly bill due in an earlier month).
+    const rowReminders = new Map(rows.map((row) => [row.id, row.reminders]))
+    const missingIds = [...unpaidBills.entries()]
+      .filter(([studentId, bill]) => !paidStudentIds.has(studentId) && !rowReminders.has(bill.id))
+      .map(([, bill]) => bill.id)
+    const extraReminders = missingIds.length ? await loadReminders(admin, missingIds) : new Map<number, ReminderSummary[]>()
+    const existingBill = (studentId: number): ExistingBill | null => {
+      const bill = unpaidBills.get(studentId)
+      if (!bill) return null
+      return { ...bill, reminders: rowReminders.get(bill.id) ?? extraReminders.get(bill.id) ?? [] }
     }
 
     // Same grouping as the cards. Students enrolled after the month ends don't count yet.
@@ -369,6 +411,8 @@ export async function loadPaymentMonth(admin: Admin, month: string, today: strin
           beltLevel: student.beltLevel,
           branchName: (student.branchId !== null && branchNames.get(student.branchId)) || 'No branch',
           enrollmentDate: student.enrollmentDate,
+          guardianEmail: student.guardianEmail,
+          existingUnpaid: existingBill(student.id),
         })
       }
     }

@@ -169,6 +169,22 @@ export default function ReminderReviewModal({ target, onClose }: { target: Remin
                   srcDoc={preview.html}
                   className="h-[420px] w-full rounded-lg border border-gray-200 bg-gray-100"
                 />
+                {/* The same subject and text the guardian gets, from the same server function. */}
+                <details className="mt-4 rounded-lg border border-gray-200">
+                  <summary className={`cursor-pointer select-none rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:text-black ${FOCUS_RING}`}>
+                    Preview email
+                  </summary>
+                  <div className="space-y-3 border-t border-gray-200 px-4 py-3">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Subject</p>
+                      <p className="mt-0.5 break-words text-sm text-gray-950">{preview.subject}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Message</p>
+                      <pre className="mt-0.5 whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-gray-800">{preview.text}</pre>
+                    </div>
+                  </div>
+                </details>
               </>
             )
           )}

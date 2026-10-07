@@ -70,7 +70,7 @@ export async function getReminderPreview(
   if ("error" in auth) return auth;
   if (!isValidId(paymentId)) return { error: "Payment not found." };
 
-  return getPaymentReminderPreview(paymentId);
+  return getPaymentReminderPreview(paymentId, auth.userId);
 }
 
 export async function getRetryPreview(
@@ -80,7 +80,7 @@ export async function getRetryPreview(
   if ("error" in auth) return auth;
   if (!isValidId(reminderId)) return { error: "Reminder not found." };
 
-  const result = await getRetryReminderPreview(reminderId);
+  const result = await getRetryReminderPreview(reminderId, auth.userId);
   // Loading the preview may close a failed reminder as Skipped, so refresh the list.
   if ("closed" in result && result.closed) revalidatePath("/payments");
   return result;
@@ -199,7 +199,8 @@ export type NewPaymentInput = {
 
 /** createPayment can also stop with a warning that the Head Coach must confirm. */
 export type CreatePaymentResult =
-  | PaymentActionResult
+  | { ok: true; paymentId: number }
+  | { error: string }
   | { warning: string; needsConfirm: true };
 
 export async function createPayment(
@@ -340,19 +341,23 @@ export async function createPayment(
 
   // No id: the database creates it. The four detail columns go in together,
   // because the database only accepts all of them or none of them.
-  const { error } = await admin.from("payment").insert({
-    student_id: studentId,
-    amount: parsed.amount,
-    ...record,
-    payment_type: paymentType,
-    quantity,
-    coverage_start: coverage,
-    notes: parsedNotes.notes,
-  });
+  const { data: created, error } = await admin
+    .from("payment")
+    .insert({
+      student_id: studentId,
+      amount: parsed.amount,
+      ...record,
+      payment_type: paymentType,
+      quantity,
+      coverage_start: coverage,
+      notes: parsedNotes.notes,
+    })
+    .select("id")
+    .single();
   if (error) return { error: error.message };
 
   revalidatePath("/payments");
-  return { ok: true };
+  return { ok: true, paymentId: Number(created.id) };
 }
 
 export async function getStudentPaymentSummary(

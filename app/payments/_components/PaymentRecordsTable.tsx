@@ -1,9 +1,9 @@
 import MarkPaidButton from './MarkPaidButton'
 import SendReminderButton from './SendReminderButton'
+import { sendButtonState } from './reminder-button-state'
 import { formatBeltLabel } from '@/utils/belts'
-import { isValidEmail } from '@/utils/email'
 import { formatCoverage } from '@/utils/payment-fees'
-import { REMINDER_TYPES, formatAmount, reminderWindowFor } from '@/utils/payment-reminders'
+import { REMINDER_TYPES, formatAmount } from '@/utils/payment-reminders'
 import type { PaymentKind, PaymentRecord } from '@/utils/payment-records'
 
 const TH = 'px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-500'
@@ -45,33 +45,6 @@ function paymentDetail(row: PaymentRecord) {
     return `${row.quantity} session${row.quantity === 1 ? '' : 's'}`
   }
   return null
-}
-
-/** Whether the row's "Send reminder" button can be used, and why not. */
-function sendButtonState(row: PaymentRecord, today: string) {
-  const timing = reminderWindowFor(row.dueDate, today)
-  // The type that is open today, or the one that opens next.
-  const reminderType = timing.open ? timing.type : timing.nextType
-  if (!row.guardianEmail) return { reminderType, disabledReason: 'No guardian email' }
-  if (!isValidEmail(row.guardianEmail)) return { reminderType, disabledReason: 'Invalid guardian email' }
-  if (!row.isActive) return { reminderType, disabledReason: 'Student is inactive' }
-  if (!timing.open) return { reminderType, disabledLabel: `Available ${formatDayMonth(timing.opensOn)}` }
-
-  const existing = row.reminders.find((reminder) => reminder.reminderType === reminderType)
-  if (existing?.status === 'Sent') {
-    return {
-      reminderType,
-      disabledLabel: existing.sentAt ? `Sent ${formatSentDate(existing.sentAt)}` : 'Sent',
-      // After due is the last reminder, so there is nothing left to send by email.
-      hint: reminderType === 'After due' ? 'All reminders sent · contact parent' : undefined,
-    }
-  }
-  if (existing?.status === 'Failed') {
-    return { reminderType, disabledReason: `${reminderType} failed. Use Retry in Reminder history.` }
-  }
-  if (existing?.status === 'Scheduled') return { reminderType, disabledLabel: 'Sending…' }
-  // No row yet, or a Skipped one that Send may reuse.
-  return { reminderType }
 }
 
 // The latest reminder type that has a row: After due > Due today > Before due.
