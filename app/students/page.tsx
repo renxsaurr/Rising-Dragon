@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { cookies } from "next/headers";
 import DashboardShell from "@/components/DashboardShell";
 import StudentModal from "@/components/StudentModal";
@@ -74,11 +75,23 @@ export default async function StudentsPage({
     }
   }
 
-  let branchQuery = supabase.from("branch").select("id, name").eq("is_active", true).order("name");
+  let branchQuery = supabase.from("branch").select("id, name, is_active").order("name");
   if (assignedBranchIds?.length)
     branchQuery = branchQuery.in("id", assignedBranchIds);
   else if (assignedBranchIds) branchQuery = branchQuery.eq("id", -1);
-  const { data: branches } = await branchQuery;
+  const { data: branchRows } = await branchQuery;
+  const filterBranches = branchRows ?? [];
+  const activeBranches = filterBranches.filter((branch) => branch.is_active);
+  const branchOptionsForStudent = (student: StudentRow) =>
+    activeBranches.some((branch) => branch.id === student.branch_id)
+      ? activeBranches
+      : [
+          ...activeBranches,
+          {
+            id: student.branch_id,
+            name: student.branch?.name ?? "Archived branch",
+          },
+        ];
 
   const requestedBranchIds = Array.isArray(params.branch)
     ? params.branch
@@ -86,7 +99,7 @@ export default async function StudentsPage({
       ? [params.branch]
       : [];
   const availableBranchIds = new Set(
-    (branches ?? []).map((branch) => String(branch.id)),
+    filterBranches.map((branch) => String(branch.id)),
   );
   const selectedBranchIds = [
     ...new Set(
@@ -105,7 +118,11 @@ export default async function StudentsPage({
       requestedBelts.filter((belt) => Object.hasOwn(BELT_LABELS, belt)),
     ),
   ];
-  let studentQuery = supabase
+  // Guardian contact fields are private and granted only to the server role.
+  // Head Coach pages load them through the server-only admin client after the
+  // role check above; assistants use the restricted roster grant and RLS.
+  const studentClient = isHeadCoach ? createAdminClient() : supabase;
+  let studentQuery = studentClient
     .from("student")
     .select(
       isHeadCoach
@@ -163,12 +180,12 @@ export default async function StudentsPage({
           <p className="text-[13px] text-gray-500 mt-0.5">{summary}</p>
         </div>
         {isHeadCoach && statusFilter !== "archived" && (
-          <StudentModal branches={branches ?? []} />
+          <StudentModal branches={activeBranches} />
         )}
       </div>
 
       <StudentFilters
-        branches={(branches ?? []).map((branch) => ({
+        branches={filterBranches.map((branch) => ({
           value: String(branch.id),
           label: branch.name,
         }))}
@@ -310,7 +327,7 @@ export default async function StudentsPage({
                               <div className="flex items-center justify-end gap-2">
                                 {student.is_active && (
                                   <StudentModal
-                                    branches={branches ?? []}
+                                    branches={branchOptionsForStudent(student)}
                                     student={student}
                                     trigger={
                                       <button
@@ -369,7 +386,7 @@ export default async function StudentsPage({
                         <div className="flex shrink-0 items-center gap-2">
                           {student.is_active && (
                             <StudentModal
-                              branches={branches ?? []}
+                              branches={branchOptionsForStudent(student)}
                               student={student}
                               trigger={
                                 <button

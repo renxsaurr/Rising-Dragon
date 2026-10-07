@@ -12,7 +12,7 @@ export type StudentFormData = {
   guardian_name: string
   guardian_contact: string | null
   guardian_email: string
-  belt_level: string
+  belt_level?: string
   enrollment_date: string
   branch_id: number
 }
@@ -50,14 +50,13 @@ export async function saveStudent(studentId: number | null, input: StudentFormDa
   if (currentUser.role !== 'head_coach') return { error: 'Only the Head Coach can add or edit student profiles.' }
   if (!input || typeof input !== 'object') return { error: 'Student details are invalid.' }
 
-  const payload: StudentFormData = {
+  const payload = {
     first_name: typeof input.first_name === 'string' ? input.first_name.trim() : '',
     middle_name: typeof input.middle_name === 'string' ? input.middle_name.trim() || null : null,
     last_name: typeof input.last_name === 'string' ? input.last_name.trim() : '',
     guardian_name: typeof input.guardian_name === 'string' ? input.guardian_name.trim() : '',
     guardian_contact: typeof input.guardian_contact === 'string' ? input.guardian_contact.trim() || null : null,
     guardian_email: normalizeEmail(input.guardian_email),
-    belt_level: typeof input.belt_level === 'string' ? input.belt_level : '',
     enrollment_date: typeof input.enrollment_date === 'string' ? input.enrollment_date : '',
     branch_id: Number(input.branch_id),
   }
@@ -72,7 +71,8 @@ export async function saveStudent(studentId: number | null, input: StudentFormDa
     return { error: 'Enter a valid guardian email address.' }
   }
   if (payload.guardian_email.length > 254) return { error: 'Guardian email must be 254 characters or fewer.' }
-  if (!ALLOWED_BELTS.has(payload.belt_level)) return { error: 'Select a valid belt level.' }
+  const beltLevel = typeof input.belt_level === 'string' ? input.belt_level : ''
+  if (studentId === null && !ALLOWED_BELTS.has(beltLevel)) return { error: 'Select a valid belt level.' }
   if (!Number.isSafeInteger(payload.branch_id) || payload.branch_id <= 0 || !isValidDate(payload.enrollment_date)) {
     return { error: 'Select a branch and enrollment date.' }
   }
@@ -81,31 +81,42 @@ export async function saveStudent(studentId: number | null, input: StudentFormDa
   }
 
   const admin = createAdminClient()
-
-  const { data: branch, error: branchError } = await admin
-    .from('branch')
-    .select('id')
-    .eq('id', payload.branch_id)
-    .eq('is_active', true)
-    .maybeSingle()
-  if (branchError || !branch) return { error: 'Select an active branch.' }
+  let existingStudent: { id: number; branch_id: number; is_active: boolean } | null = null
 
   if (studentId !== null) {
-    const { data: existingStudent, error: existingError } = await admin
+    const { data, error: existingError } = await admin
       .from('student')
       .select('id, branch_id, is_active')
       .eq('id', studentId)
       .maybeSingle()
 
-    if (existingError || !existingStudent) return { error: 'Student record not found.' }
+    if (existingError || !data) return { error: 'Student record not found.' }
+    existingStudent = data
     if (!existingStudent.is_active) return { error: 'Restore this student before editing their record.' }
+  }
 
+  // Existing students may remain attached to an archived branch. Allow an
+  // edit that keeps that association, but only active branches for new or
+  // reassigned profiles.
+  if (studentId === null || payload.branch_id !== existingStudent?.branch_id) {
+    const { data: branch, error: branchError } = await admin
+      .from('branch')
+      .select('id')
+      .eq('id', payload.branch_id)
+      .eq('is_active', true)
+      .maybeSingle()
+    if (branchError || !branch) return { error: 'Select an active branch.' }
+  }
+
+  if (studentId !== null) {
+    // Belt changes must be recorded through Promotions, which also writes the
+    // student's promotion history. Ignore any forged belt_level in an edit.
     const { error } = await admin.from('student').update(payload).eq('id', studentId)
     if (error) return { error: error.message }
     return { success: true }
   }
 
-  const { error } = await admin.from('student').insert(payload)
+  const { error } = await admin.from('student').insert({ ...payload, belt_level: beltLevel })
   if (error) return { error: error.message }
   return { success: true }
 }

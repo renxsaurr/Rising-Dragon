@@ -89,7 +89,7 @@ export default function StudentModal({
       guardian_name: guardianName,
       guardian_contact: guardianContact,
       guardian_email: guardianEmail,
-      belt_level: beltLevel,
+      ...(isEditMode ? {} : { belt_level: beltLevel }),
       enrollment_date: enrollmentDate,
       branch_id: Number(branchId),
     };
@@ -227,21 +227,32 @@ export default function StudentModal({
                   <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
                     Belt Level
                   </label>
-                  <select
-                    value={beltLevel}
-                    onChange={(e) => setBeltLevel(e.target.value)}
-                    required
-                    className="w-full h-11 px-4 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all bg-white"
-                  >
-                    <option value="" disabled>
-                      Select belt
-                    </option>
-                    {BELT_LEVELS.map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
+                  {isEditMode ? (
+                    <div>
+                      <p className="flex h-11 items-center rounded-lg border border-gray-200 bg-gray-50 px-4 text-[14px] text-gray-800">
+                        {BELT_LEVELS.find(([value]) => value === beltLevel)?.[1] ?? beltLevel}
+                      </p>
+                      <p className="mt-1 text-xs text-gray-500">
+                        Record belt changes through Promotions to keep the student’s history.
+                      </p>
+                    </div>
+                  ) : (
+                    <select
+                      value={beltLevel}
+                      onChange={(e) => setBeltLevel(e.target.value)}
+                      required
+                      className="w-full h-11 px-4 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all bg-white"
+                    >
+                      <option value="" disabled>
+                        Select belt
                       </option>
-                    ))}
-                  </select>
+                      {BELT_LEVELS.map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
                 <div>
                   <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
