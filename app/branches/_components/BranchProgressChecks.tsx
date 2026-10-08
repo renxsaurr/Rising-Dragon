@@ -27,7 +27,7 @@ export default function BranchProgressChecks({ checks, title = 'Latest student p
         <li key={check.id} className="px-5 py-4">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0">
-              <Link href={`/students/${check.studentId}/progress`} className="font-semibold text-gray-950 hover:text-red-700 hover:underline">{check.studentName}</Link>
+              <Link href={`/students/${check.studentId}/progress`} className="font-semibold text-gray-950 underline-offset-2 focus-visible:underline">{check.studentName}</Link>
               <p className="mt-0.5 text-xs text-gray-600">{check.branchName} · {focusLabels[check.focusArea] ?? check.focusArea} · {levelLabels[check.progressLevel] ?? check.progressLevel}</p>
             </div>
             <time className="shrink-0 text-xs text-gray-600" dateTime={check.assessedOn}>{new Date(`${check.assessedOn}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</time>
@@ -42,10 +42,7 @@ export default function BranchProgressChecks({ checks, title = 'Latest student p
       ))}
     </ol>
 
-  if (embedded) return <div>
-    {content}
-    <p className="border-t border-gray-100 px-5 py-3 text-xs text-gray-600">Shows up to five latest checks per selected branch. Assessment readiness is a coach recommendation; promotions remain a separate decision.</p>
-  </div>
+  if (embedded) return <div>{content}</div>
 
   return (
     <Card title={<><ClipboardCheck className="h-4 w-4 text-gray-950" aria-hidden />{title}</>} chip={checks.length ? `${checks.length} recent` : undefined} flush className={`${cardClass} print:break-inside-avoid`}>

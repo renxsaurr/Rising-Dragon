@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { addDays, dateInTimeZone } from '@/utils/dates'
 import { syncWeeklySessions } from '@/utils/weekly-sessions'
+import { ensureUpcomingMonthlyBills } from '@/utils/monthly-billing'
+import { sendScheduledPaymentReminders } from '@/utils/payment-reminders'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,7 +16,11 @@ export async function GET(request: Request) {
   }
 
   const today = dateInTimeZone()
-  const result = await syncWeeklySessions(today, addDays(today, 27))
-  if (result.error) return NextResponse.json(result, { status: 500 })
-  return NextResponse.json(result)
+  const [sessions, bills] = await Promise.all([
+    syncWeeklySessions(today, addDays(today, 27)),
+    ensureUpcomingMonthlyBills(today),
+  ])
+  const reminders = await sendScheduledPaymentReminders(today)
+  const status = sessions.error || bills.error || reminders.error ? 500 : 200
+  return NextResponse.json({ sessions, monthlyBills: bills, reminders }, { status })
 }

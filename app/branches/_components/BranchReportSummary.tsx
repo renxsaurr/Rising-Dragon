@@ -11,7 +11,7 @@ type Issue = { branchId: number; branchName: string; rank: number; weight: numbe
 
 const MAX_ISSUES = 6
 // -mx-2 px-2 gives the hover tint some room without moving the text or the dividers
-const rowClass = '-mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 text-sm transition-colors duration-200 hover:bg-red-600/5'
+const rowClass = '-mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 text-sm'
 const count = (value: number, one: string, many: string) => `${value} ${value === 1 ? one : many}`
 
 function kpiChange(kind: 'classes' | 'rate' | 'avg', current: BranchCounts, comparison: ReportComparison | null): Change {
@@ -85,10 +85,10 @@ export function ReportKpis({ totals, comparison }: { totals: BranchCounts; compa
   return (
     <section aria-label="Key figures" className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 print:grid-cols-4">
       {kpis.map((kpi) => (
-        <article key={kpi.label} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm shadow-gray-900/[0.03] transition duration-200 hover:-translate-y-0.5 hover:shadow-md print:break-inside-avoid">
+        <article key={kpi.label} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm shadow-gray-900/[0.03] print:break-inside-avoid">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-sm font-medium leading-5 text-gray-900">{kpi.label}</p>
+            <p className="text-sm font-semibold leading-5 text-gray-950">{kpi.label}</p>
               <p className="mt-3 text-3xl font-semibold tracking-tight text-gray-950 tabular-nums">{kpi.value ?? '—'}</p>
             </div>
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gray-100 text-gray-950 ring-1 ring-inset ring-gray-200/80">
@@ -123,7 +123,7 @@ export function NeedsAttention({ branches, comparison, detailQuery = '', single 
   const issues = findIssues(branches, comparison?.report ?? null)
   if (issues.length === 0) return null
   return (
-    <Card title={<><TriangleAlert className="h-4 w-4 text-gray-950" aria-hidden />Needs attention</>} chip={issues.length ? String(issues.length) : undefined} className={`${cardClass} print:break-inside-avoid`}>
+    <Card title={<><TriangleAlert className="h-4 w-4 text-gray-950" aria-hidden />Needs attention</>} titleClassName="text-base font-semibold tracking-tight text-gray-950" chip={issues.length ? String(issues.length) : undefined} className={`${cardClass} print:break-inside-avoid`}>
       <>
         <ul className="-mt-1 divide-y divide-gray-100">
           {issues.slice(0, MAX_ISSUES).map((issue) => {
@@ -133,7 +133,7 @@ export function NeedsAttention({ branches, comparison, detailQuery = '', single 
               <span className="min-w-0 flex-1 text-gray-600">
                 {single
                   ? issue.message.charAt(0).toUpperCase() + issue.message.slice(1)
-                  : <><span className="font-medium text-gray-900 group-hover:text-red-600">{issue.branchName}</span>: {issue.message}</>}
+                  : <><span className="font-medium text-gray-900">{issue.branchName}</span>: {issue.message}</>}
               </span>
               <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${tone.tagClass}`}>{tone.tag}</span>
             </>
@@ -141,9 +141,9 @@ export function NeedsAttention({ branches, comparison, detailQuery = '', single 
               <li key={`${issue.branchId}-${issue.rank}`}>
                 {single
                   ? <div className={rowClass}>{content}</div>
-                  : <Link href={`/branches/${issue.branchId}${detailQuery && `?${detailQuery}`}`} className={`group ${rowClass}`}>
+                  : <Link href={`/branches/${issue.branchId}${detailQuery && `?${detailQuery}`}`} className={rowClass}>
                     {content}
-                    <ArrowUpRight className="h-4 w-4 shrink-0 text-gray-400 group-hover:text-gray-950 print:hidden" aria-hidden />
+                    <ArrowUpRight className="h-4 w-4 shrink-0 text-gray-700 print:hidden" aria-hidden />
                   </Link>}
               </li>
             )

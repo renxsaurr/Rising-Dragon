@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import type { ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { Pencil } from 'lucide-react'
 import { updateUser } from '@/app/users/actions'
@@ -105,8 +106,8 @@ export default function EditUserModal({
       </button>}
 
       {/* EDIT MODAL */}
-      {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+      {isOpen && createPortal(
+        <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/45 p-4">
           <section role="dialog" aria-modal="true" aria-labelledby={`edit-user-title-${user.id}`} className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl sm:p-7">
             <button type="button" onClick={closeModal} disabled={loading} aria-label="Close" className="absolute right-5 top-5 text-xl leading-none text-gray-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50">×</button>
             <h2 id={`edit-user-title-${user.id}`} className="text-lg font-semibold text-gray-950">Edit staff account</h2>
@@ -149,7 +150,8 @@ export default function EditUserModal({
               </div>
             </form>
           </section>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   )

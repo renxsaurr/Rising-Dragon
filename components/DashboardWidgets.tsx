@@ -2,19 +2,20 @@ import Link from 'next/link'
 import PaginatedTableRows from '@/components/PaginatedTableRows'
 import type { ReactNode } from 'react'
 
-export function Card({ title, chip, action, children, className = '', contentClassName = '', flush = false }: {
+export function Card({ title, chip, action, children, className = '', contentClassName = '', titleClassName = '', flush = false }: {
   title: ReactNode
   chip?: string
   action?: ReactNode
   children: ReactNode
   className?: string
   contentClassName?: string
+  titleClassName?: string
   flush?: boolean
 }) {
   return (
     <section className={`card ${className}`}>
       <div className="flex items-start justify-between gap-3 px-5 pb-4 pt-5">
-        <h3 className="flex min-w-0 items-center gap-2.5 text-[15px] font-semibold text-gray-950">{title}</h3>
+        <h3 className={`flex min-w-0 items-center gap-2.5 ${titleClassName || 'text-[15px] font-semibold text-gray-950'}`}>{title}</h3>
         {chip && <span className="chip">{chip}</span>}
         {action}
       </div>

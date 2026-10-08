@@ -8,8 +8,9 @@ import { formatBeltLabel } from '@/utils/belts'
 import { formatCoverage } from '@/utils/payment-fees'
 import { REMINDER_TYPES, formatAmount } from '@/utils/payment-reminders'
 import type { PaymentKind, PaymentRecord } from '@/utils/payment-records'
+import type { ReminderSchedule } from '@/utils/reminder-timing'
 
-const TH = 'px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-600'
+const TH = 'px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-950'
 
 const KIND_BADGES: Record<PaymentKind, { label: string; className: string }> = {
   paid: { label: 'Paid', className: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20' },
@@ -43,7 +44,7 @@ function statusNote(row: PaymentRecord) {
 // Also used by the printed payment report, so both say the same thing.
 export function paymentDetail(row: PaymentRecord) {
   if (row.paymentType === 'Monthly' && row.coverageStart && row.quantity) {
-    return `Monthly · ${formatCoverage(row.coverageStart, row.quantity)}`
+    return `Monthly · ${formatCoverage(row.coverageStart, row.quantity, row.enrollmentDate ?? row.coverageStart)}`
   }
   if (row.paymentType === 'Per session' && row.quantity) {
     return `${row.quantity} session${row.quantity === 1 ? '' : 's'}`
@@ -74,11 +75,13 @@ function LatestReminder({ row }: { row: PaymentRecord }) {
 export default function PaymentRecordsTable({
   rows,
   today,
+  reminderSchedule,
   showBranch,
   emptyText,
 }: {
   rows: PaymentRecord[]
   today: string
+  reminderSchedule: ReminderSchedule
   showBranch: boolean
   emptyText: string
 }) {
@@ -95,8 +98,8 @@ export default function PaymentRecordsTable({
   return (
     // The table keeps its width and scrolls inside this box on small screens.
     <div className="overflow-x-auto">
-      <table className="system-data-table w-full min-w-[880px] border-collapse text-left">
-        <thead className="border-b border-gray-100 bg-gray-50">
+      <table className="system-data-table payment-records-table w-full min-w-[880px] border-collapse text-left">
+        <thead className="border-b border-gray-100 bg-white">
           <tr>
             <th className={`${TH} pl-5`}>Student</th>
             <th className={TH}>Amount</th>
@@ -109,7 +112,7 @@ export default function PaymentRecordsTable({
         <PaginatedTableRows itemLabel="payment records" colSpan={6}>
           {rows.map((row) => {
             const badge = KIND_BADGES[row.kind]
-            const reminderState = sendButtonState(row, today)
+            const reminderState = sendButtonState(row, today, reminderSchedule)
             return (
               <tr key={row.id} className="align-top">
                 <td className="px-5 py-3">
@@ -121,17 +124,17 @@ export default function PaymentRecordsTable({
                       </span>
                     )}
                   </p>
-                  <p className="mt-0.5 text-xs text-gray-500">
+                  <p className="mt-0.5 text-xs text-gray-700">
                     {[formatBeltLabel(row.beltLevel), showBranch ? row.branchName : null].filter(Boolean).join(' · ')}
                   </p>
                 </td>
                 <td className="px-3 py-3">
                   <p className="whitespace-nowrap text-sm font-medium text-gray-900">{formatAmount(row.amount)}</p>
                   {paymentDetail(row) && (
-                    <p className="mt-0.5 whitespace-nowrap text-xs text-gray-500">{paymentDetail(row)}</p>
+                    <p className="mt-0.5 whitespace-nowrap text-xs text-gray-700">{paymentDetail(row)}</p>
                   )}
                   {row.notes && (
-                    <p className="mt-0.5 max-w-[200px] truncate text-xs text-gray-500" title={row.notes}>
+                    <p className="mt-0.5 max-w-[200px] whitespace-normal break-words text-xs text-gray-700">
                       {row.notes}
                     </p>
                   )}
@@ -141,7 +144,7 @@ export default function PaymentRecordsTable({
                   <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${badge.className}`}>
                     {badge.label}
                   </span>
-                  <p className={`mt-1 whitespace-nowrap text-xs ${row.kind === 'overdue' ? 'text-red-600' : 'text-gray-500'}`}>
+                  <p className={`mt-1 whitespace-nowrap text-xs ${row.kind === 'overdue' ? 'text-red-700' : 'text-gray-700'}`}>
                     {statusNote(row)}
                   </p>
                 </td>

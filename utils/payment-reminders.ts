@@ -3,11 +3,14 @@ import 'server-only'
 import { createAdminClient } from '@/utils/supabase/admin'
 
 import { dateInTimeZone } from '@/utils/dates'
+import { addDays } from '@/utils/dates'
 import { CONTACT_NUMBER, PAYMENT_DETAILS } from '@/utils/academy-settings'
 import { isValidEmail, normalizeEmail } from '@/utils/email'
 import { sendGmail } from '@/utils/gmail'
 import { formatCoverage, type PaymentType } from '@/utils/payment-fees'
 import { reminderWindowFor, type ReminderType, type ReminderWindow } from '@/utils/reminder-timing'
+import { loadReminderSchedule } from '@/utils/reminder-settings'
+import { fetchAllRows } from '@/utils/fetch-all-rows'
 
 // Kept here too so existing imports from this file keep working.
 export { reminderWindowFor, type ReminderType, type ReminderWindow } from '@/utils/reminder-timing'
@@ -40,11 +43,12 @@ type PaymentWithStudent = {
     guardian_name: string | null
     guardian_email: string | null
     is_active: boolean
+    enrollment_date: string | null
   } | null
 }
 
 // payment has only one link to student, so no foreign key hint is needed.
-const PAYMENT_SELECT = 'id, amount, due_date, status, payment_type, quantity, coverage_start, student:student(first_name, middle_name, last_name, guardian_name, guardian_email, is_active)'
+const PAYMENT_SELECT = 'id, amount, due_date, status, payment_type, quantity, coverage_start, student:student(first_name, middle_name, last_name, guardian_name, guardian_email, is_active, enrollment_date)'
 
 type ExistingReminder = {
   id: number
@@ -128,22 +132,19 @@ function emailLabel(daysUntilDue: number): { label: string; tone: EmailTone } {
   return { label: 'Overdue', tone: 'urgent' }
 }
 
-// '2026-10-01' → "October 2026"
-const formatLongMonth = (date: string) =>
-  new Date(`${date.slice(0, 7)}-01T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'long', year: 'numeric' })
+type FeeDetails = Pick<PaymentWithStudent, 'payment_type' | 'quantity' | 'coverage_start' | 'student'>
 
-type FeeDetails = Pick<PaymentWithStudent, 'payment_type' | 'quantity' | 'coverage_start'>
-
-// "October 2026" for one month, "Oct – Nov 2026" for several.
-const monthsCovered = (coverageStart: string, quantity: number) =>
-  quantity === 1 ? formatLongMonth(coverageStart) : formatCoverage(coverageStart, quantity)
+function feeCoverage(fee: FeeDetails) {
+  if (!fee.coverage_start || !fee.quantity) return 'monthly fee'
+  return formatCoverage(fee.coverage_start, fee.quantity, fee.student?.enrollment_date ?? fee.coverage_start)
+}
 
 const sessions = (quantity: number) => `${quantity} session${quantity === 1 ? '' : 's'}`
 
 /** For the subject: "October 2026 Monthly Fee", "Oct – Nov 2026 Monthly Fee", "Training Fee (6 sessions)" or "Payment". */
 function feeTitle(fee: FeeDetails) {
   if (fee.payment_type === 'Monthly' && fee.coverage_start && fee.quantity) {
-    return `${monthsCovered(fee.coverage_start, fee.quantity)} Monthly Fee`
+    return `${feeCoverage(fee)} Monthly Fee`
   }
   if (fee.payment_type === 'Per session' && fee.quantity) return `Training Fee (${sessions(fee.quantity)})`
   return 'Payment'
@@ -152,7 +153,7 @@ function feeTitle(fee: FeeDetails) {
 /** For the sentence: "monthly training fee for October 2026", "training fee for 6 sessions" or "payment". */
 function feePhrase(fee: FeeDetails) {
   if (fee.payment_type === 'Monthly' && fee.coverage_start && fee.quantity) {
-    return `monthly training fee for ${monthsCovered(fee.coverage_start, fee.quantity)}`
+    return `monthly training fee for ${feeCoverage(fee)}`
   }
   if (fee.payment_type === 'Per session' && fee.quantity) return `training fee for ${sessions(fee.quantity)}`
   return 'payment'
@@ -470,7 +471,7 @@ export async function getPaymentReminderPreview(paymentId: number, userId: numbe
     const problem = paymentProblem(payment)
     if (problem || !payment) return { error: problem ?? 'Payment not found.' }
 
-    const timing = reminderWindowFor(payment.due_date)
+    const timing = reminderWindowFor(payment.due_date, dateInTimeZone(), await loadReminderSchedule())
     // Outside the timing windows nothing can be sent, so stop before any reminder row is touched.
     if (!timing.open) return { error: opensLater(timing) }
     const type = timing.type
@@ -497,7 +498,7 @@ export async function sendReminderForPayment(
 
     const recipient = guardianEmail(payment)
     const today = dateInTimeZone()
-    const timing = reminderWindowFor(payment.due_date, today)
+    const timing = reminderWindowFor(payment.due_date, today, await loadReminderSchedule())
     if (!timing.open) return { error: opensLater(timing) }
     const type = timing.type
     if (reviewChanged(reviewed, recipient, type)) {
@@ -542,6 +543,66 @@ export async function sendReminderForPayment(
   }
 }
 
+/** Send scheduled reminders on their due date offsets. Re-reading before send prevents emailing paid/inactive students. */
+export async function sendScheduledPaymentReminders(today = dateInTimeZone()) {
+  const admin = createAdminClient()
+  let sent = 0
+  let failed = 0
+  let skipped = 0
+
+  try {
+    const reminderSchedule = await loadReminderSchedule()
+    const schedule: { dueDate: string; type: ReminderType }[] = [
+      { dueDate: addDays(today, reminderSchedule.beforeDueDays), type: 'Before due' },
+      { dueDate: today, type: 'Due today' },
+      { dueDate: addDays(today, -reminderSchedule.afterDueDays), type: 'After due' },
+    ]
+    for (const item of schedule) {
+      const duePayments = await fetchAllRows<{ id: number }>((from, to) => admin.from('payment')
+        .select('id')
+        .eq('status', 'Unpaid')
+        .eq('due_date', item.dueDate)
+        .order('id')
+        .range(from, to))
+
+      for (const row of duePayments) {
+        try {
+          const payment = await loadPayment(admin, Number(row.id))
+          const problem = paymentProblem(payment)
+          if (problem || !payment) { skipped += 1; continue }
+
+          const existing = await findReminder(admin, payment.id, item.type)
+          if (blockedBy(existing, item.type)) { skipped += 1; continue }
+
+          const { data, error } = await admin.from('payment_reminder').insert({
+            payment_id: payment.id,
+            reminder_type: item.type,
+            recipient_email: guardianEmail(payment),
+            scheduled_for: today,
+            sent_by: null,
+            status: 'Scheduled',
+            attempt_count: 1,
+            last_attempt_at: nowIso(),
+          }).select('id').single()
+          if (error) {
+            if (error.code === '23505') { skipped += 1; continue }
+            failed += 1
+            continue
+          }
+          const result = await deliver(admin, Number(data.id), payment, guardianEmail(payment), item.type, null)
+          if ('error' in result) failed += 1
+          else sent += 1
+        } catch {
+          failed += 1
+        }
+      }
+    }
+  } catch (error) {
+    return { sent, failed, skipped, error: errorMessage(error, 'Could not process scheduled payment reminders.') }
+  }
+  return { sent, failed, skipped }
+}
+
 type RetryContext = { reminder: ExistingReminder; payment: PaymentWithStudent; recipient: string }
 
 /** Load a Failed reminder for Retry. Closes it as Skipped when no reminder is needed any more. */
@@ -565,7 +626,7 @@ async function prepareRetry(admin: Admin, reminderId: number): Promise<RetryCont
   }
 
   // Retry only while this reminder's own window is open, so the email wording still fits.
-  const timing = reminderWindowFor(payment.due_date)
+  const timing = reminderWindowFor(payment.due_date, dateInTimeZone(), await loadReminderSchedule())
   if (!timing.open && timing.nextType === reminder.reminder_type) {
     // Too early (an older row sent before these windows existed): keep it Failed for later.
     return { error: `${opensLater(timing)} Retry it then.` }

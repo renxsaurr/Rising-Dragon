@@ -21,7 +21,7 @@ export async function getCurrentUser() {
 
   const { data: profile, error } = await supabase
     .from('user')
-    .select('id, first_name, middle_name, last_name, role, primary_branch_id')
+    .select('id, first_name, middle_name, last_name, contact, role, primary_branch_id')
     .eq('auth_id', authUser.id)
     .maybeSingle()
 

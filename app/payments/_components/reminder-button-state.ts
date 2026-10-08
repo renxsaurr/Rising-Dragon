@@ -2,7 +2,7 @@
 // No server-only imports, so client components can use it too.
 import { isValidEmail } from '@/utils/email'
 import type { ReminderSummary } from '@/utils/payment-records'
-import { reminderWindowFor } from '@/utils/reminder-timing'
+import { DEFAULT_REMINDER_SCHEDULE, reminderWindowFor, type ReminderSchedule } from '@/utils/reminder-timing'
 
 export type ReminderButtonInput = {
   dueDate: string
@@ -19,8 +19,12 @@ const formatSentDate = (timestamp: string) =>
   new Date(timestamp).toLocaleDateString('en-US', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric' })
 
 /** Whether a payment's "Send reminder" button can be used, and why not. */
-export function sendButtonState(input: ReminderButtonInput, today: string) {
-  const timing = reminderWindowFor(input.dueDate, today)
+export function sendButtonState(
+  input: ReminderButtonInput,
+  today: string,
+  schedule: ReminderSchedule = DEFAULT_REMINDER_SCHEDULE,
+) {
+  const timing = reminderWindowFor(input.dueDate, today, schedule)
   // The type that is open today, or the one that opens next.
   const reminderType = timing.open ? timing.type : timing.nextType
   if (!input.guardianEmail) return { reminderType, disabledReason: 'No guardian email' }

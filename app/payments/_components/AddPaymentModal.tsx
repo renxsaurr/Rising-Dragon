@@ -2,11 +2,11 @@
 
 import { useId, useRef, useState, type FormEvent } from 'react'
 import { createPayment } from '@/app/payments/actions'
+import { monthlyDueDate, monthlyDueOffset } from '@/utils/billing-cycle'
 import { PAYMENT_METHODS } from '@/utils/payment-methods'
 import {
   MAX_MONTHS,
   MAX_SESSIONS,
-  MONTHLY_FEE,
   PAYMENT_TYPES,
   SESSION_FEE,
   findCoverageOverlap,
@@ -36,8 +36,6 @@ const toMoney = (value: string) => {
   return text && Number.isFinite(amount) ? amount : null
 }
 const moneyText = (amount: number) => (Math.round(amount * 100) / 100).toFixed(2)
-const defaultMonthlyFee = MONTHLY_FEE === null ? '' : moneyText(MONTHLY_FEE)
-
 const formatDayMonth = (date: string) =>
   new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' })
 
@@ -48,6 +46,7 @@ export default function AddPaymentModal({
   branchName,
   month,
   today,
+  monthlyFee,
   initialStudentId,
   onClose,
 }: {
@@ -57,6 +56,8 @@ export default function AddPaymentModal({
   month: string
   /** Today in Manila, from the server. */
   today: string
+  /** Academy-wide fee, configured once by the Head Coach. */
+  monthlyFee: number | null
   /** Preselected student. The combobox shows the name, and the info card and overlap check run as usual. */
   initialStudentId?: number
   onClose: () => void
@@ -65,8 +66,6 @@ export default function AddPaymentModal({
   const [paymentType, setPaymentType] = useState<PaymentType>('Monthly')
   const [startMonth, setStartMonth] = useState(month)
   const [months, setMonths] = useState('1')
-  const [monthlyFee, setMonthlyFee] = useState(defaultMonthlyFee)
-  const [feeEdited, setFeeEdited] = useState(false)
   const [sessions, setSessions] = useState('1')
   const [rate, setRate] = useState(moneyText(SESSION_FEE))
   // null = use the calculated amount; a string = typed by hand.
@@ -79,6 +78,7 @@ export default function AddPaymentModal({
   const [notes, setNotes] = useState('')
   // Monthly coverage from the info card, tagged with the student it belongs to.
   const [knownMonthly, setKnownMonthly] = useState<{ studentId: number; items: MonthlyCoverage[] } | null>(null)
+  const [enrollmentDate, setEnrollmentDate] = useState<string | null>(null)
   const [overlapConfirmed, setOverlapConfirmed] = useState(false)
   // A warning the server sent back (e.g. the info card was still loading when Add was pressed).
   const [serverWarning, setServerWarning] = useState<string | null>(null)
@@ -90,7 +90,6 @@ export default function AddPaymentModal({
   const studentFieldId = useId()
   const startMonthFieldId = useId()
   const monthsFieldId = useId()
-  const feeFieldId = useId()
   const sessionsFieldId = useId()
   const rateFieldId = useId()
   const amountFieldId = useId()
@@ -104,12 +103,18 @@ export default function AddPaymentModal({
   const quantity = Number(isMonthly ? months : sessions)
   const maxQuantity = isMonthly ? MAX_MONTHS : MAX_SESSIONS
   const quantityValid = Number.isInteger(quantity) && quantity >= 1 && quantity <= maxQuantity
-  const unitPrice = toMoney(isMonthly ? monthlyFee : rate)
+  const unitPrice = isMonthly ? monthlyFee : toMoney(rate)
   const calculatedAmount = quantityValid && unitPrice !== null ? moneyText(quantity * unitPrice) : ''
   const amount = amountOverride ?? calculatedAmount
-  const coverageStart = /^\d{4}-\d{2}$/.test(startMonth) ? `${startMonth}-01` : ''
-  const coverage = isMonthly && coverageStart && quantityValid ? formatCoverage(coverageStart, quantity) : null
-  const dueDate = dueDateOverride ?? (isMonthly ? coverageStart : '')
+  const selectedMonth = /^\d{4}-\d{2}$/.test(startMonth) ? startMonth : ''
+  const monthOffset = enrollmentDate && selectedMonth
+    ? (Number(selectedMonth.slice(0, 4)) - Number(enrollmentDate.slice(0, 4))) * 12 + Number(selectedMonth.slice(5, 7)) - Number(enrollmentDate.slice(5, 7))
+    : null
+  const coverageStart = isMonthly && enrollmentDate && monthOffset !== null
+    ? monthlyDueDate(enrollmentDate, monthOffset) ?? ''
+    : ''
+  const coverage = isMonthly && coverageStart && quantityValid ? formatCoverage(coverageStart, quantity, enrollmentDate ?? coverageStart) : null
+  const dueDate = isMonthly ? coverageStart : dueDateOverride ?? ''
   const student = students.find((choice) => choice.id === studentId) ?? null
 
   // Per session: the month comes from the paid date (Paid now) or the due date.
@@ -120,7 +125,7 @@ export default function AddPaymentModal({
     ? findCoverageOverlap(
         knownCoverage,
         isMonthly
-          ? { kind: 'Monthly', coverageStart, quantity: quantityValid ? quantity : 0 }
+          ? { kind: 'Monthly', coverageStart, quantity: quantityValid ? quantity : 0, enrollmentDate }
           : { kind: 'Per session', date: perSessionDate },
       )
     : null
@@ -135,14 +140,21 @@ export default function AddPaymentModal({
 
   const selectStudent = (id: number | null) => {
     setStudentId(id)
+    setEnrollmentDate(null)
     clearOverlap()
-    // A new student starts from the default fee again unless it was typed by hand.
-    if (!feeEdited) setMonthlyFee(defaultMonthlyFee)
   }
 
   const handleSummary = (id: number, summary: StudentPaymentSummary) => {
     setKnownMonthly({ studentId: id, items: summary.monthlyCoverage })
-    if (!feeEdited && summary.lastMonthlyFee !== null) setMonthlyFee(moneyText(summary.lastMonthlyFee))
+    setEnrollmentDate(summary.enrollmentDate)
+    if (summary.enrollmentDate) {
+      const latest = summary.monthlyCoverage[0]
+      const latestOffset = latest ? monthlyDueOffset(summary.enrollmentDate, latest.coverageStart) : null
+      const nextDate = latest && latestOffset !== null
+        ? monthlyDueDate(summary.enrollmentDate, latestOffset + latest.quantity)
+        : monthlyDueDate(summary.enrollmentDate, 0)
+      if (nextDate) setStartMonth(nextDate.slice(0, 7))
+    }
   }
 
   const chooseType = (type: PaymentType) => {
@@ -221,7 +233,7 @@ export default function AddPaymentModal({
       size="lg"
     >
       <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-        <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
           {/* a) Student */}
           <div>
             <label htmlFor={studentFieldId} className={LABEL}>Student</label>
@@ -263,13 +275,13 @@ export default function AddPaymentModal({
 
           {/* d) Monthly or Per session details */}
           {isMonthly ? (
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div>
-                <label htmlFor={startMonthFieldId} className={LABEL}>Start month</label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label htmlFor={startMonthFieldId} className={LABEL}>Billing month</label>
                 <input
                   id={startMonthFieldId}
                   type="month"
-                  min="2020-01"
+                  min={enrollmentDate?.slice(0, 7) ?? '2020-01'}
                   max="2100-12"
                   // shown as a plain text box in browsers without a month picker
                   pattern="\d{4}-\d{2}"
@@ -280,7 +292,7 @@ export default function AddPaymentModal({
                     clearOverlap()
                   }}
                   required
-                  disabled={saving}
+                  disabled={saving || !enrollmentDate}
                   className={INPUT}
                 />
               </div>
@@ -303,23 +315,11 @@ export default function AddPaymentModal({
                   className={INPUT}
                 />
               </div>
-              <div>
-                <label htmlFor={feeFieldId} className={LABEL}>Monthly fee (₱)</label>
-                <input
-                  id={feeFieldId}
-                  type="text"
-                  inputMode="decimal"
-                  autoComplete="off"
-                  value={monthlyFee}
-                  onChange={(event) => {
-                    setMonthlyFee(event.target.value)
-                    setFeeEdited(true)
-                  }}
-                  disabled={saving}
-                  className={INPUT}
-                />
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5">
+                <p className="text-xs font-medium text-gray-700">Academy monthly fee</p>
+                <p className="mt-1 text-sm font-semibold text-gray-950">{monthlyFee === null ? 'Not configured' : formatPeso(monthlyFee)}</p>
               </div>
-              {coverage && <p className="text-xs text-gray-500 sm:col-span-3">Covers {coverage}</p>}
+              {coverage && <p className="text-xs text-gray-700 sm:col-span-2">Due on the {formatDayMonth(coverageStart)} enrollment-date cycle · covers {coverage}</p>}
             </div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
@@ -359,7 +359,7 @@ export default function AddPaymentModal({
           <div>
             <div className="mb-1.5 flex items-center justify-between gap-2">
               <label htmlFor={amountFieldId} className={LABEL_INLINE}>Amount (₱)</label>
-              {amountOverride !== null && (
+              {amountOverride !== null && !isMonthly && (
                 <span className="text-xs text-gray-500">
                   Custom amount ·{' '}
                   <button
@@ -382,10 +382,11 @@ export default function AddPaymentModal({
                 autoComplete="off"
                 placeholder="0.00"
                 value={amount}
-                onChange={(event) => setAmountOverride(event.target.value)}
+                onChange={(event) => { if (!isMonthly) setAmountOverride(event.target.value) }}
+                readOnly={isMonthly}
                 required
                 disabled={saving}
-                className={`${INPUT} pl-7`}
+                className={`${INPUT} pl-7 ${isMonthly ? 'bg-gray-50' : ''}`}
               />
             </div>
           </div>
@@ -446,7 +447,7 @@ export default function AddPaymentModal({
                   </select>
                 </div>
               </div>
-            ) : (
+            ) : !isMonthly ? (
               <div>
                 <label htmlFor={dueDateFieldId} className={LABEL}>Due date</label>
                 <input
@@ -464,6 +465,8 @@ export default function AddPaymentModal({
                   className={INPUT}
                 />
               </div>
+            ) : (
+              <p className="text-sm text-gray-700">This monthly bill is due on the student’s scheduled billing date: <span className="font-semibold text-gray-950">{coverageStart ? formatDayMonth(coverageStart) : 'loading enrollment date…'}</span>.</p>
             )}
           </div>
 
@@ -512,13 +515,13 @@ export default function AddPaymentModal({
           )}
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-gray-200 px-6 py-4">
+        <div className="shrink-0 flex flex-wrap justify-end gap-2 border-t border-gray-200 px-4 py-3 sm:px-6 sm:py-4">
           <button type="button" onClick={onClose} disabled={saving} className={BUTTON_SECONDARY}>
             Cancel
           </button>
           <button
             type="submit"
-            disabled={saving || students.length === 0 || blockedByOverlap}
+            disabled={saving || students.length === 0 || blockedByOverlap || !quantityValid || (isMonthly && (!coverageStart || monthlyFee === null))}
             className={BUTTON_PRIMARY}
           >
             {saving ? 'Saving…' : 'Add payment'}

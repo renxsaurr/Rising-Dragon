@@ -4,12 +4,15 @@ import { revalidatePath } from "next/cache";
 
 import { createAdminClient } from "@/utils/supabase/admin";
 import { dateInTimeZone } from "@/utils/dates";
+import { coveredBillingDates, monthlyDueDate, monthlyDueOffset } from "@/utils/billing-cycle";
 import { getCurrentUser } from "@/utils/getCurrentUser";
 import { isPaymentMethod } from "@/utils/payment-methods";
 import {
   MAX_MONTHS,
   MAX_SESSIONS,
   findCoverageOverlap,
+  formatCoverage,
+  formatPeso,
   isPaymentType,
   overlapMessage,
   type PaymentType,
@@ -33,6 +36,10 @@ import {
 export type ReminderActionResult =
   | { success: true; message: string }
   | { error: string; closed?: boolean };
+
+export type MonthlyFeeActionResult =
+  | { ok: true; updatedBills: number }
+  | { error: string };
 
 async function requireHeadCoach(): Promise<
   { error: string } | { userId: number }
@@ -185,7 +192,7 @@ export type NewPaymentInput = {
   paymentType: PaymentType;
   /** Months (Monthly) or sessions (Per session). */
   quantity: number;
-  /** Monthly only: 'YYYY-MM-01'. */
+  /** Monthly only: an enrollment-anniversary cycle start, 'YYYY-MM-DD'. */
   coverageStart?: string | null;
   amount: string | number;
   paidNow: boolean;
@@ -244,8 +251,8 @@ export async function createPayment(
 
   let coverage: string | null = null;
   if (isMonthly) {
-    if (!isRealDate(coverageStart) || !coverageStart.endsWith("-01"))
-      return { error: "Choose the first month this payment covers." };
+    if (!isRealDate(coverageStart))
+      return { error: "Choose a valid monthly billing date." };
     if (!inYearRange(coverageStart))
       return { error: "The start month must be between 2020 and 2100." };
     coverage = coverageStart;
@@ -293,12 +300,35 @@ export async function createPayment(
 
   const { data: student, error: studentError } = await admin
     .from("student")
-    .select("id, is_active, first_name, middle_name, last_name")
+      .select("id, is_active, enrollment_date, first_name, middle_name, last_name")
     .eq("id", studentId)
     .maybeSingle();
   if (studentError) return { error: studentError.message };
   if (!student) return { error: "Student not found." };
+  if (isMonthly) {
+    const { data: setting, error: settingError } = await admin
+      .from("payment_settings")
+      .select("monthly_fee")
+      .eq("singleton", true)
+      .maybeSingle();
+    if (settingError) return { error: settingError.message };
+    const monthlyFee = setting?.monthly_fee == null ? null : Number(setting.monthly_fee);
+    if (!monthlyFee || !Number.isFinite(monthlyFee)) {
+      return { error: "Set the academy monthly fee in Payment settings first." };
+    }
+    const expectedAmountCents = Math.round(monthlyFee * quantity * 100);
+    if (Math.round(parsed.amount * 100) !== expectedAmountCents) {
+      return { error: `Monthly payments must use the current academy rate of ${formatPeso(monthlyFee * quantity)}.` };
+    }
+  }
   if (!student.is_active) return { error: "This student is inactive." };
+  const monthlyOffset = isMonthly && student.enrollment_date ? monthlyDueOffset(student.enrollment_date, coverage!) : null;
+  if (isMonthly && (monthlyOffset === null || monthlyOffset < 0)) {
+    return { error: "The monthly payment date must match this student's enrollment-date billing cycle." };
+  }
+  if (isMonthly && !paidNow && (quantity !== 1 || dueDate !== coverage)) {
+    return { error: "An unpaid monthly bill must cover one cycle and use its scheduled due date." };
+  }
 
   // Only two Unpaid payments on the same due date are duplicates.
   // Paid records are never blocked: a partial payment is its own record.
@@ -326,7 +356,7 @@ export async function createPayment(
     const overlap = findCoverageOverlap(
       existing.data,
       isMonthly && coverage
-        ? { kind: "Monthly", coverageStart: coverage, quantity }
+        ? { kind: "Monthly", coverageStart: coverage, quantity, enrollmentDate: student.enrollment_date }
         : { kind: "Per session", date: record.due_date },
     );
     if (overlap) {
@@ -359,6 +389,54 @@ export async function createPayment(
 
   revalidatePath("/payments");
   return { ok: true, paymentId: Number(created.id) };
+}
+
+/** Changes the academy-wide monthly rate and updates unpaid monthly bills atomically. */
+export async function updateAcademyMonthlyFee(value: number): Promise<MonthlyFeeActionResult> {
+  const auth = await requireHeadCoach();
+  if ("error" in auth) return auth;
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0 || value > 1_000_000 || Math.round(value * 100) !== value * 100) {
+    return { error: "Enter a positive fee with no more than two decimal places." };
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc("set_academy_monthly_fee", {
+    p_monthly_fee: value,
+    p_updated_by: auth.userId,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/payments");
+  revalidatePath("/settings");
+  return { ok: true, updatedBills: Number(data ?? 0) };
+}
+
+export async function updateReminderSchedule(input: {
+  beforeDueDays: number;
+  afterDueDays: number;
+}): Promise<{ ok: true } | { error: string }> {
+  const auth = await requireHeadCoach();
+  if ("error" in auth) return auth;
+  if (!input || !Number.isInteger(input.beforeDueDays) || !Number.isInteger(input.afterDueDays) ||
+    input.beforeDueDays < 1 || input.beforeDueDays > 30 || input.afterDueDays < 1 || input.afterDueDays > 30) {
+    return { error: "Choose reminder intervals from 1 to 30 days." };
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin.from("payment_settings")
+    .update({
+      reminder_before_due_days: input.beforeDueDays,
+      reminder_after_due_days: input.afterDueDays,
+      updated_at: new Date().toISOString(),
+      updated_by: auth.userId,
+    })
+    .eq("singleton", true)
+    .select("singleton")
+    .maybeSingle();
+  if (error) return { error: error.message };
+  if (!data) return { error: "Payment settings are missing. Run the shared payment settings migration first." };
+  revalidatePath("/payments");
+  revalidatePath("/settings");
+  return { ok: true };
 }
 
 export async function getStudentPaymentSummary(
@@ -415,6 +493,144 @@ export async function markPaymentPaid(input: {
     return { error: payment ? ALREADY_PAID : "Payment not found." };
   }
 
+  revalidatePath("/payments");
+  return { ok: true };
+}
+
+export type AdvanceBillOption = {
+  dueDate: string;
+  coverage: string;
+  amount: number | null;
+  status: "Paid" | "Unpaid" | "Upcoming";
+};
+
+/** Upcoming billing cycles for the Head Coach's advance-payment picker. */
+export async function getAdvanceBillOptions(studentId: number): Promise<{ options: AdvanceBillOption[] } | { error: string }> {
+  const auth = await requireHeadCoach();
+  if ("error" in auth) return auth;
+  if (!isValidId(studentId)) return { error: "Choose a student." };
+
+  const admin = createAdminClient();
+  const [studentResult, paymentsResult] = await Promise.all([
+    admin.from("student").select("id, enrollment_date, is_active").eq("id", studentId).maybeSingle(),
+    admin.from("payment")
+      .select("id, amount, due_date, status, quantity, coverage_start")
+      .eq("student_id", studentId)
+      .eq("payment_type", "Monthly")
+      .not("coverage_start", "is", null)
+      .order("due_date", { ascending: false })
+      .order("id", { ascending: false }),
+  ]);
+  if (studentResult.error) return { error: studentResult.error.message };
+  if (paymentsResult.error) return { error: paymentsResult.error.message };
+  const student = studentResult.data;
+  if (!student || !student.is_active) return { error: "Active student not found." };
+  if (!student.enrollment_date) return { error: "This student has no enrollment date for monthly billing." };
+
+  const payments = (paymentsResult.data ?? []) as {
+    id: number; amount: number | string; due_date: string; status: "Paid" | "Unpaid"; quantity: number | null; coverage_start: string | null;
+  }[];
+  const { data: setting, error: settingError } = await admin
+    .from("payment_settings")
+    .select("monthly_fee")
+    .eq("singleton", true)
+    .maybeSingle();
+  if (settingError) return { error: settingError.message };
+  const academyFee = setting?.monthly_fee == null ? null : Number(setting.monthly_fee);
+  const today = dateInTimeZone();
+  const todayDate = new Date(`${today}T00:00:00Z`);
+  const anchorDate = new Date(`${student.enrollment_date}T00:00:00Z`);
+  let offset = Math.max(0, (todayDate.getUTCFullYear() - anchorDate.getUTCFullYear()) * 12 + todayDate.getUTCMonth() - anchorDate.getUTCMonth() - 1);
+  const monthlyFee = academyFee && Number.isFinite(academyFee) ? academyFee : null;
+  const options: AdvanceBillOption[] = [];
+  for (let count = 0; count < 8 && options.length < 6; count += 1, offset += 1) {
+    const dueDate = monthlyDueDate(student.enrollment_date, offset);
+    if (!dueDate || dueDate < today) continue;
+    const covering = payments.find((payment) => payment.coverage_start && payment.quantity &&
+      coveredBillingDates(payment.coverage_start, Number(payment.quantity), student.enrollment_date).includes(dueDate));
+    options.push({
+      dueDate,
+      coverage: formatCoverage(dueDate, 1, student.enrollment_date),
+      amount: covering ? Number(covering.amount) / Number(covering.quantity ?? 1) : monthlyFee,
+      status: covering?.status ?? "Upcoming",
+    });
+  }
+  return { options };
+}
+
+/** Records an advance against the exact upcoming installment, or settles its existing bill. */
+export async function recordAdvancePayment(input: {
+  studentId: number;
+  dueDate: string;
+  paidDate: string;
+  method: string;
+}): Promise<PaymentActionResult> {
+  const auth = await requireHeadCoach();
+  if ("error" in auth) return auth;
+  if (!input || !isValidId(input.studentId) || !isRealDate(input.dueDate)) return { error: "Choose a valid upcoming bill." };
+  if (!isRealDate(input.paidDate) || input.paidDate > dateInTimeZone()) return { error: "Enter a valid payment date no later than today." };
+  if (!isPaymentMethod(input.method)) return { error: "Choose how the payment was made." };
+  if (input.dueDate < dateInTimeZone()) return { error: "Advance payment can only be recorded for a current or future bill." };
+
+  const admin = createAdminClient();
+  const [studentResult, paymentsResult] = await Promise.all([
+    admin.from("student").select("id, enrollment_date, is_active").eq("id", input.studentId).maybeSingle(),
+    admin.from("payment")
+      .select("id, amount, due_date, status, quantity, coverage_start")
+      .eq("student_id", input.studentId)
+      .eq("payment_type", "Monthly")
+      .not("coverage_start", "is", null)
+      .order("due_date", { ascending: false })
+      .order("id", { ascending: false }),
+  ]);
+  if (studentResult.error) return { error: studentResult.error.message };
+  if (paymentsResult.error) return { error: paymentsResult.error.message };
+  const student = studentResult.data;
+  if (!student?.is_active || !student.enrollment_date) return { error: "Active student with an enrollment date not found." };
+  const dueOffset = monthlyDueOffset(student.enrollment_date, input.dueDate);
+  if (dueOffset === null || dueOffset < 0) return { error: "That date is not on this student's monthly billing schedule." };
+
+  const payments = (paymentsResult.data ?? []) as {
+    id: number; amount: number | string; due_date: string; status: "Paid" | "Unpaid"; quantity: number | null; coverage_start: string | null;
+  }[];
+  const { data: setting, error: settingError } = await admin
+    .from("payment_settings")
+    .select("monthly_fee")
+    .eq("singleton", true)
+    .maybeSingle();
+  if (settingError) return { error: settingError.message };
+  const monthlyFee = setting?.monthly_fee == null ? null : Number(setting.monthly_fee);
+  if (!monthlyFee || !Number.isFinite(monthlyFee)) return { error: "Set the academy monthly fee in Payment settings first." };
+  const covering = payments.find((payment) => payment.coverage_start && payment.quantity &&
+    coveredBillingDates(payment.coverage_start, Number(payment.quantity), student.enrollment_date).includes(input.dueDate));
+  if (covering?.status === "Paid") return { error: "This billing period has already been paid." };
+  if (covering?.status === "Unpaid") {
+    if (covering.coverage_start !== input.dueDate || Number(covering.quantity) !== 1) {
+      return { error: "This date is part of an existing multi-period bill. Mark that bill paid from the payment records." };
+    }
+    const { data, error } = await admin.from("payment")
+      .update({ status: "Paid", paid_date: input.paidDate, method: input.method })
+      .eq("id", covering.id)
+      .eq("status", "Unpaid")
+      .select("id");
+    if (error) return { error: error.message };
+    if (!data?.length) return { error: "This bill changed while you were recording the payment. Refresh and try again." };
+  } else {
+    const amount = monthlyFee;
+    const { error } = await admin.from("payment").insert({
+      student_id: input.studentId,
+      amount,
+      status: "Paid",
+      due_date: input.dueDate,
+      paid_date: input.paidDate,
+      method: input.method,
+      payment_type: "Monthly",
+      quantity: 1,
+      coverage_start: input.dueDate,
+      notes: "Advance payment",
+    });
+    if (error) return { error: error.message };
+  }
   revalidatePath("/payments");
   return { ok: true };
 }

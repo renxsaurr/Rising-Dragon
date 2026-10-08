@@ -113,7 +113,7 @@ export default function ReminderReviewModal({ target, onClose }: { target: Remin
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 text-left"
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/50 px-3 py-3 text-left sm:flex sm:items-center sm:justify-center sm:px-4 sm:py-4"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) close()
       }}
@@ -124,9 +124,9 @@ export default function ReminderReviewModal({ target, onClose }: { target: Remin
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white outline-none"
+        className="mx-auto flex max-h-[calc(100dvh-1.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white outline-none sm:max-h-[calc(100dvh-2rem)]"
       >
-        <div className="border-b border-gray-200 px-6 py-4">
+        <div className="shrink-0 border-b border-gray-200 px-4 py-3 sm:px-6 sm:py-4">
           <h2 id={titleId} className="text-[17px] font-semibold text-gray-950">
             {target.kind === 'payment' ? 'Review payment reminder' : 'Review reminder retry'}
           </h2>
@@ -135,7 +135,7 @@ export default function ReminderReviewModal({ target, onClose }: { target: Remin
           </p>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
           {notice && (
             <p
               role={notice.tone === 'error' ? 'alert' : 'status'}
@@ -167,7 +167,7 @@ export default function ReminderReviewModal({ target, onClose }: { target: Remin
                   title="Email preview"
                   sandbox=""
                   srcDoc={preview.html}
-                  className="h-[420px] w-full rounded-lg border border-gray-200 bg-gray-100"
+                  className="h-[min(360px,42dvh)] w-full rounded-lg border border-gray-200 bg-white sm:h-[420px]"
                 />
                 {/* The same subject and text the guardian gets, from the same server function. */}
                 <details className="mt-4 rounded-lg border border-gray-200">
@@ -190,7 +190,7 @@ export default function ReminderReviewModal({ target, onClose }: { target: Remin
           )}
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-gray-200 px-6 py-4">
+        <div className="shrink-0 flex flex-wrap justify-end gap-2 border-t border-gray-200 px-4 py-3 sm:px-6 sm:py-4">
           <button
             type="button"
             onClick={close}

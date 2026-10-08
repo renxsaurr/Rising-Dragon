@@ -46,11 +46,59 @@
   .system-data-table tbody tr:hover {
     @apply bg-gray-50;
   }
+  .branch-report-table tbody tr:not(.branch-report-total-row),
+  .branch-report-table tbody tr:not(.branch-report-total-row):hover,
+  .branch-report-table tbody tr.branch-report-total-row,
+  .branch-report-table tbody tr.branch-report-total-row:hover,
+  .branch-report-table thead,
+  .branch-report-table th,
+  .branch-report-table td {
+    background-color: #fff;
+    transition: none;
+  }
+  table.branch-report-table thead th {
+    color: #000;
+  }
+
+  .payment-records-table tbody tr,
+  .payment-records-table tbody tr:hover,
+  .payment-records-table thead,
+  .payment-records-table th,
+  .payment-records-table td {
+    background-color: #fff;
+    transition: none;
+  }
+
+  table.payment-records-table thead th {
+    color: #000;
+  }
 }
 
 table.system-data-table thead th {
   color: #4b5563;
   background-color: #f9fafb;
+}
+
+table.branch-report-table,
+table.branch-report-table thead,
+table.branch-report-table thead th,
+table.branch-report-table tbody tr,
+table.branch-report-table tbody tr:hover,
+table.branch-report-table td {
+  background-color: #fff;
+}
+
+table.payment-records-table,
+table.payment-records-table thead,
+table.payment-records-table thead th,
+table.payment-records-table tbody tr,
+table.payment-records-table tbody tr:hover,
+table.payment-records-table td {
+  background-color: #fff;
+}
+
+table.payment-records-table thead th {
+  color: #000;
 }
 
 @media print {

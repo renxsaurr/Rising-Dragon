@@ -60,7 +60,7 @@ export default function MarkPaidModal({
   return (
     <ModalShell title="Mark as paid" busy={saving} onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-        <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
           <dl className="grid grid-cols-1 gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 sm:grid-cols-3">
             <Detail label="Student" value={payment.studentName} />
             <Detail label="Amount" value={payment.amount} />
@@ -108,7 +108,7 @@ export default function MarkPaidModal({
           )}
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-gray-200 px-6 py-4">
+        <div className="shrink-0 flex flex-wrap justify-end gap-2 border-t border-gray-200 px-4 py-3 sm:px-6 sm:py-4">
           <button type="button" onClick={onClose} disabled={saving} className={BUTTON_SECONDARY}>
             Cancel
           </button>

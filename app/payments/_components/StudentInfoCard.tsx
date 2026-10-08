@@ -20,7 +20,7 @@ function paymentLine(payment: StudentPayment) {
     : `Due ${formatDate(payment.dueDate)} · Unpaid`
   const detail =
     payment.paymentType === 'Monthly' && payment.coverageStart && payment.quantity
-      ? `Monthly ${formatCoverage(payment.coverageStart, payment.quantity)}`
+      ? `Monthly ${formatCoverage(payment.coverageStart, payment.quantity, payment.enrollmentDate ?? payment.coverageStart)}`
       : payment.paymentType === 'Per session' && payment.quantity
         ? `${payment.quantity} session${payment.quantity === 1 ? '' : 's'}`
         : null

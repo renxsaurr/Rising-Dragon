@@ -46,6 +46,7 @@ export type PaymentRecord = {
   paymentType: PaymentType | null
   quantity: number | null
   coverageStart: string | null
+  enrollmentDate: string | null
   notes: string | null
   reminders: ReminderSummary[]
 }
@@ -142,6 +143,7 @@ type RawStudent = {
   branch_id: number | null
   guardian_email: string | null
   is_active: boolean
+  enrollment_date: string | null
 }
 
 type RawPayment = {
@@ -173,7 +175,7 @@ type RawOlderPayment = {
 
 // payment has only one link to student, so no foreign key hint is needed.
 const PAYMENT_SELECT =
-  'id, amount, due_date, paid_date, method, status, payment_type, quantity, coverage_start, notes, student:student(id, first_name, middle_name, last_name, belt_level, branch_id, guardian_email, is_active)'
+  'id, amount, due_date, paid_date, method, status, payment_type, quantity, coverage_start, notes, student:student(id, first_name, middle_name, last_name, belt_level, branch_id, guardian_email, is_active, enrollment_date)'
 
 const one = <T,>(value: T | T[] | null | undefined) => (Array.isArray(value) ? (value[0] ?? null) : (value ?? null))
 
@@ -250,7 +252,7 @@ const laterMonth = (a: string, b: string) => (a > b ? a : b)
 const earlierMonth = (a: string, b: string) => (a < b ? a : b)
 
 type PaidDue = { studentId: number; dueDate: string }
-type PaidCoverage = { studentId: number; coverageStart: string; quantity: number }
+type PaidCoverage = { studentId: number; coverageStart: string; quantity: number; enrollmentDate: string | null }
 
 /**
  * The one "paid for the month" rule, used by "Not paid yet" and by the missed-months box:
@@ -262,7 +264,7 @@ function paidStudentsByMonth(months: string[], paidDue: PaidDue[], paidCoverage:
   const paid = new Map(months.map((month) => [month, new Set<number>()]))
   for (const payment of paidDue) paid.get(payment.dueDate.slice(0, 7))?.add(payment.studentId)
   for (const payment of paidCoverage) {
-    for (const month of coveredMonths(payment.coverageStart, payment.quantity)) paid.get(month)?.add(payment.studentId)
+    for (const month of coveredMonths(payment.coverageStart, payment.quantity, payment.enrollmentDate ?? payment.coverageStart)) paid.get(month)?.add(payment.studentId)
   }
   return paid
 }
@@ -384,6 +386,7 @@ export async function loadPaymentMonth(admin: Admin, month: string, today: strin
         paymentType: payment.payment_type,
         quantity: payment.quantity == null ? null : Number(payment.quantity),
         coverageStart: payment.coverage_start,
+        enrollmentDate: student?.enrollment_date ?? null,
         notes: payment.notes?.trim() || null,
         reminders: reminders.get(Number(payment.id)) ?? [],
       }
@@ -435,6 +438,7 @@ export async function loadPaymentMonth(admin: Admin, month: string, today: strin
         studentId: Number(payment.student_id),
         coverageStart: payment.coverage_start,
         quantity: Number(payment.quantity),
+        enrollmentDate: students.find((student) => Number(student.id) === Number(payment.student_id))?.enrollment_date ?? null,
       }))
     const paidThisMonth: PaidDue[] = rows
       .filter((row) => row.status === 'Paid' && row.studentId !== null)
@@ -454,7 +458,8 @@ export async function loadPaymentMonth(admin: Admin, month: string, today: strin
     }
     for (const payment of nearbyMonthly) {
       if (payment.status !== 'Unpaid') continue
-      if (!coveredMonths(payment.coverage_start, Number(payment.quantity)).includes(month)) continue
+      const enrollmentDate = students.find((student) => Number(student.id) === Number(payment.student_id))?.enrollment_date ?? payment.coverage_start
+      if (!coveredMonths(payment.coverage_start, Number(payment.quantity), enrollmentDate).includes(month)) continue
       keepEarliest(Number(payment.student_id), { id: Number(payment.id), dueDate: payment.due_date, amount: Number(payment.amount) })
     }
 
@@ -553,11 +558,13 @@ export type StudentPayment = {
   paymentType: PaymentType | null
   quantity: number | null
   coverageStart: string | null
+  enrollmentDate: string | null
   method: string | null
 }
 
 export type StudentPaymentSummary = {
   guardianName: string | null
+  enrollmentDate: string | null
   /** Newest due date first, at most 5. */
   payments: StudentPayment[]
   /** amount ÷ months of the latest Monthly payment, to prefill the Monthly fee. */
@@ -590,22 +597,28 @@ export async function loadMonthlyCoverage(
   admin: Admin,
   studentId: number,
 ): Promise<{ data: MonthlyCoverage[]; error: null } | { data: null; error: string }> {
-  const { data, error } = await admin.from('payment')
-    .select('amount, quantity, coverage_start, status')
-    .eq('student_id', studentId)
-    .eq('payment_type', 'Monthly')
-    .not('coverage_start', 'is', null)
-    .order('due_date', { ascending: false })
-    .order('id', { ascending: false })
-  if (error) return { data: null, error: error.message }
+  const [studentResult, paymentResult] = await Promise.all([
+    admin.from('student').select('enrollment_date').eq('id', studentId).maybeSingle(),
+    admin.from('payment')
+      .select('amount, quantity, coverage_start, status')
+      .eq('student_id', studentId)
+      .eq('payment_type', 'Monthly')
+      .not('coverage_start', 'is', null)
+      .order('due_date', { ascending: false })
+      .order('id', { ascending: false }),
+  ])
+  if (studentResult.error) return { data: null, error: studentResult.error.message }
+  if (paymentResult.error) return { data: null, error: paymentResult.error.message }
+  const enrollmentDate = (studentResult.data?.enrollment_date as string | null) ?? null
   return {
-    data: ((data ?? []) as RawMonthlyCoverage[])
+    data: ((paymentResult.data ?? []) as RawMonthlyCoverage[])
       .filter((row) => row.coverage_start && row.quantity)
       .map((row) => ({
         coverageStart: row.coverage_start as string,
         quantity: Number(row.quantity),
         status: row.status,
         amount: Number(row.amount),
+        enrollmentDate,
       })),
     error: null,
   }
@@ -617,7 +630,7 @@ export async function loadStudentPaymentSummary(
   studentId: number,
 ): Promise<{ data: StudentPaymentSummary; error: null } | { data: null; error: string }> {
   const [studentResult, recentResult, coverageResult] = await Promise.all([
-    admin.from('student').select('guardian_name').eq('id', studentId).maybeSingle(),
+    admin.from('student').select('guardian_name, enrollment_date').eq('id', studentId).maybeSingle(),
     admin.from('payment')
       .select('id, amount, due_date, paid_date, method, status, payment_type, quantity, coverage_start')
       .eq('student_id', studentId)
@@ -629,13 +642,15 @@ export async function loadStudentPaymentSummary(
   const error = studentResult.error?.message ?? recentResult.error?.message ?? coverageResult.error
   if (error) return { data: null, error }
   if (!studentResult.data) return { data: null, error: 'Student not found.' }
+  const student = studentResult.data
 
   const monthlyCoverage = coverageResult.data ?? []
   // The list is newest first, so the first one is the latest Monthly payment.
   const latestMonthly = monthlyCoverage[0]
   return {
     data: {
-      guardianName: (studentResult.data.guardian_name as string | null)?.trim() || null,
+      guardianName: (student.guardian_name as string | null)?.trim() || null,
+      enrollmentDate: (student.enrollment_date as string | null) ?? null,
       payments: ((recentResult.data ?? []) as RawStudentPayment[]).map((payment) => ({
         id: Number(payment.id),
         dueDate: payment.due_date,
@@ -645,6 +660,7 @@ export async function loadStudentPaymentSummary(
         paymentType: payment.payment_type,
         quantity: payment.quantity == null ? null : Number(payment.quantity),
         coverageStart: payment.coverage_start,
+        enrollmentDate: (student.enrollment_date as string | null) ?? null,
         method: payment.method,
       })),
       lastMonthlyFee: latestMonthly ? roundMoney(latestMonthly.amount / latestMonthly.quantity) : null,

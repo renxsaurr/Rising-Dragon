@@ -1,10 +1,8 @@
 // Fees and limits for recording payments. No server-only imports: the Add payment popup uses these too.
+import { coveredBillingDates, formatBillingCoverage } from '@/utils/billing-cycle'
 
 /** Fee for one class session, in pesos. */
 export const SESSION_FEE = 150
-
-/** Monthly fee in pesos. null until the owner confirms the amount, so the form starts empty. */
-export const MONTHLY_FEE: number | null = null
 
 export const PAYMENT_TYPES = ['Monthly', 'Per session'] as const
 
@@ -16,21 +14,9 @@ export const isPaymentType = (value: unknown): value is PaymentType =>
 export const MAX_MONTHS = 12
 export const MAX_SESSIONS = 100
 
-const monthStart = (date: string, add: number) => {
-  const [year, month] = date.split('-').map(Number)
-  return new Date(Date.UTC(year, month - 1 + add, 1))
-}
-
-const monthLabel = (date: Date, withYear: boolean) =>
-  date.toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', ...(withYear ? { year: 'numeric' } : {}) })
-
-/** Months covered: "Oct 2026", "Oct – Nov 2026", or "Dec 2026 – Jan 2027" when the years differ. */
-export function formatCoverage(coverageStart: string, months: number) {
-  const first = monthStart(coverageStart, 0)
-  if (months <= 1) return monthLabel(first, true)
-  const last = monthStart(coverageStart, months - 1)
-  const sameYear = first.getUTCFullYear() === last.getUTCFullYear()
-  return `${monthLabel(first, !sameYear)} – ${monthLabel(last, true)}`
+/** Enrollment-anniversary coverage, e.g. "Apr 5 – May 4, 2027". */
+export function formatCoverage(coverageStart: string, months: number, enrollmentDate = coverageStart) {
+  return formatBillingCoverage(coverageStart, months, enrollmentDate)
 }
 
 /** "₱1,500.00", the same format the server's formatAmount uses. */
@@ -43,11 +29,12 @@ export type MonthlyCoverage = {
   quantity: number
   status: 'Paid' | 'Unpaid'
   amount: number
+  enrollmentDate?: string | null
 }
 
 /** What the new payment would cover: months for Monthly, one date's month for Per session. */
 export type CoverageCheck =
-  | { kind: 'Monthly'; coverageStart: string; quantity: number }
+  | { kind: 'Monthly'; coverageStart: string; quantity: number; enrollmentDate?: string | null }
   | { kind: 'Per session'; date: string }
 
 export type CoverageOverlap = {
@@ -57,10 +44,9 @@ export type CoverageOverlap = {
   payments: MonthlyCoverage[]
 }
 
-/** 'YYYY-MM' keys for every month from coverageStart, e.g. ('2026-10-01', 2) → ['2026-10', '2026-11']. */
-export function coveredMonths(coverageStart: string, months: number) {
-  if (!/^\d{4}-\d{2}/.test(coverageStart) || !Number.isInteger(months) || months < 1) return []
-  return Array.from({ length: months }, (_, index) => monthStart(coverageStart, index).toISOString().slice(0, 7))
+/** Month keys of the installment due dates represented by a monthly record. */
+export function coveredMonths(coverageStart: string, months: number, enrollmentDate = coverageStart) {
+  return coveredBillingDates(coverageStart, months, enrollmentDate).map((date) => date.slice(0, 7))
 }
 
 /**
@@ -70,7 +56,7 @@ export function coveredMonths(coverageStart: string, months: number) {
 export function findCoverageOverlap(existing: MonthlyCoverage[], next: CoverageCheck): CoverageOverlap | null {
   const wanted =
     next.kind === 'Monthly'
-      ? coveredMonths(next.coverageStart, next.quantity)
+      ? coveredMonths(next.coverageStart, next.quantity, next.enrollmentDate ?? next.coverageStart)
       : /^\d{4}-\d{2}-\d{2}$/.test(next.date) ? [next.date.slice(0, 7)] : []
   if (wanted.length === 0) return null
 
@@ -78,7 +64,7 @@ export function findCoverageOverlap(existing: MonthlyCoverage[], next: CoverageC
   const months = new Set<string>()
   const payments: MonthlyCoverage[] = []
   for (const payment of existing) {
-    const shared = coveredMonths(payment.coverageStart, payment.quantity).filter((month) => wantedMonths.has(month))
+    const shared = coveredMonths(payment.coverageStart, payment.quantity, payment.enrollmentDate ?? payment.coverageStart).filter((month) => wantedMonths.has(month))
     if (shared.length) {
       payments.push(payment)
       for (const month of shared) months.add(month)
@@ -91,10 +77,10 @@ export function findCoverageOverlap(existing: MonthlyCoverage[], next: CoverageC
 export function overlapMessage(overlap: CoverageOverlap, type: PaymentType, studentName?: string) {
   if (type === 'Monthly') {
     const covered = overlap.payments
-      .map((payment) => `${formatCoverage(payment.coverageStart, payment.quantity)} (${payment.status} ${formatPeso(payment.amount)})`)
+      .map((payment) => `${formatCoverage(payment.coverageStart, payment.quantity, payment.enrollmentDate ?? payment.coverageStart)} (${payment.status} ${formatPeso(payment.amount)})`)
       .join('; ')
     return `Already covered: ${covered}. This might be a duplicate.`
   }
-  const month = formatCoverage(`${overlap.months[0]}-01`, 1)
+  const month = new Date(`${overlap.months[0]}-01T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'long', year: 'numeric' })
   return `${studentName || 'This student'} is covered by a Monthly payment for ${month}. Per-session payments are usually not needed while monthly is active.`
 }

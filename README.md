@@ -30,15 +30,15 @@ Recurring classes create and reconcile dated sessions for the next four weeks wh
 
 ### Payment reminder email setup
 
-Payment reminders are sent manually by the Head Coach after reviewing the recipient and message preview. The app sends them through Gmail SMTP; it does not send payment reminders on a schedule.
+Monthly billing follows each student's enrollment date. The Head Coach records the first payment when the student enrolls; the daily Vercel job creates the next monthly unpaid bill on that same day-of-month (using the last day in shorter months). The job emails the guardian through Gmail SMTP on the due date, plus the before/after offsets configured by the Head Coach in Settings, if the bill is still unpaid. Paid and inactive student records are skipped. The Head Coach can also record an advance payment against a specific upcoming monthly bill, or manually send/retry a reminder from the payment page.
 
 1. Create or choose the academy Gmail account and enable Google 2-Step Verification.
 2. Create a Google App Password for this app. Do not put the normal Gmail password in the project.
 3. Copy `.env.example` to `.env.local` and fill in `GMAIL_USER` and `GMAIL_APP_PASSWORD`. Optionally set `REMINDER_FROM_NAME` and `REMINDER_REPLY_TO`.
 4. Add the same server-only variables to the deployment environment (for example, Vercel Project Settings → Environment Variables). Never prefix them with `NEXT_PUBLIC_` or commit the values.
-5. Apply `20261005_payment_reminder_automation.sql`, `20261007_payment_record_details.sql`, and `20261008150000_payment_method_categories.sql` from `supabase/migrations/` before using reminder history and the standardized payment methods.
+5. Apply `20261005_payment_reminder_automation.sql`, `20261007_payment_record_details.sql`, `20261008150000_payment_method_categories.sql`, and `20261008170000_enrollment_anniversary_billing.sql` from `supabase/migrations/` before using automated monthly billing and reminders.
 
-The Head Coach can send at most one reminder of each type per payment: before the due date, on the due date, and after the due date. A guardian email must be saved on the student record. Sending a reminder never changes the payment status.
+The database records at most one reminder of each type per payment: before the due date, on the due date, and after the due date. A guardian email must be saved on the student record. Sending a reminder never changes the payment status. The scheduled job uses the existing `CRON_SECRET`; Gmail credentials must be configured in the deployment environment as well as local development.
 
 The provided schema extract does not show the custom enum declarations. Confirm that its role values include `head_coach` and `assistant_coach`, schedule values include `Scheduled`, `Cancelled`, and `Completed`, availability values include `Available` and `Unavailable`, and attendance values include `Present` and `Absent`.
 

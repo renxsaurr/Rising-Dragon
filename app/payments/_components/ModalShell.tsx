@@ -78,7 +78,7 @@ export default function ModalShell({
   }, [])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 text-left">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 px-3 py-3 text-left sm:flex sm:items-center sm:justify-center sm:px-4 sm:py-4">
       <div
         ref={dialogRef}
         role="dialog"
@@ -86,12 +86,12 @@ export default function ModalShell({
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
-        className={`flex max-h-[90vh] w-full ${size === 'lg' ? 'max-w-lg' : 'max-w-md'} flex-col overflow-hidden rounded-2xl bg-white outline-none`}
+        className={`mx-auto flex max-h-[calc(100dvh-1.5rem)] w-full ${size === 'lg' ? 'max-w-lg' : 'max-w-md'} flex-col overflow-hidden rounded-2xl bg-white outline-none sm:max-h-[calc(100dvh-2rem)]`}
       >
-        <div className="border-b border-gray-200 px-6 py-4">
-          <h2 id={titleId} className="text-[17px] font-semibold text-gray-950">{title}</h2>
+        <div className="shrink-0 border-b border-gray-200 px-4 py-3 sm:px-6 sm:py-4">
+          <h2 id={titleId} className="break-words text-[17px] font-semibold text-gray-950">{title}</h2>
           {description && (
-            <p id={descriptionId} className="mt-0.5 text-[13px] text-gray-500">{description}</p>
+            <p id={descriptionId} className="mt-0.5 break-words text-[13px] text-gray-700">{description}</p>
           )}
         </div>
         {children}

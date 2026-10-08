@@ -59,7 +59,7 @@ function Detail({ label, children, wide = false }: { label: string; children: Re
 function ReminderDetailsModal({ row, onClose }: { row: HistoryRow; onClose: () => void }) {
   return (
     <ModalShell title={`${row.reminderType} reminder`} description={`${row.studentName} · ${row.branchName}`} busy={false} onClose={onClose}>
-      <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
         <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
           <Detail label="Status"><StatusBadge status={row.status} /></Detail>
           <Detail label="Type">{row.reminderType}</Detail>
@@ -92,7 +92,7 @@ function ReminderDetailsModal({ row, onClose }: { row: HistoryRow; onClose: () =
             </div>
           ))}
       </div>
-      <div className="flex justify-end border-t border-gray-200 px-6 py-4">
+      <div className="shrink-0 flex justify-end border-t border-gray-200 px-4 py-3 sm:px-6 sm:py-4">
         <button type="button" onClick={onClose} className={BUTTON_SECONDARY}>Close</button>
       </div>
     </ModalShell>
@@ -159,7 +159,7 @@ export default function ReminderHistoryTable({ rows }: { rows: HistoryRow[] }) {
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-700">{row.reminderType}</td>
                   <td className="px-3 py-3">
-                    <p className="max-w-[220px] truncate text-sm text-gray-700" title={row.recipientEmail}>{row.recipientEmail}</p>
+                    <p className="max-w-[220px] break-all text-sm text-gray-800">{row.recipientEmail}</p>
                   </td>
                   <td className="px-3 py-3"><StatusBadge status={row.status} /></td>
                   {/* Clicks here (Retry) must not also open the details. */}

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import DashboardShell from "@/components/DashboardShell";
 import AddPaymentButton from "./_components/AddPaymentButton";
+import AdvancePaymentButton from "./_components/AdvancePaymentButton";
 import BranchCards from "./_components/BranchCards";
 import MissedMonthsList from "./_components/MissedMonthsList";
 import MonthPicker from "./_components/MonthPicker";
@@ -25,6 +26,7 @@ import { TRACKING_START_MONTH } from "@/utils/academy-settings";
 import { formatBeltLabel } from "@/utils/belts";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { dateInTimeZone } from "@/utils/dates";
+import type { ReminderSchedule } from "@/utils/reminder-timing";
 import { failStuckReminders, formatAmount } from "@/utils/payment-reminders";
 import {
   formatMonth,
@@ -82,7 +84,7 @@ export default async function PaymentsPage({
   // There is no daily job any more, so clean up interrupted sends whenever the page loads.
   const stuckError = await failStuckReminders(admin);
 
-  const [failedResult, monthResult, historyResult] =
+  const [failedResult, monthResult, historyResult, settingsResult] =
     await Promise.all([
     // The main view only needs the number of failed reminders, for the red banner.
     showHistory ? null : countFailedReminders(admin),
@@ -99,12 +101,14 @@ export default async function PaymentsPage({
           hpage: param("hpage"),
         })
       : null,
+    admin.from("payment_settings").select("monthly_fee, reminder_before_due_days, reminder_after_due_days").eq("singleton", true).maybeSingle(),
   ]);
 
   const loadError =
     failedResult?.error ??
     monthResult?.error ??
-    historyResult?.error;
+    historyResult?.error ??
+    settingsResult.error?.message;
   if (loadError) {
     return (
       <DashboardShell title="Payments" currentUser={currentUser}>
@@ -116,6 +120,11 @@ export default async function PaymentsPage({
   }
 
   const failedCount = failedResult?.count ?? 0;
+  const monthlyFee = settingsResult.data?.monthly_fee == null ? null : Number(settingsResult.data.monthly_fee);
+  const reminderSchedule: ReminderSchedule = {
+    beforeDueDays: Number(settingsResult.data?.reminder_before_due_days ?? 3),
+    afterDueDays: Number(settingsResult.data?.reminder_after_due_days ?? 3),
+  };
 
   const monthData = monthResult?.data ?? null;
   const selected =
@@ -123,27 +132,14 @@ export default async function PaymentsPage({
     monthData?.branches[0];
   const query = { month, branch: selected?.key ?? requestedBranch, filter };
 
-  const intro = (
-    <>
-      <p className="mb-4 text-[13px] text-gray-500">
-        The Head Coach reviews and sends each reminder by Gmail: 3 days before
-        the due date, on the due date, and 3 days after. Sending an email never
-        marks a payment as paid.
-      </p>
-
-      {stuckError && (
-        <p role="alert" className="mb-4 text-[13px] text-red-600">
-          Could not check for interrupted reminders: {stuckError}
-        </p>
-      )}
-
-    </>
-  );
-
   if (showHistory && historyResult?.data) {
     return (
       <DashboardShell title="Payments" currentUser={currentUser}>
-        {intro}
+        {stuckError && (
+          <p role="alert" className="mb-4 text-[13px] text-red-700">
+            Could not check for interrupted reminders: {stuckError}
+          </p>
+        )}
         <ReminderHistoryView
           history={historyResult.data}
           base={{ month, branch: requestedBranch, filter }}
@@ -243,43 +239,63 @@ export default async function PaymentsPage({
   return (
     <DashboardShell title="Payments" currentUser={currentUser}>
       {/* Everything on screen. On paper only the report below is shown. */}
-      <div className="print:hidden">
-        {intro}
+      <div className="space-y-5 print:hidden">
+        {stuckError && (
+          <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-800">
+            Could not check for interrupted reminders: {stuckError}
+          </p>
+        )}
 
-        <div className="mb-5">
-          <MonthPicker month={month} branch={selected.key} filter={filter} tab={chosenTab} />
-        </div>
+        <section aria-labelledby="payment-overview-title" className="space-y-3">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 id="payment-overview-title" className="text-lg font-semibold tracking-tight text-gray-950">Payment overview</h2>
+              <p className="mt-1 text-sm text-gray-700">Collected and outstanding amounts by branch.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <MonthPicker month={month} branch={selected.key} filter={filter} tab={chosenTab} />
+            </div>
+          </div>
 
-        <BranchCards
-          branches={monthData.branches}
-          notPaid={trackingStarted ? monthData.notPaid : {}}
-          selectedKey={selected.key}
-          month={month}
-          filter={filter}
-          tab={chosenTab}
-        />
+          <BranchCards
+            branches={monthData.branches}
+            notPaid={trackingStarted ? monthData.notPaid : {}}
+            selectedKey={selected.key}
+            month={month}
+            filter={filter}
+            tab={chosenTab}
+          />
+        </section>
 
-        {/* Tab bar, with the actions on the right. On small screens the actions wrap below. */}
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <PaymentTabs tabs={tabs} active={activeTab} panelId="payments-tab-panel" />
-          <div className="flex flex-wrap items-center gap-3">
+        <section aria-label="Payment actions" className="flex flex-col gap-3 border-b border-gray-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-gray-950">Payment actions</h2>
+            <p className="mt-0.5 text-[13px] text-gray-700">Record payments or review and export payment activity.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
             <PrintPaymentReportButton
               documentTitle={`Payment Report - ${monthLabel} - ${selected.name}`}
             />
             <AddPaymentButton
               students={studentChoices}
               branchName={selected.key === "all" ? undefined : selected.name}
+              monthlyFee={monthlyFee}
               month={month}
               today={today}
             />
+            <AdvancePaymentButton students={studentChoices} today={today} />
             <Link
               href={paymentsHref({ ...query, view: "history" })}
               scroll={false}
-              className="text-xs font-semibold text-gray-700 underline decoration-gray-300 underline-offset-4 hover:text-black"
+              className="inline-flex h-9 items-center justify-center whitespace-nowrap rounded-lg border border-gray-200 bg-white px-3.5 text-sm font-medium text-gray-800 hover:bg-gray-50"
             >
               Reminder history
             </Link>
           </div>
+        </section>
+
+        <div className="min-w-0">
+          <PaymentTabs tabs={tabs} active={activeTab} panelId="payments-tab-panel" />
         </div>
 
         {/* One compact alert area, only when there is something to say. */}
@@ -333,7 +349,7 @@ export default async function PaymentsPage({
                   <span className="font-normal text-gray-500">{branchSuffix}</span>
                 </h2>
                 <p className="mt-0.5 text-[13px] text-gray-500">
-                  Active students with no payment for {monthLabel}.
+                  Monthly bills follow each student’s enrollment date. Reminders are available {reminderSchedule.beforeDueDays} days before, on, and {reminderSchedule.afterDueDays} days after the due date while the bill remains unpaid.
                 </p>
               </div>
               {notPaid.notPaidCount > 0 ? (
@@ -342,6 +358,8 @@ export default async function PaymentsPage({
                   showBranch={selected.key === "all"}
                   studentChoices={studentChoices}
                   branchName={selected.key === "all" ? undefined : selected.name}
+                  monthlyFee={monthlyFee}
+                  reminderSchedule={reminderSchedule}
                   month={month}
                   today={today}
                 />
@@ -404,6 +422,7 @@ export default async function PaymentsPage({
               <PaymentRecordsTable
                 rows={visibleRows}
                 today={today}
+                reminderSchedule={reminderSchedule}
                 showBranch={selected.key === "all"}
                 emptyText={
                   branchRows.length

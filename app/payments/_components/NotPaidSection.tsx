@@ -13,7 +13,7 @@ import { formatBeltLabel } from '@/utils/belts'
 import { isValidEmail } from '@/utils/email'
 import { formatPeso } from '@/utils/payment-fees'
 import type { NotPaidStudent } from '@/utils/payment-records'
-import type { ReminderWindow } from '@/utils/reminder-timing'
+import type { ReminderSchedule, ReminderWindow } from '@/utils/reminder-timing'
 
 const FIRST_ROWS = 10
 
@@ -35,6 +35,8 @@ export default function NotPaidSection({
   branchName,
   month,
   today,
+  monthlyFee,
+  reminderSchedule,
 }: {
   students: NotPaidStudent[]
   showBranch: boolean
@@ -43,6 +45,8 @@ export default function NotPaidSection({
   branchName?: string
   month: string
   today: string
+  monthlyFee: number | null
+  reminderSchedule: ReminderSchedule
 }) {
   const [showAll, setShowAll] = useState(false)
   // The popups live here, not in the rows: creating a bill changes the row's button
@@ -98,6 +102,7 @@ export default function NotPaidSection({
                     {...sendButtonState(
                       { dueDate: bill.dueDate, guardianEmail: student.guardianEmail, isActive: true, reminders: bill.reminders },
                       today,
+                      reminderSchedule,
                     )}
                   />
                 ) : (
@@ -121,6 +126,7 @@ export default function NotPaidSection({
                   branchName={branchName}
                   month={month}
                   today={today}
+                  monthlyFee={monthlyFee}
                   initialStudent={choice}
                   label="Record payment"
                   compact
@@ -145,7 +151,7 @@ export default function NotPaidSection({
       )}
 
       {billStudent && (
-        <CreateBillModal student={billStudent} month={month} today={today} onCreated={handleCreated} onClose={closeBill} />
+        <CreateBillModal student={billStudent} month={month} today={today} monthlyFee={monthlyFee} reminderSchedule={reminderSchedule} onCreated={handleCreated} onClose={closeBill} />
       )}
       {reviewId !== null && <ReminderReviewModal target={{ kind: 'payment', id: reviewId }} onClose={closeReview} />}
       {notice && <Toast message={notice} onDismiss={clearNotice} />}

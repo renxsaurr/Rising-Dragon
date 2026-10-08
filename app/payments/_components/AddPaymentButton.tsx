@@ -10,6 +10,7 @@ export default function AddPaymentButton({
   branchName,
   month,
   today,
+  monthlyFee,
   initialStudent,
   label = '+ Add payment',
   compact = false,
@@ -19,6 +20,7 @@ export default function AddPaymentButton({
   branchName?: string
   month: string
   today: string
+  monthlyFee: number | null
   /** Opens the popup with this student already picked ("Record payment"). */
   initialStudent?: StudentChoice
   label?: string
@@ -50,6 +52,7 @@ export default function AddPaymentButton({
           branchName={branchName}
           month={month}
           today={today}
+          monthlyFee={monthlyFee}
           initialStudentId={initialStudent?.id}
           onClose={close}
         />
