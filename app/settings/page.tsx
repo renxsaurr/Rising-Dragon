@@ -7,6 +7,7 @@ import MonthlyFeeSettingsButton from '@/app/payments/_components/MonthlyFeeSetti
 import PasswordChangeForm from './_components/PasswordChangeForm'
 import ProfileSettingsForm from './_components/ProfileSettingsForm'
 import ReminderScheduleSettings from './_components/ReminderScheduleSettings'
+import PerSessionFeeSettings from './_components/PerSessionFeeSettings'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,6 +19,7 @@ export default async function SettingsPage() {
 
   let settings: {
     monthlyFee: number | null
+    perSessionFee: number
     beforeDueDays: number
     afterDueDays: number
   } | null = null
@@ -26,13 +28,14 @@ export default async function SettingsPage() {
   if (currentUser.role === 'head_coach') {
     const admin = createAdminClient()
     const { data, error } = await admin.from('payment_settings')
-      .select('monthly_fee, reminder_before_due_days, reminder_after_due_days')
+      .select('monthly_fee, per_session_fee, reminder_before_due_days, reminder_after_due_days')
       .eq('singleton', true)
       .maybeSingle()
     if (error) settingsError = error.message
     else {
       settings = {
         monthlyFee: data?.monthly_fee == null ? null : Number(data.monthly_fee),
+        perSessionFee: Number(data?.per_session_fee ?? 150),
         beforeDueDays: Number(data?.reminder_before_due_days ?? DEFAULT_REMINDER_SCHEDULE.beforeDueDays),
         afterDueDays: Number(data?.reminder_after_due_days ?? DEFAULT_REMINDER_SCHEDULE.afterDueDays),
       }
@@ -81,6 +84,14 @@ export default async function SettingsPage() {
                     <p className="mt-1 text-[13px] text-gray-700">Set when the before-due and after-due reminders become available.</p>
                   </div>
                   <ReminderScheduleSettings beforeDueDays={settings.beforeDueDays} afterDueDays={settings.afterDueDays} />
+                </section>
+
+                <section id="per-session-fee" aria-labelledby="per-session-fee-title" className="rounded-xl border border-gray-200 bg-white p-5">
+                  <div className="mb-4">
+                    <h3 id="per-session-fee-title" className="text-base font-semibold text-gray-950">Per-session fee</h3>
+                    <p className="mt-1 text-[13px] text-gray-700">Set one rate for every checked-in pay-per-session student.</p>
+                  </div>
+                  <PerSessionFeeSettings fee={settings.perSessionFee} />
                 </section>
               </div>
             )}

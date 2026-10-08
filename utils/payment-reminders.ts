@@ -350,6 +350,7 @@ async function loadSenderName(admin: Admin, userId: number) {
 // Paid or inactive: no reminder is needed at all.
 function noReminderNeeded(payment: PaymentWithStudent) {
   if (payment.status !== 'Unpaid') return 'Payment is already paid.'
+  if (payment.payment_type === 'Per session') return 'Per-session charges do not use email reminders.'
   if (!payment.student?.is_active) return 'Student is inactive.'
   return null
 }
@@ -562,6 +563,7 @@ export async function sendScheduledPaymentReminders(today = dateInTimeZone()) {
         .select('id')
         .eq('status', 'Unpaid')
         .eq('due_date', item.dueDate)
+        .or('payment_type.eq.Monthly,payment_type.is.null')
         .order('id')
         .range(from, to))
 

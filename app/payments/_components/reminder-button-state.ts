@@ -10,6 +10,7 @@ export type ReminderButtonInput = {
   guardianEmail: string
   isActive: boolean
   reminders: ReminderSummary[]
+  paymentType?: string | null
 }
 
 const formatDayMonth = (date: string) =>
@@ -27,6 +28,7 @@ export function sendButtonState(
   const timing = reminderWindowFor(input.dueDate, today, schedule)
   // The type that is open today, or the one that opens next.
   const reminderType = timing.open ? timing.type : timing.nextType
+  if (input.paymentType === 'Per session') return { reminderType, disabledReason: 'Email reminders are for monthly bills.' }
   if (!input.guardianEmail) return { reminderType, disabledReason: 'No guardian email' }
   if (!isValidEmail(input.guardianEmail)) return { reminderType, disabledReason: 'Invalid guardian email' }
   if (!input.isActive) return { reminderType, disabledReason: 'Student is inactive' }

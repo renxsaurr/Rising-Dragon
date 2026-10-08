@@ -101,7 +101,7 @@ export default async function PaymentsPage({
           hpage: param("hpage"),
         })
       : null,
-    admin.from("payment_settings").select("monthly_fee, reminder_before_due_days, reminder_after_due_days").eq("singleton", true).maybeSingle(),
+    admin.from("payment_settings").select("monthly_fee, per_session_fee, reminder_before_due_days, reminder_after_due_days").eq("singleton", true).maybeSingle(),
   ]);
 
   const loadError =
@@ -110,10 +110,15 @@ export default async function PaymentsPage({
     historyResult?.error ??
     settingsResult.error?.message;
   if (loadError) {
+    const billingMigrationMissing =
+      loadError.includes("student.billing_plan") ||
+      loadError.includes("per_session_fee");
     return (
       <DashboardShell title="Payments" currentUser={currentUser}>
         <p role="alert" className="text-sm text-red-600">
-          Could not load payments: {loadError}
+          {billingMigrationMissing
+            ? "The payments database is missing the student billing plan update. Apply supabase/migrations/20261008190000_student_billing_plans_and_session_checkins.sql in Supabase, then reload this page."
+            : `Could not load payments: ${loadError}`}
         </p>
       </DashboardShell>
     );
@@ -121,6 +126,7 @@ export default async function PaymentsPage({
 
   const failedCount = failedResult?.count ?? 0;
   const monthlyFee = settingsResult.data?.monthly_fee == null ? null : Number(settingsResult.data.monthly_fee);
+  const perSessionFee = Number(settingsResult.data?.per_session_fee ?? 150);
   const reminderSchedule: ReminderSchedule = {
     beforeDueDays: Number(settingsResult.data?.reminder_before_due_days ?? 3),
     afterDueDays: Number(settingsResult.data?.reminder_after_due_days ?? 3),
@@ -184,7 +190,9 @@ export default async function PaymentsPage({
       name: student.name,
       belt: formatBeltLabel(student.beltLevel),
       branch: branchNames.get(String(student.branchId)) ?? "No branch",
+      billingPlan: student.billingPlan,
     }));
+  const monthlyStudentChoices = studentChoices.filter((student) => student.billingPlan === "Monthly");
   const notPaid = monthData.notPaid[selected.key] ?? {
     activeCount: 0,
     notPaidCount: 0,
@@ -280,10 +288,11 @@ export default async function PaymentsPage({
               students={studentChoices}
               branchName={selected.key === "all" ? undefined : selected.name}
               monthlyFee={monthlyFee}
+              perSessionFee={perSessionFee}
               month={month}
               today={today}
             />
-            <AdvancePaymentButton students={studentChoices} today={today} />
+            <AdvancePaymentButton students={monthlyStudentChoices} today={today} />
             <Link
               href={paymentsHref({ ...query, view: "history" })}
               scroll={false}
@@ -359,6 +368,7 @@ export default async function PaymentsPage({
                   studentChoices={studentChoices}
                   branchName={selected.key === "all" ? undefined : selected.name}
                   monthlyFee={monthlyFee}
+                  perSessionFee={perSessionFee}
                   reminderSchedule={reminderSchedule}
                   month={month}
                   today={today}

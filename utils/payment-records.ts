@@ -76,6 +76,7 @@ export type ActiveStudent = {
   branchId: number | null
   beltLevel: string
   enrollmentDate: string | null
+  billingPlan: 'Monthly' | 'Per session'
   /** Trimmed and lowercased. '' when missing. */
   guardianEmail: string
 }
@@ -224,6 +225,7 @@ type RawActiveStudent = {
   belt_level: string | null
   enrollment_date: string | null
   guardian_email: string | null
+  billing_plan: 'Monthly' | 'Per session' | null
 }
 
 type RawNearbyMonthly = {
@@ -332,7 +334,7 @@ export async function loadPaymentMonth(admin: Admin, month: string, today: strin
         .order('id')
         .range(from, to)),
       fetchAllRows<RawActiveStudent>((from, to) => admin.from('student')
-        .select('id, first_name, middle_name, last_name, branch_id, belt_level, enrollment_date, guardian_email')
+        .select('id, first_name, middle_name, last_name, branch_id, belt_level, enrollment_date, guardian_email, billing_plan')
         .eq('is_active', true)
         .order('last_name')
         .order('first_name')
@@ -348,8 +350,8 @@ export async function loadPaymentMonth(admin: Admin, month: string, today: strin
         .range(from, to)),
       // Paid payments due anywhere in the missed range (one query, not one per month).
       missedLast
-        ? fetchAllRows<{ student_id: number; due_date: string }>((from, to) => admin.from('payment')
-            .select('student_id, due_date')
+        ? fetchAllRows<{ student_id: number; due_date: string; payment_type: PaymentType | null }>((from, to) => admin.from('payment')
+            .select('student_id, due_date, payment_type')
             .eq('status', 'Paid')
             .gte('due_date', `${missedMonthKeys[0]}-01`)
             .lte('due_date', monthEnd(missedLast))
@@ -429,6 +431,7 @@ export async function loadPaymentMonth(admin: Admin, month: string, today: strin
       branchId: student.branch_id == null ? null : Number(student.branch_id),
       beltLevel: student.belt_level ?? '',
       enrollmentDate: student.enrollment_date,
+      billingPlan: student.billing_plan === 'Per session' ? 'Per session' : 'Monthly',
       guardianEmail: normalizeEmail(student.guardian_email),
     }))
 
@@ -441,7 +444,7 @@ export async function loadPaymentMonth(admin: Admin, month: string, today: strin
         enrollmentDate: students.find((student) => Number(student.id) === Number(payment.student_id))?.enrollment_date ?? null,
       }))
     const paidThisMonth: PaidDue[] = rows
-      .filter((row) => row.status === 'Paid' && row.studentId !== null)
+      .filter((row) => row.status === 'Paid' && row.studentId !== null && row.paymentType !== 'Per session')
       .map((row) => ({ studentId: row.studentId as number, dueDate: row.dueDate }))
     const paidStudentIds = paidStudentsByMonth([month], paidThisMonth, paidCoverage).get(month) ?? new Set<number>()
 
@@ -452,7 +455,7 @@ export async function loadPaymentMonth(admin: Admin, month: string, today: strin
       if (!current || bill.dueDate < current.dueDate) unpaidBills.set(studentId, bill)
     }
     for (const row of rows) {
-      if (row.studentId !== null && row.status === 'Unpaid') {
+      if (row.studentId !== null && row.status === 'Unpaid' && row.paymentType !== 'Per session') {
         keepEarliest(row.studentId, { id: row.id, dueDate: row.dueDate, amount: row.amount })
       }
     }
@@ -479,6 +482,7 @@ export async function loadPaymentMonth(admin: Admin, month: string, today: strin
     const notPaid: Record<string, NotPaidGroup> = { all: emptyNotPaid() }
     for (const branch of branchList) notPaid[String(branch.id)] = emptyNotPaid()
     for (const student of activeStudents) {
+      if (student.billingPlan !== 'Monthly') continue
       if (student.enrollmentDate && student.enrollmentDate > end) continue
       const branchGroup = student.branchId === null ? undefined : notPaid[String(student.branchId)]
       const paid = paidStudentIds.has(student.id)
@@ -502,12 +506,13 @@ export async function loadPaymentMonth(admin: Admin, month: string, today: strin
     // and has no Paid record for it under the same rule.
     const paidByMonth = paidStudentsByMonth(
       missedMonthKeys,
-      paidInRange.map((payment) => ({ studentId: Number(payment.student_id), dueDate: payment.due_date })),
+      paidInRange.filter((payment) => payment.payment_type !== 'Per session').map((payment) => ({ studentId: Number(payment.student_id), dueDate: payment.due_date })),
       paidCoverage,
     )
     const missedMonths: Record<string, MissedStudent[]> = { all: [] }
     for (const branch of branchList) missedMonths[String(branch.id)] = []
     for (const student of activeStudents) {
+      if (student.billingPlan !== 'Monthly') continue
       const months = missedMonthKeys.filter(
         (key) =>
           (!student.enrollmentDate || student.enrollmentDate <= monthEnd(key)) &&

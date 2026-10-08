@@ -300,11 +300,14 @@ export async function createPayment(
 
   const { data: student, error: studentError } = await admin
     .from("student")
-      .select("id, is_active, enrollment_date, first_name, middle_name, last_name")
+      .select("id, is_active, enrollment_date, billing_plan, first_name, middle_name, last_name")
     .eq("id", studentId)
     .maybeSingle();
   if (studentError) return { error: studentError.message };
   if (!student) return { error: "Student not found." };
+  if (student.billing_plan !== paymentType) {
+    return { error: `This student is enrolled on the ${student.billing_plan === 'Per session' ? 'per-session' : 'monthly'} plan. Record a ${student.billing_plan === 'Per session' ? 'per-session' : 'monthly'} payment instead.` };
+  }
   if (isMonthly) {
     const { data: setting, error: settingError } = await admin
       .from("payment_settings")
@@ -319,6 +322,19 @@ export async function createPayment(
     const expectedAmountCents = Math.round(monthlyFee * quantity * 100);
     if (Math.round(parsed.amount * 100) !== expectedAmountCents) {
       return { error: `Monthly payments must use the current academy rate of ${formatPeso(monthlyFee * quantity)}.` };
+    }
+  } else {
+    const { data: setting, error: settingError } = await admin
+      .from("payment_settings")
+      .select("per_session_fee")
+      .eq("singleton", true)
+      .maybeSingle();
+    if (settingError) return { error: settingError.message };
+    const sessionFee = setting?.per_session_fee == null ? null : Number(setting.per_session_fee);
+    if (!sessionFee || !Number.isFinite(sessionFee)) return { error: "Set the academy per-session fee in Settings first." };
+    const expectedAmountCents = Math.round(sessionFee * quantity * 100);
+    if (Math.round(parsed.amount * 100) !== expectedAmountCents) {
+      return { error: `Per-session payments must use the current academy rate of ${formatPeso(sessionFee * quantity)}.` };
     }
   }
   if (!student.is_active) return { error: "This student is inactive." };
@@ -408,6 +424,25 @@ export async function updateAcademyMonthlyFee(value: number): Promise<MonthlyFee
   revalidatePath("/payments");
   revalidatePath("/settings");
   return { ok: true, updatedBills: Number(data ?? 0) };
+}
+
+/** Changes the shared per-session rate and refreshes unpaid attendance-generated charges. */
+export async function updateAcademyPerSessionFee(value: number): Promise<{ ok: true; updatedCharges: number } | { error: string }> {
+  const auth = await requireHeadCoach();
+  if ("error" in auth) return auth;
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0 || value > 1_000_000 || Math.round(value * 100) !== value * 100) {
+    return { error: "Enter a positive fee with no more than two decimal places." };
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc("set_academy_per_session_fee", {
+    p_per_session_fee: value,
+    p_updated_by: auth.userId,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/payments");
+  revalidatePath("/settings");
+  return { ok: true, updatedCharges: Number(data ?? 0) };
 }
 
 export async function updateReminderSchedule(input: {
@@ -512,7 +547,7 @@ export async function getAdvanceBillOptions(studentId: number): Promise<{ option
 
   const admin = createAdminClient();
   const [studentResult, paymentsResult] = await Promise.all([
-    admin.from("student").select("id, enrollment_date, is_active").eq("id", studentId).maybeSingle(),
+    admin.from("student").select("id, enrollment_date, is_active, billing_plan").eq("id", studentId).maybeSingle(),
     admin.from("payment")
       .select("id, amount, due_date, status, quantity, coverage_start")
       .eq("student_id", studentId)
@@ -525,6 +560,7 @@ export async function getAdvanceBillOptions(studentId: number): Promise<{ option
   if (paymentsResult.error) return { error: paymentsResult.error.message };
   const student = studentResult.data;
   if (!student || !student.is_active) return { error: "Active student not found." };
+  if (student.billing_plan !== "Monthly") return { error: "Advance payment is available only for monthly students." };
   if (!student.enrollment_date) return { error: "This student has no enrollment date for monthly billing." };
 
   const payments = (paymentsResult.data ?? []) as {
@@ -574,7 +610,7 @@ export async function recordAdvancePayment(input: {
 
   const admin = createAdminClient();
   const [studentResult, paymentsResult] = await Promise.all([
-    admin.from("student").select("id, enrollment_date, is_active").eq("id", input.studentId).maybeSingle(),
+    admin.from("student").select("id, enrollment_date, is_active, billing_plan").eq("id", input.studentId).maybeSingle(),
     admin.from("payment")
       .select("id, amount, due_date, status, quantity, coverage_start")
       .eq("student_id", input.studentId)
@@ -587,6 +623,7 @@ export async function recordAdvancePayment(input: {
   if (paymentsResult.error) return { error: paymentsResult.error.message };
   const student = studentResult.data;
   if (!student?.is_active || !student.enrollment_date) return { error: "Active student with an enrollment date not found." };
+  if (student.billing_plan !== "Monthly") return { error: "Advance payment is available only for monthly students." };
   const dueOffset = monthlyDueOffset(student.enrollment_date, input.dueDate);
   if (dueOffset === null || dueOffset < 0) return { error: "That date is not on this student's monthly billing schedule." };
 

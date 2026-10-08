@@ -3,11 +3,11 @@
 import { useId, useMemo, useState, type KeyboardEvent } from 'react'
 import { INPUT } from './ModalShell'
 
-export type StudentChoice = { id: number; name: string; belt: string; branch: string }
+export type StudentChoice = { id: number; name: string; belt: string; branch: string; billingPlan: 'Monthly' | 'Per session' }
 
 const MAX_RESULTS = 8
 
-const details = (student: StudentChoice) => [student.belt, student.branch].filter(Boolean).join(' · ')
+const details = (student: StudentChoice) => [student.billingPlan === 'Per session' ? 'Pay per session' : 'Monthly', student.belt, student.branch].filter(Boolean).join(' · ')
 
 /** Every typed word must appear somewhere in the name, ignoring case: "juan cruz" finds "Juan Dela Cruz". */
 function matchesName(name: string, query: string) {

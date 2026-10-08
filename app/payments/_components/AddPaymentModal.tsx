@@ -8,7 +8,6 @@ import {
   MAX_MONTHS,
   MAX_SESSIONS,
   PAYMENT_TYPES,
-  SESSION_FEE,
   findCoverageOverlap,
   formatCoverage,
   formatPeso,
@@ -47,6 +46,7 @@ export default function AddPaymentModal({
   month,
   today,
   monthlyFee,
+  perSessionFee,
   initialStudentId,
   onClose,
 }: {
@@ -58,18 +58,18 @@ export default function AddPaymentModal({
   today: string
   /** Academy-wide fee, configured once by the Head Coach. */
   monthlyFee: number | null
+  perSessionFee: number
   /** Preselected student. The combobox shows the name, and the info card and overlap check run as usual. */
   initialStudentId?: number
   onClose: () => void
 }) {
   const [studentId, setStudentId] = useState<number | null>(initialStudentId ?? null)
-  const [paymentType, setPaymentType] = useState<PaymentType>('Monthly')
+  const [paymentType, setPaymentType] = useState<PaymentType>(() => students.find((choice) => choice.id === (initialStudentId ?? null))?.billingPlan ?? 'Monthly')
   const [startMonth, setStartMonth] = useState(month)
   const [months, setMonths] = useState('1')
   const [sessions, setSessions] = useState('1')
-  const [rate, setRate] = useState(moneyText(SESSION_FEE))
+  const [rate] = useState(moneyText(perSessionFee))
   // null = use the calculated amount; a string = typed by hand.
-  const [amountOverride, setAmountOverride] = useState<string | null>(null)
   const [paidNow, setPaidNow] = useState(true)
   const [paidDate, setPaidDate] = useState(today)
   const [method, setMethod] = useState('')
@@ -105,7 +105,7 @@ export default function AddPaymentModal({
   const quantityValid = Number.isInteger(quantity) && quantity >= 1 && quantity <= maxQuantity
   const unitPrice = isMonthly ? monthlyFee : toMoney(rate)
   const calculatedAmount = quantityValid && unitPrice !== null ? moneyText(quantity * unitPrice) : ''
-  const amount = amountOverride ?? calculatedAmount
+  const amount = calculatedAmount
   const selectedMonth = /^\d{4}-\d{2}$/.test(startMonth) ? startMonth : ''
   const monthOffset = enrollmentDate && selectedMonth
     ? (Number(selectedMonth.slice(0, 4)) - Number(enrollmentDate.slice(0, 4))) * 12 + Number(selectedMonth.slice(5, 7)) - Number(enrollmentDate.slice(5, 7))
@@ -141,6 +141,8 @@ export default function AddPaymentModal({
   const selectStudent = (id: number | null) => {
     setStudentId(id)
     setEnrollmentDate(null)
+    const selected = students.find((choice) => choice.id === id)
+    if (selected) chooseType(selected.billingPlan)
     clearOverlap()
   }
 
@@ -160,7 +162,6 @@ export default function AddPaymentModal({
   const chooseType = (type: PaymentType) => {
     setPaymentType(type)
     // The amount and due date mean something different for the other type.
-    setAmountOverride(null)
     setDueDateOverride(null)
     clearOverlap()
   }
@@ -264,8 +265,8 @@ export default function AddPaymentModal({
                   type="button"
                   aria-pressed={paymentType === type}
                   onClick={() => chooseType(type)}
-                  disabled={saving}
-                  className={toggleClass(paymentType === type)}
+                  disabled={saving || Boolean(student && student.billingPlan !== type)}
+                  className={`${toggleClass(paymentType === type)} ${student && student.billingPlan !== type ? 'opacity-40' : ''}`}
                 >
                   {type}
                 </button>
@@ -347,7 +348,7 @@ export default function AddPaymentModal({
                   inputMode="decimal"
                   autoComplete="off"
                   value={rate}
-                  onChange={(event) => setRate(event.target.value)}
+                  readOnly
                   disabled={saving}
                   className={INPUT}
                 />
@@ -357,22 +358,7 @@ export default function AddPaymentModal({
 
           {/* e) Amount */}
           <div>
-            <div className="mb-1.5 flex items-center justify-between gap-2">
-              <label htmlFor={amountFieldId} className={LABEL_INLINE}>Amount (₱)</label>
-              {amountOverride !== null && !isMonthly && (
-                <span className="text-xs text-gray-500">
-                  Custom amount ·{' '}
-                  <button
-                    type="button"
-                    onClick={() => setAmountOverride(null)}
-                    disabled={saving}
-                    className={`font-semibold text-gray-700 underline decoration-gray-300 underline-offset-4 hover:text-black ${FOCUS_RING}`}
-                  >
-                    Reset
-                  </button>
-                </span>
-              )}
-            </div>
+            <label htmlFor={amountFieldId} className={`${LABEL_INLINE} mb-1.5 block`}>Amount (₱)</label>
             <div className="relative">
               <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-500" aria-hidden="true">₱</span>
               <input
@@ -382,11 +368,10 @@ export default function AddPaymentModal({
                 autoComplete="off"
                 placeholder="0.00"
                 value={amount}
-                onChange={(event) => { if (!isMonthly) setAmountOverride(event.target.value) }}
-                readOnly={isMonthly}
+                readOnly
                 required
                 disabled={saving}
-                className={`${INPUT} pl-7 ${isMonthly ? 'bg-gray-50' : ''}`}
+                className={`${INPUT} bg-gray-50 pl-7`}
               />
             </div>
           </div>

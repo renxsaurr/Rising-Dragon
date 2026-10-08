@@ -96,7 +96,7 @@ export default async function AttendancePage({
     ? await Promise.all([
         admin
           .from("student")
-          .select("id, branch_id, enrollment_date")
+          .select("id, branch_id, enrollment_date, billing_plan")
           .eq("is_active", true)
           .lte("enrollment_date", date)
           .in("branch_id", branchIds),
@@ -113,7 +113,7 @@ export default async function AttendancePage({
     branchStudentsResult.error?.message ?? dayAttendanceResult.error?.message ?? "";
   const activeStudentIdsPerBranch = new Map<number, Set<number>>();
   for (const row of branchStudentsResult.data ?? [])
-    activeStudentIdsPerBranch.set(Number(row.branch_id), new Set([
+    if (row.billing_plan !== "Per session") activeStudentIdsPerBranch.set(Number(row.branch_id), new Set([
       ...(activeStudentIdsPerBranch.get(Number(row.branch_id)) ?? []),
       Number(row.id),
     ]));
@@ -145,7 +145,9 @@ export default async function AttendancePage({
     last_name: string;
     belt_level: string;
     enrollment_date: string;
+    billing_plan: "Monthly" | "Per session";
   }[] = [];
+  let availableWalkIns: { id: number; name: string; belt: string }[] = [];
   let attendance: { student_id: number; status: "Present" | "Absent" }[] = [];
   let rosterError = "";
 
@@ -153,7 +155,7 @@ export default async function AttendancePage({
     const [studentsResult, attendanceResult] = await Promise.all([
       admin
         .from("student")
-        .select("id, first_name, middle_name, last_name, belt_level, enrollment_date")
+        .select("id, first_name, middle_name, last_name, belt_level, enrollment_date, billing_plan")
         .eq("is_active", true)
         .eq("branch_id", selectedSchedule.branch_id)
         .lte("enrollment_date", selectedSchedule.date)
@@ -170,16 +172,27 @@ export default async function AttendancePage({
     else attendance = (attendanceResult.data ?? []) as typeof attendance;
     if (!rosterError) {
       const activeStudents = (studentsResult.data ?? []) as typeof students;
+      const markedIds = new Set(attendance.map((row) => Number(row.student_id)));
+      const monthlyStudents = activeStudents.filter((student) => student.billing_plan !== "Per session");
+      const activeWalkIns = activeStudents.filter((student) => student.billing_plan === "Per session");
+      availableWalkIns = activeWalkIns
+        .filter((student) => !markedIds.has(Number(student.id)))
+        .map((student) => ({
+          id: Number(student.id),
+          name: [student.first_name, student.middle_name, student.last_name].filter(Boolean).join(" "),
+          belt: student.belt_level,
+        }));
       const activeIds = new Set(activeStudents.map((student) => Number(student.id)));
-      const historicalIds = [...new Set(attendance.map((row) => Number(row.student_id)))].filter((id) => !activeIds.has(id));
+      const historicalIds = [...markedIds].filter((id) => !activeIds.has(id));
       const historicalResult = historicalIds.length
         ? await admin.from("student")
-            .select("id, first_name, middle_name, last_name, belt_level, enrollment_date")
+            .select("id, first_name, middle_name, last_name, belt_level, enrollment_date, billing_plan")
             .in("id", historicalIds)
         : { data: [], error: null };
       if (historicalResult.error) rosterError = historicalResult.error.message;
       else {
-        students = [...activeStudents, ...((historicalResult.data ?? []) as typeof students)]
+        const checkedInWalkIns = activeWalkIns.filter((student) => markedIds.has(Number(student.id)));
+        students = [...monthlyStudents, ...checkedInWalkIns, ...((historicalResult.data ?? []) as typeof students)]
           .sort((a, b) => a.last_name.localeCompare(b.last_name) || a.first_name.localeCompare(b.first_name));
       }
     }
@@ -310,6 +323,7 @@ export default async function AttendancePage({
           students={students}
           initialAttendance={attendance}
           canMarkAttendance={canMarkAttendance}
+          availableWalkIns={availableWalkIns}
         />
       )}
     </DashboardShell>

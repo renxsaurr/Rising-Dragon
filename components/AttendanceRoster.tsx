@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { saveAttendance } from '@/app/attendance/actions'
+import { addPerSessionWalkIn, saveAttendance } from '@/app/attendance/actions'
 import { Toast } from '@/components/Toast'
 import { formatBeltLabel } from '@/utils/belts'
 
-type Student = { id: number; first_name: string; middle_name: string | null; last_name: string; belt_level: string }
+type Student = { id: number; first_name: string; middle_name: string | null; last_name: string; belt_level: string; billing_plan: 'Monthly' | 'Per session' }
 type Status = 'Present' | 'Absent'
 type Filter = 'all' | 'unmarked' | 'Present' | 'Absent'
 
@@ -23,12 +23,14 @@ export default function AttendanceRoster({
   students,
   initialAttendance,
   canMarkAttendance,
+  availableWalkIns,
 }: {
   scheduleId: number
   classLabel: string
   students: Student[]
   initialAttendance: { student_id: number; status: Status }[]
   canMarkAttendance: boolean
+  availableWalkIns: { id: number; name: string; belt: string }[]
 }) {
   const router = useRouter()
   const [saved, setSaved] = useState<Record<number, Status>>(() => toStatusMap(initialAttendance))
@@ -37,6 +39,8 @@ export default function AttendanceRoster({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
+  const [walkInId, setWalkInId] = useState('')
+  const [addingWalkIn, setAddingWalkIn] = useState(false)
   const dismissToast = useCallback(() => setToast(''), [])
 
   const totals = useMemo(() => {
@@ -74,10 +78,29 @@ export default function AttendanceRoster({
   const markRemainingPresent = () => {
     setStatuses((current) => {
       const next = { ...current }
-      for (const student of students) if (!next[student.id]) next[student.id] = 'Present'
+      for (const student of students) if (student.billing_plan !== 'Per session' && !next[student.id]) next[student.id] = 'Present'
       return next
     })
     setError('')
+  }
+
+  const addWalkIn = async () => {
+    const id = Number(walkInId)
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      setError('Choose a per-session student first.')
+      return
+    }
+    setAddingWalkIn(true)
+    setError('')
+    const result = await addPerSessionWalkIn(scheduleId, id)
+    setAddingWalkIn(false)
+    if (result.error) {
+      setError(result.error)
+      return
+    }
+    setWalkInId('')
+    setToast('Walk-in checked in · session charge added to Payments')
+    router.refresh()
   }
 
   const submit = async () => {
@@ -102,12 +125,27 @@ export default function AttendanceRoster({
           <div>
             <h2 className="text-base font-semibold text-gray-950">{classLabel}</h2>
           </div>
-          {canMarkAttendance && students.length > 0 && totals.unmarked > 0 && (
+          {canMarkAttendance && students.some((student) => student.billing_plan !== 'Per session') && totals.unmarked > 0 && (
             <button onClick={markRemainingPresent} className="text-xs font-semibold text-gray-700 underline decoration-gray-300 underline-offset-4 hover:text-black">
               Mark remaining present
             </button>
           )}
         </div>
+
+        {canMarkAttendance && availableWalkIns.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-end gap-2 rounded-lg border border-gray-200 bg-white p-3">
+            <div className="min-w-[220px] flex-1">
+              <label htmlFor="attendance-walk-in" className="mb-1 block text-xs font-medium text-gray-700">Check in a pay-per-session student</label>
+              <select id="attendance-walk-in" value={walkInId} onChange={(event) => setWalkInId(event.target.value)} disabled={addingWalkIn || saving} className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-950 outline-none focus:border-gray-500">
+                <option value="">Choose student</option>
+                {availableWalkIns.map((student) => <option key={student.id} value={student.id}>{student.name} · {formatBeltLabel(student.belt)}</option>)}
+              </select>
+            </div>
+            <button type="button" onClick={addWalkIn} disabled={!walkInId || addingWalkIn || saving} className="h-10 rounded-lg bg-black px-4 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50">
+              {addingWalkIn ? 'Checking in…' : 'Check in walk-in'}
+            </button>
+          </div>
+        )}
 
         {students.length > 0 && (
           <div className="mt-4 flex justify-end">
@@ -157,13 +195,13 @@ export default function AttendanceRoster({
                       {fullName}
                       {changed && <span className="ml-2 align-middle text-[10px] font-semibold uppercase tracking-wide text-red-600">Unsaved</span>}
                     </Link>
-                    <p className="mt-0.5 text-xs text-gray-500">{formatBeltLabel(student.belt_level)}</p>
+                    <p className="mt-0.5 text-xs text-gray-500">{formatBeltLabel(student.belt_level)}{student.billing_plan === 'Per session' ? ' · Pay per session' : ''}</p>
                   </div>
                 </div>
                 <div className="flex shrink-0 gap-1.5" role="group" aria-label={`Attendance for ${fullName}`}>
                   <button
                     onClick={() => mark(student.id, 'Present')}
-                    disabled={!canMarkAttendance}
+                    disabled={!canMarkAttendance || student.billing_plan === 'Per session'}
                     aria-pressed={status === 'Present'}
                     className={`h-9 rounded-lg px-3.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${status === 'Present' ? 'bg-black text-white' : 'border border-gray-200 text-black hover:border-gray-400 hover:bg-gray-50'}`}
                   >
@@ -171,7 +209,7 @@ export default function AttendanceRoster({
                   </button>
                   <button
                     onClick={() => mark(student.id, 'Absent')}
-                    disabled={!canMarkAttendance}
+                    disabled={!canMarkAttendance || student.billing_plan === 'Per session'}
                     aria-pressed={status === 'Absent'}
                     className={`h-9 rounded-lg px-3.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${status === 'Absent' ? 'bg-red-600 text-white' : 'border border-gray-200 text-gray-600 hover:border-red-300 hover:bg-red-50 hover:text-red-700'}`}
                   >

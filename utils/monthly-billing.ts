@@ -5,7 +5,7 @@ import { fetchAllRows } from '@/utils/fetch-all-rows'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { coveredBillingDates, monthlyDueDate, monthlyDueOffset } from '@/utils/billing-cycle'
 
-type Student = { id: number; enrollment_date: string | null }
+type Student = { id: number; enrollment_date: string | null; billing_plan: string | null }
 type MonthlyPayment = {
   id: number
   student_id: number
@@ -24,8 +24,9 @@ export async function ensureUpcomingMonthlyBills(today: string): Promise<Monthly
   try {
     const [studentResult, paymentRows, settingsResult] = await Promise.all([
       fetchAllRows<Student>((from, to) => admin.from('student')
-        .select('id, enrollment_date')
+        .select('id, enrollment_date, billing_plan')
         .eq('is_active', true)
+        .eq('billing_plan', 'Monthly')
         .not('enrollment_date', 'is', null)
         .order('id')
         .range(from, to)),

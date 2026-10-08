@@ -13,6 +13,7 @@ export type StudentFormData = {
   guardian_contact: string | null
   guardian_email: string
   belt_level?: string
+  billing_plan?: 'Monthly' | 'Per session'
   enrollment_date: string
   branch_id: number
 }
@@ -57,6 +58,7 @@ export async function saveStudent(studentId: number | null, input: StudentFormDa
     guardian_name: typeof input.guardian_name === 'string' ? input.guardian_name.trim() : '',
     guardian_contact: typeof input.guardian_contact === 'string' ? input.guardian_contact.trim() || null : null,
     guardian_email: normalizeEmail(input.guardian_email),
+    billing_plan: input.billing_plan === 'Per session' ? 'Per session' : input.billing_plan === 'Monthly' || input.billing_plan == null ? 'Monthly' : null,
     enrollment_date: typeof input.enrollment_date === 'string' ? input.enrollment_date : '',
     branch_id: Number(input.branch_id),
   }
@@ -81,19 +83,29 @@ export async function saveStudent(studentId: number | null, input: StudentFormDa
   }
 
   const admin = createAdminClient()
-  let existingStudent: { id: number; branch_id: number; is_active: boolean } | null = null
+  let existingStudent: { id: number; branch_id: number; is_active: boolean; billing_plan: string | null } | null = null
 
   if (studentId !== null) {
     const { data, error: existingError } = await admin
       .from('student')
-      .select('id, branch_id, is_active')
+      .select('id, branch_id, is_active, billing_plan')
       .eq('id', studentId)
       .maybeSingle()
 
     if (existingError || !data) return { error: 'Student record not found.' }
     existingStudent = data
     if (!existingStudent.is_active) return { error: 'Restore this student before editing their record.' }
+    if (existingStudent.billing_plan !== payload.billing_plan) {
+      const { data: unpaidRows, error: unpaidError } = await admin.from('payment')
+        .select('id')
+        .eq('student_id', studentId)
+        .eq('status', 'Unpaid')
+        .limit(1)
+      if (unpaidError) return { error: 'Could not check this student’s outstanding payments. Please try again.' }
+      if (unpaidRows?.length) return { error: 'Settle or resolve the student’s unpaid bills before changing their billing plan.' }
+    }
   }
+  if (!payload.billing_plan) return { error: 'Choose a valid billing plan.' }
 
   // Existing students may remain attached to an archived branch. Allow an
   // edit that keeps that association, but only active branches for new or
@@ -113,11 +125,21 @@ export async function saveStudent(studentId: number | null, input: StudentFormDa
     // student's promotion history. Ignore any forged belt_level in an edit.
     const { error } = await admin.from('student').update(payload).eq('id', studentId)
     if (error) return { error: error.message }
+    revalidatePath('/students')
+    revalidatePath('/attendance')
+    revalidatePath('/payments')
+    revalidatePath('/dashboard')
+    revalidatePath('/branches')
     return { success: true }
   }
 
   const { error } = await admin.from('student').insert({ ...payload, belt_level: beltLevel })
   if (error) return { error: error.message }
+  revalidatePath('/students')
+  revalidatePath('/attendance')
+  revalidatePath('/payments')
+  revalidatePath('/dashboard')
+  revalidatePath('/branches')
   return { success: true }
 }
 

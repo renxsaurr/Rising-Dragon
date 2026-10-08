@@ -152,8 +152,8 @@ export async function getBranchReport({ start, end, branchIds }: {
         return (data ?? []) as { id: number; name: string }[]
       })(),
       // today's snapshot, not range-based
-      fetchAllRows<{ id: number; branch_id: number; enrollment_date: string }>((from, to) => {
-        let query = supabase.from('student').select('id, branch_id, enrollment_date').eq('is_active', true)
+      fetchAllRows<{ id: number; branch_id: number; enrollment_date: string; billing_plan: string | null }>((from, to) => {
+        let query = supabase.from('student').select('id, branch_id, enrollment_date, billing_plan').eq('is_active', true)
         if (filterIds) query = query.in('branch_id', filterIds)
         return query.order('id').range(from, to)
       }),
@@ -207,10 +207,12 @@ export async function getBranchReport({ start, end, branchIds }: {
     for (const row of activeRows) {
       const counts = countsByBranch.get(Number(row.branch_id))
       if (counts) counts.activeStudents += 1
-      activeRosterByBranch.set(Number(row.branch_id), [
-        ...(activeRosterByBranch.get(Number(row.branch_id)) ?? []),
-        { id: Number(row.id), enrollmentDate: row.enrollment_date },
-      ])
+      if (row.billing_plan !== 'Per session') {
+        activeRosterByBranch.set(Number(row.branch_id), [
+          ...(activeRosterByBranch.get(Number(row.branch_id)) ?? []),
+          { id: Number(row.id), enrollmentDate: row.enrollment_date },
+        ])
+      }
     }
     for (const row of newRows) {
       const counts = countsByBranch.get(Number(row.branch_id))

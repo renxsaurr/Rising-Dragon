@@ -36,7 +36,7 @@ Monthly billing follows each student's enrollment date. The Head Coach records t
 2. Create a Google App Password for this app. Do not put the normal Gmail password in the project.
 3. Copy `.env.example` to `.env.local` and fill in `GMAIL_USER` and `GMAIL_APP_PASSWORD`. Optionally set `REMINDER_FROM_NAME` and `REMINDER_REPLY_TO`.
 4. Add the same server-only variables to the deployment environment (for example, Vercel Project Settings → Environment Variables). Never prefix them with `NEXT_PUBLIC_` or commit the values.
-5. Apply `20261005_payment_reminder_automation.sql`, `20261007_payment_record_details.sql`, `20261008150000_payment_method_categories.sql`, and `20261008170000_enrollment_anniversary_billing.sql` from `supabase/migrations/` before using automated monthly billing and reminders.
+5. Apply `20261005_payment_reminder_automation.sql`, `20261007_payment_record_details.sql`, `20261008150000_payment_method_categories.sql`, `20261008170000_enrollment_anniversary_billing.sql`, and `20261008190000_student_billing_plans_and_session_checkins.sql` from `supabase/migrations/` before using payments. The final migration adds the student billing plan and per-session billing schema required to load the Payments page.
 
 The database records at most one reminder of each type per payment: before the due date, on the due date, and after the due date. A guardian email must be saved on the student record. Sending a reminder never changes the payment status. The scheduled job uses the existing `CRON_SECRET`; Gmail credentials must be configured in the deployment environment as well as local development.
 

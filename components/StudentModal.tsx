@@ -20,6 +20,7 @@ type Student = {
   guardian_contact: string | null;
   guardian_email: string;
   belt_level: string;
+  billing_plan?: "Monthly" | "Per session";
   enrollment_date: string;
   branch_id: number;
 };
@@ -54,6 +55,7 @@ export default function StudentModal({
     student?.guardian_email ?? "",
   );
   const [beltLevel, setBeltLevel] = useState(student?.belt_level ?? "");
+  const [billingPlan, setBillingPlan] = useState<"Monthly" | "Per session">(student?.billing_plan ?? "Monthly");
   const [enrollmentDate, setEnrollmentDate] = useState(
     student?.enrollment_date ?? "",
   );
@@ -72,6 +74,7 @@ export default function StudentModal({
       setGuardianContact("");
       setGuardianEmail("");
       setBeltLevel("");
+      setBillingPlan("Monthly");
       setEnrollmentDate("");
       setBranchId("");
     }
@@ -93,6 +96,7 @@ export default function StudentModal({
       ...(isEditMode ? {} : { belt_level: beltLevel }),
       enrollment_date: enrollmentDate,
       branch_id: Number(branchId),
+      billing_plan: billingPlan,
     };
 
     const result = await saveStudent(student?.id ?? null, payload);
@@ -262,6 +266,20 @@ export default function StudentModal({
                       ))}
                     </select>
                   )}
+                </div>
+                <div>
+                  <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
+                    Billing plan
+                  </label>
+                  <select
+                    value={billingPlan}
+                    onChange={(e) => setBillingPlan(e.target.value as "Monthly" | "Per session")}
+                    required
+                    className="w-full h-11 px-4 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all bg-white"
+                  >
+                    <option value="Monthly">Monthly</option>
+                    <option value="Per session">Pay per session</option>
+                  </select>
                 </div>
                 <div>
                   <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">

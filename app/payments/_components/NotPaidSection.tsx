@@ -36,6 +36,7 @@ export default function NotPaidSection({
   month,
   today,
   monthlyFee,
+  perSessionFee,
   reminderSchedule,
 }: {
   students: NotPaidStudent[]
@@ -46,6 +47,7 @@ export default function NotPaidSection({
   month: string
   today: string
   monthlyFee: number | null
+  perSessionFee: number
   reminderSchedule: ReminderSchedule
 }) {
   const [showAll, setShowAll] = useState(false)
@@ -75,6 +77,7 @@ export default function NotPaidSection({
             name: student.name,
             belt: formatBeltLabel(student.beltLevel),
             branch: student.branchName,
+            billingPlan: 'Monthly',
           }
           const bill = student.existingUnpaid
           const problem = emailProblem(student.guardianEmail)
@@ -127,6 +130,7 @@ export default function NotPaidSection({
                   month={month}
                   today={today}
                   monthlyFee={monthlyFee}
+                  perSessionFee={perSessionFee}
                   initialStudent={choice}
                   label="Record payment"
                   compact

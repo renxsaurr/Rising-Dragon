@@ -28,7 +28,7 @@ export async function loadNotifications(user: { id: number; role: 'head_coach' |
       admin.from('payment_reminder').select('id, created_at, reminder_type')
         .eq('status', 'Failed').order('created_at', { ascending: false }).limit(12),
       admin.from('payment').select('id, due_date, student:student(first_name, middle_name, last_name)')
-        .eq('status', 'Unpaid').lt('due_date', today).order('due_date').limit(12),
+        .eq('status', 'Unpaid').or('payment_type.eq.Monthly,payment_type.is.null').lt('due_date', today).order('due_date').limit(12),
       admin.from('class_schedule')
         .select('id, date, time_start, branch:branch!class_schedule_branch_id_fkey(name)')
         .lt('date', today).neq('status', 'Cancelled').neq('status', 'Draft')

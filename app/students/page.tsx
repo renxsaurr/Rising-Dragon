@@ -22,6 +22,7 @@ type StudentRow = {
   middle_name: string | null;
   last_name: string;
   belt_level: string;
+  billing_plan: "Monthly" | "Per session";
   branch_id: number;
   is_active: boolean;
   guardian_name: string;
@@ -131,7 +132,7 @@ export default async function StudentsPage({
     .select(
       isHeadCoach
         ? "*, branch:branch!student_branch_id_fkey(name)"
-        : "id, first_name, middle_name, last_name, belt_level, branch_id, is_active, branch:branch!student_branch_id_fkey(name)",
+        : "id, first_name, middle_name, last_name, belt_level, billing_plan, branch_id, is_active, branch:branch!student_branch_id_fkey(name)",
     )
     .order("last_name")
     .order("first_name");
@@ -229,12 +230,13 @@ export default async function StudentsPage({
                   {isHeadCoach ? (
                     <>
                       <col className="w-[16%]" />
-                      <col className="w-[18%]" />
+                      <col className="w-[15%]" />
+                      <col className="w-[10%]" />
                       <col className="w-[9%]" />
                       <col className="w-[11%]" />
-                      <col className="w-[16%]" />
-                      <col className="w-[11%]" />
-                      <col className="w-[19%]" />
+                      <col className="w-[15%]" />
+                      <col className="w-[10%]" />
+                      <col className="w-[14%]" />
                     </>
                   ) : (
                     <>
@@ -253,6 +255,7 @@ export default async function StudentsPage({
                     <th className="px-3 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
                       Belt level
                     </th>
+                    {isHeadCoach && <th className="px-3 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Plan</th>}
                     <th className="px-3 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
                       Branch
                     </th>
@@ -277,7 +280,7 @@ export default async function StudentsPage({
                     )}
                   </tr>
                 </thead>
-                <PaginatedTableRows itemLabel="students" pageSize={6} colSpan={isHeadCoach ? 7 : 4}>
+                <PaginatedTableRows itemLabel="students" pageSize={6} colSpan={isHeadCoach ? 8 : 4}>
                   {students?.map((student) => {
                     const fullName = [
                       student.first_name,
@@ -306,6 +309,7 @@ export default async function StudentsPage({
                             {formatBeltLabel(student.belt_level)}
                           </span>
                         </td>
+                        {isHeadCoach && <td className="whitespace-normal px-3 py-4 text-sm font-medium text-gray-950">{student.billing_plan === "Per session" ? "Per session" : "Monthly"}</td>}
                         <td className="whitespace-normal break-words px-3 py-4 text-sm font-medium text-gray-950">
                           {student.branch?.name || "—"}
                         </td>
@@ -407,6 +411,10 @@ export default async function StudentsPage({
                             {formatBeltLabel(student.belt_level)}
                           </span>
                         </dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Billing plan</dt>
+                        <dd className="mt-1 text-sm font-medium text-gray-950">{student.billing_plan === "Per session" ? "Per session" : "Monthly"}</dd>
                       </div>
                       <div className="min-w-0">
                         <dt className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
