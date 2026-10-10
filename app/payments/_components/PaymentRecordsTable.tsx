@@ -1,3 +1,7 @@
+'use client'
+
+import { useState } from 'react'
+import { Search, X } from 'lucide-react'
 import MarkPaidButton from './MarkPaidButton'
 import SendReminderButton from './SendReminderButton'
 import { sendButtonState } from './reminder-button-state'
@@ -5,10 +9,10 @@ import RowActionsMenu from '@/components/RowActionsMenu'
 import RowActionItem, { ROW_ACTION_CLASS } from '@/components/RowActionItem'
 import PaginatedTableRows from '@/components/PaginatedTableRows'
 import { formatBeltLabel } from '@/utils/belts'
-import { formatCoverage } from '@/utils/payment-fees'
-import { REMINDER_TYPES, formatAmount } from '@/utils/payment-reminders'
+import { REMINDER_TYPES, formatAmount } from '@/utils/payment-display'
 import type { PaymentKind, PaymentRecord } from '@/utils/payment-records'
 import type { ReminderSchedule } from '@/utils/reminder-timing'
+import { paymentDetail } from './payment-detail'
 
 const TH = 'px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-950'
 
@@ -38,18 +42,6 @@ function statusNote(row: PaymentRecord) {
   if (days === 0) return 'Due today'
   if (days === 1) return 'Due tomorrow'
   return `Due in ${days} days`
-}
-
-// "Monthly · Oct – Nov 2026", "Monthly · Oct 2026" or "6 sessions". Nothing for older records.
-// Also used by the printed payment report, so both say the same thing.
-export function paymentDetail(row: PaymentRecord) {
-  if (row.paymentType === 'Monthly' && row.coverageStart && row.quantity) {
-    return `Monthly · ${formatCoverage(row.coverageStart, row.quantity, row.enrollmentDate ?? row.coverageStart)}`
-  }
-  if (row.paymentType === 'Per session' && row.quantity) {
-    return `${row.quantity} session${row.quantity === 1 ? '' : 's'}`
-  }
-  return null
 }
 
 // The latest reminder type that has a row: After due > Due today > Before due.
@@ -85,19 +77,85 @@ export default function PaymentRecordsTable({
   showBranch: boolean
   emptyText: string
 }) {
-  if (rows.length === 0) {
-    return (
-      <div className="p-5">
-        <div className="rounded-xl border border-dashed border-gray-300 bg-white px-5 py-12 text-center">
-          <p className="text-sm font-medium text-gray-800">{emptyText}</p>
-        </div>
-      </div>
-    )
-  }
+  const [searchQuery, setSearchQuery] = useState('')
+  const normalizedSearch = searchQuery.trim().toLowerCase()
+  const searchTerms = normalizedSearch.split(/\s+/).filter(Boolean)
+  const visibleRows = normalizedSearch
+    ? rows.filter((row) => {
+        const searchableFields = [
+          row.studentName,
+          row.branchName,
+          formatBeltLabel(row.beltLevel),
+          row.isActive ? 'Active' : 'Inactive',
+          formatAmount(row.amount),
+          String(row.amount),
+          row.dueDate,
+          formatDate(row.dueDate),
+          row.paidDate,
+          row.paymentType,
+          row.status,
+          row.kind,
+          KIND_BADGES[row.kind].label,
+          row.method,
+          row.notes,
+          paymentDetail(row),
+          statusNote(row),
+          ...row.reminders.flatMap((reminder) => [reminder.reminderType, reminder.status]),
+        ]
+          .filter((value): value is string => typeof value === 'string' && value.length > 0)
+          .map((value) => value.toLowerCase())
+        return searchTerms.every((term) =>
+          searchableFields.some((field) => field.includes(term)),
+        )
+      })
+    : rows
 
   return (
-    // The table keeps its width and scrolls inside this box on small screens.
-    <div className="overflow-x-auto">
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-3">
+        <div className="relative w-full max-w-md">
+          <label htmlFor="payment-record-search" className="sr-only">Search payment records</label>
+          <Search aria-hidden="true" size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            id="payment-record-search"
+            type="text"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search student, branch, amount, status, or due date"
+            className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-10 text-sm text-gray-900 outline-none transition focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              aria-label="Clear payment search"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+            >
+              <X size={15} aria-hidden="true" />
+            </button>
+          )}
+        </div>
+        <p className="text-xs text-gray-500" aria-live="polite">
+          {visibleRows.length} of {rows.length} record{rows.length === 1 ? '' : 's'}
+        </p>
+      </div>
+
+      {visibleRows.length === 0 ? (
+        <div className="p-5">
+          <div className="rounded-xl border border-dashed border-gray-300 bg-white px-5 py-12 text-center">
+            <p className="text-sm font-medium text-gray-800">
+              {rows.length === 0
+                ? emptyText
+                : `No payment records match “${searchQuery.trim()}”.`}
+            </p>
+            {rows.length > 0 && (
+              <p className="mt-1 text-[13px] text-gray-500">Try another name or payment detail.</p>
+            )}
+          </div>
+        </div>
+      ) : (
+        // The table keeps its width and scrolls inside this box on small screens.
+        <div className="overflow-x-auto">
       <table className="system-data-table payment-records-table w-full min-w-[880px] border-collapse text-left">
         <thead className="border-b border-gray-100 bg-white">
           <tr>
@@ -110,7 +168,7 @@ export default function PaymentRecordsTable({
           </tr>
         </thead>
         <PaginatedTableRows itemLabel="payment records" colSpan={6}>
-          {rows.map((row) => {
+          {visibleRows.map((row) => {
             const badge = KIND_BADGES[row.kind]
             const reminderState = sendButtonState(row, today, reminderSchedule)
             return (
@@ -177,6 +235,8 @@ export default function PaymentRecordsTable({
           })}
         </PaginatedTableRows>
       </table>
+        </div>
+      )}
     </div>
   )
 }

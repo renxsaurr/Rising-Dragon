@@ -77,16 +77,14 @@ export default async function UsersPage() {
         <div>
           <div className="flex flex-wrap items-center gap-3">
             <h2 className="text-xl font-semibold tracking-tight text-gray-950">Staff accounts</h2>
-            <span className="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">{total} account{total === 1 ? '' : 's'}</span>
           </div>
-          <p className="mt-1 text-sm text-gray-500">Manage coach contact details, branch assignments, and login access.</p>
         </div>
         <AddUserModal branches={branches ?? []} />
       </div>
 
       {authLoadError && <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Login status could not be loaded. Confirm the server has SUPABASE_SERVICE_ROLE_KEY configured.</p>}
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <div className="overflow-hidden border-y border-gray-200 bg-white">
         {total === 0 ? (
           <div className="px-6 py-16 text-center">
             <p className="text-sm font-medium text-gray-800">No staff accounts yet</p>
@@ -95,31 +93,36 @@ export default async function UsersPage() {
         ) : (
           <>
           <div className="hidden xl:block">
-            <table className="system-data-table w-full table-fixed text-left">
-              <thead className="border-b border-gray-200 bg-gray-50/70">
+            <div className="overflow-x-auto">
+            <table aria-label="Staff accounts" className="w-full min-w-[1040px] table-fixed border-collapse bg-white text-left text-sm text-gray-950">
+              <thead className="border-b border-gray-200">
                 <tr>
-                  <th className="w-[15%] px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Name</th>
-                  <th className="w-[19%] px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Login email</th>
-                  <th className="w-[18%] px-3 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Role</th>
-                  <th className="w-[15%] px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Primary branch</th>
-                  <th className="w-[12%] px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Status</th>
-                  <th className="w-[21%] px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-500">Actions</th>
+                  <th scope="col" className="w-[6%] px-4 py-4 text-xs font-medium text-gray-500">#</th>
+                  <th scope="col" className="w-[25%] px-4 py-4 text-xs font-medium text-gray-500">Staff member</th>
+                  <th scope="col" className="w-[22%] px-4 py-4 text-xs font-medium text-gray-500">Login email</th>
+                  <th scope="col" className="w-[14%] px-4 py-4 text-xs font-medium text-gray-500">Role</th>
+                  <th scope="col" className="w-[16%] px-4 py-4 text-xs font-medium text-gray-500">Primary branch</th>
+                  <th scope="col" className="w-[10%] px-4 py-4 text-xs font-medium text-gray-500">Status</th>
+                  <th scope="col" className="w-[7%] px-4 py-4 text-right text-xs font-medium text-gray-500">Actions</th>
                 </tr>
               </thead>
-              <PaginatedTableRows itemLabel="staff accounts" colSpan={6}>
-                {users?.map((user) => {
+              <PaginatedTableRows itemLabel="staff accounts" colSpan={7}>
+                {users?.map((user, index) => {
                   const authUser = authById.get(user.auth_id)
                   const active = isAuthUserActive(authUser)
                   const isSelf = user.id === currentUser.id
                   const name = displayName(user)
                   return (
-                    <tr id={`user-${user.id}-desktop`} key={user.id} className="hover:bg-gray-50/70">
-                      <td className="px-5 py-4 text-sm font-medium text-gray-950">{name}{isSelf && <span className="ml-2 text-xs font-normal text-gray-400">You</span>}</td>
-                      <td className="px-5 py-4 text-sm font-medium text-gray-950">{authUser?.email ?? '—'}</td>
-                      <td className="whitespace-nowrap px-3 py-4"><span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium text-gray-950 ring-1 ring-inset ${user.role === 'head_coach' ? 'bg-red-50 ring-red-200' : 'bg-blue-50 ring-blue-200'}`}>{ROLE_LABELS[user.role] ?? user.role}</span></td>
-                      <td className="px-5 py-4 text-sm font-medium text-gray-950">{branchNameById.get(Number(user.primary_branch_id)) ?? '—'}</td>
-                      <td className="px-5 py-4"><span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-950"><span className={`h-1.5 w-1.5 rounded-full ${active ? 'bg-emerald-500' : 'bg-gray-300'}`} />{authUser ? active ? 'Active' : 'Inactive' : 'Unavailable'}</span></td>
-                      <td className="px-4 py-3">
+                    <tr id={`user-${user.id}-desktop`} key={user.id} className="border-b border-gray-100 transition-colors last:border-b-0 hover:bg-gray-50/60">
+                      <td className="px-4 py-5 text-sm font-medium tabular-nums text-gray-700">{index + 1}</td>
+                      <td className="px-4 py-5">
+                        <span className="break-words text-sm font-medium text-gray-950">{name}{isSelf && <span className="ml-2 text-xs font-normal text-gray-700">You</span>}</span>
+                      </td>
+                      <td className="break-all px-4 py-5 text-sm font-medium text-gray-950">{authUser?.email ?? '—'}</td>
+                      <td className="whitespace-normal px-4 py-5 text-sm font-medium text-gray-950">{ROLE_LABELS[user.role] ?? user.role}</td>
+                      <td className="break-words px-4 py-5 text-sm font-medium text-gray-950">{branchNameById.get(Number(user.primary_branch_id)) ?? '—'}</td>
+                      <td className="px-4 py-5"><span className="inline-flex items-center gap-2 text-sm font-medium text-gray-950"><span className={`h-2 w-2 rounded-full ${authUser && active ? 'bg-emerald-500' : 'bg-gray-300'}`} />{authUser ? active ? 'Active' : 'Inactive' : 'Unavailable'}</span></td>
+                      <td className="px-4 py-4">
                         <div className="flex justify-end"><RowActionsMenu>
                           <EditUserModal user={user} branches={branches ?? []} trigger={<RowActionItem>Edit staff account</RowActionItem>} />
                           <DeleteUserButton userId={user.id} userName={name} active={active} disabled={isSelf || !authUser} trigger={<RowActionItem disabled={isSelf || !authUser} className={`${ROW_ACTION_CLASS} text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40`}>{active ? 'Deactivate account' : 'Reactivate account'}</RowActionItem>} />
@@ -130,6 +133,7 @@ export default async function UsersPage() {
                 })}
               </PaginatedTableRows>
             </table>
+            </div>
           </div>
           <div className="divide-y divide-gray-100 xl:hidden">
             <PaginatedListItems itemLabel="staff accounts">
@@ -165,7 +169,6 @@ export default async function UsersPage() {
           </div>
           </>
         )}
-        <div className="border-t border-gray-100 px-5 py-3 text-xs text-gray-500">Staff records remain available for schedule and attendance history when login access is deactivated.</div>
       </div>
     </DashboardShell>
   )

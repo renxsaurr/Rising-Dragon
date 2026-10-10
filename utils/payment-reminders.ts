@@ -11,13 +11,13 @@ import { formatCoverage, type PaymentType } from '@/utils/payment-fees'
 import { reminderWindowFor, type ReminderType, type ReminderWindow } from '@/utils/reminder-timing'
 import { loadReminderSchedule } from '@/utils/reminder-settings'
 import { fetchAllRows } from '@/utils/fetch-all-rows'
+import { formatAmount } from '@/utils/payment-display'
+
+export { formatAmount, REMINDER_TYPES } from '@/utils/payment-display'
 
 // Kept here too so existing imports from this file keep working.
 export { reminderWindowFor, type ReminderType, type ReminderWindow } from '@/utils/reminder-timing'
 export type ReminderStatus = 'Scheduled' | 'Sent' | 'Failed' | 'Skipped'
-
-// Each type can be sent once per payment (UNIQUE payment_id + reminder_type), so at most 3.
-export const REMINDER_TYPES: ReminderType[] = ['Before due', 'Due today', 'After due']
 
 // A Gmail send times out within seconds, so a row still Scheduled after this was interrupted.
 const STUCK_AFTER_MINUTES = 10
@@ -97,9 +97,6 @@ const guardianEmail = (payment: PaymentWithStudent) => normalizeEmail(payment.st
 
 const studentName = (payment: PaymentWithStudent) =>
   [payment.student?.first_name, payment.student?.middle_name, payment.student?.last_name].filter(Boolean).join(' ') || 'your student'
-
-export const formatAmount = (amount: number | string) =>
-  new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(Number(amount))
 
 const formatDueDate = (date: string) =>
   new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'long', day: 'numeric', year: 'numeric' })

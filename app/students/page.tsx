@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Form from "next/form";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { cookies } from "next/headers";
@@ -15,6 +16,7 @@ import RowActionsMenu from "@/components/RowActionsMenu";
 import RowActionItem, { ROW_ACTION_CLASS } from "@/components/RowActionItem";
 import PaginatedTableRows from "@/components/PaginatedTableRows";
 import PaginatedListItems from "@/components/PaginatedListItems";
+import { Search } from "lucide-react";
 
 type StudentRow = {
   id: number;
@@ -39,6 +41,7 @@ export default async function StudentsPage({
     status?: string | string[];
     branch?: string | string[];
     belt?: string | string[];
+    q?: string | string[];
   }>;
 }) {
   const cookieStore = await cookies();
@@ -50,6 +53,10 @@ export default async function StudentsPage({
   const isHeadCoach = currentUser.role === "head_coach";
 
   const params = await searchParams;
+  const requestedSearch = Array.isArray(params.q) ? params.q[0] : params.q;
+  const searchQuery = typeof requestedSearch === "string"
+    ? requestedSearch.trim().slice(0, 80)
+    : "";
   const requestedStatus = Array.isArray(params.status)
     ? params.status[0]
     : params.status;
@@ -160,14 +167,45 @@ export default async function StudentsPage({
   }
 
   const total = students.length;
+  const normalizedSearch = searchQuery.toLowerCase();
+  const searchTerms = normalizedSearch.split(/\s+/).filter(Boolean);
+  const visibleStudents = normalizedSearch
+    ? students.filter((student) => {
+        const searchableFields = [
+          student.first_name,
+          student.middle_name,
+          student.last_name,
+          student.branch?.name,
+          formatBeltLabel(student.belt_level),
+        ]
+          .filter((value): value is string => typeof value === "string" && value.length > 0)
+          .map((value) => value.toLowerCase());
+        return searchTerms.every((term) =>
+          searchableFields.some((field) => field.includes(term)),
+        );
+      })
+    : students;
+  const visibleTotal = visibleStudents.length;
   const assistantHasNoSchedule =
     currentUser.role === "assistant_coach" &&
     (assignedBranchIds?.length ?? 0) === 0;
   const summary = assistantHasNoSchedule
     ? "Your roster appears here when you are scheduled at a branch."
-    : isHeadCoach
+    : searchQuery
+      ? `${visibleTotal} of ${total} student record${total === 1 ? "" : "s"} match “${searchQuery}”.`
+      : isHeadCoach
       ? `${total} student record${total === 1 ? " matches" : "s match"} the selected filters.`
       : `${total} student${total === 1 ? "" : "s"} at your assigned branches today.`;
+
+  const clearSearchParams = new URLSearchParams();
+  if (isHeadCoach && statusFilter !== "active")
+    clearSearchParams.set("status", statusFilter);
+  selectedBranchIds.forEach((id) => clearSearchParams.append("branch", id));
+  selectedBelts.forEach((belt) => clearSearchParams.append("belt", belt));
+  const clearSearchQuery = clearSearchParams.toString();
+  const clearSearchHref = clearSearchQuery
+    ? `/students?${clearSearchQuery}`
+    : "/students";
 
   return (
     <DashboardShell title="Students" currentUser={currentUser}>
@@ -189,6 +227,39 @@ export default async function StudentsPage({
         )}
       </div>
 
+      <Form action="/students" scroll={false} className="mb-3 flex max-w-2xl flex-wrap items-center gap-2">
+        {isHeadCoach && statusFilter !== "active" && (
+          <input type="hidden" name="status" value={statusFilter} />
+        )}
+        {selectedBranchIds.map((id) => (
+          <input key={id} type="hidden" name="branch" value={id} />
+        ))}
+        {selectedBelts.map((belt) => (
+          <input key={belt} type="hidden" name="belt" value={belt} />
+        ))}
+        <label htmlFor="student-search" className="sr-only">Search students</label>
+        <div className="relative min-w-[220px] flex-1">
+          <Search aria-hidden="true" size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            id="student-search"
+            name="q"
+            type="search"
+            maxLength={80}
+            defaultValue={searchQuery}
+            placeholder="Search by name, branch, or belt"
+            className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-900 outline-none transition focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
+          />
+        </div>
+        <button type="submit" className="h-10 rounded-lg bg-gray-900 px-4 text-sm font-medium text-white transition hover:bg-gray-700">
+          Search
+        </button>
+        {searchQuery && (
+          <Link href={clearSearchHref} scroll={false} className="px-2 py-2 text-sm font-medium text-gray-600 hover:text-gray-950">
+            Clear
+          </Link>
+        )}
+      </Form>
+
       <StudentFilters
         branches={filterBranches.map((branch) => ({
           value: String(branch.id),
@@ -202,22 +273,27 @@ export default async function StudentsPage({
         selectedBranchIds={selectedBranchIds}
         selectedBelts={selectedBelts}
         selectedStatus={statusFilter}
+        searchQuery={searchQuery}
       />
 
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-        {total === 0 ? (
+        {visibleTotal === 0 ? (
           <div className="px-6 py-16 text-center">
             <p className="text-sm font-medium text-gray-700">
               {assistantHasNoSchedule
                 ? "No branch assigned today"
-                : total === 0 && statusFilter === "archived"
+                : searchQuery
+                  ? "No students match this search"
+                  : total === 0 && statusFilter === "archived"
                   ? "No archived students"
                   : "No students match these filters"}
             </p>
             <p className="mt-1 text-[13px] text-gray-500">
               {assistantHasNoSchedule
                 ? "Your roster appears here when you are scheduled at a branch."
-                : total === 0 && statusFilter === "archived"
+                : searchQuery
+                  ? "Try another name, branch, or belt level, or clear the search."
+                  : total === 0 && statusFilter === "archived"
                   ? "Archived student records will appear here."
                   : "Try changing or clearing the filters."}
             </p>
@@ -281,7 +357,7 @@ export default async function StudentsPage({
                   </tr>
                 </thead>
                 <PaginatedTableRows itemLabel="students" pageSize={6} colSpan={isHeadCoach ? 8 : 4}>
-                  {students?.map((student) => {
+                  {visibleStudents.map((student) => {
                     const fullName = [
                       student.first_name,
                       student.middle_name,
@@ -362,7 +438,7 @@ export default async function StudentsPage({
 
             <div className="divide-y divide-gray-100 overflow-hidden rounded-b-xl xl:hidden">
               <PaginatedListItems itemLabel="students" pageSize={6}>
-              {students?.map((student) => {
+              {visibleStudents.map((student) => {
                 const fullName = [
                   student.first_name,
                   student.middle_name,
@@ -477,8 +553,8 @@ export default async function StudentsPage({
 
         <div className="flex items-center justify-between border-t border-gray-200 px-5 py-3.5">
           <p className="text-[13px] text-gray-500">
-            <span className="font-medium text-gray-700">{total}</span> result
-            {total === 1 ? "" : "s"}
+            <span className="font-medium text-gray-700">{visibleTotal}</span> result
+            {visibleTotal === 1 ? "" : "s"}
           </p>
         </div>
       </div>

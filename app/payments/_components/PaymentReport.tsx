@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
-import { paymentDetail } from './PaymentRecordsTable'
+import { paymentDetail } from './payment-detail'
 import { formatBeltLabel } from '@/utils/belts'
 import { formatCoverage } from '@/utils/payment-fees'
-import { formatAmount } from '@/utils/payment-reminders'
+import { formatAmount } from '@/utils/payment-display'
 import type {
   BranchPaymentStats,
   MissedStudent,

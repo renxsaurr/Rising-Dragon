@@ -110,16 +110,15 @@ export default function EditUserModal({
         <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/45 p-4">
           <section role="dialog" aria-modal="true" aria-labelledby={`edit-user-title-${user.id}`} className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl sm:p-7">
             <button type="button" onClick={closeModal} disabled={loading} aria-label="Close" className="absolute right-5 top-5 text-xl leading-none text-gray-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50">×</button>
-            <h2 id={`edit-user-title-${user.id}`} className="text-lg font-semibold text-gray-950">Edit staff account</h2>
-            <p className="mb-5 mt-1 text-sm text-gray-500">Update this staff member’s information and branch assignment.</p>
+            <h2 id={`edit-user-title-${user.id}`} className="mb-5 text-lg font-semibold text-gray-950">Edit staff account</h2>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <label className="block text-xs font-medium text-gray-700"><span className="flex h-8 items-center">First Name</span>
                   <input type="text" value={firstName} onChange={(event) => setFirstName(event.target.value)} placeholder="First name" required disabled={loading} autoComplete="given-name" className={`${inputClass} mt-1.5`} />
                 </label>
-                <label className="block text-xs font-medium text-gray-700"><span className="flex h-8 items-center gap-1 whitespace-nowrap text-[11px]">Middle Name <span className="text-[10px] font-normal text-gray-400">(optional)</span></span>
-                  <input type="text" value={middleName} onChange={(event) => setMiddleName(event.target.value)} placeholder="Middle name" disabled={loading} autoComplete="additional-name" className={`${inputClass} mt-1.5`} />
+                <label className="block text-xs font-medium text-gray-700"><span className="flex h-8 items-center whitespace-nowrap text-[11px]">Middle Name</span>
+                  <input type="text" value={middleName} onChange={(event) => setMiddleName(event.target.value)} placeholder="Optional" disabled={loading} autoComplete="additional-name" className={`${inputClass} mt-1.5`} />
                 </label>
                 <label className="block text-xs font-medium text-gray-700"><span className="flex h-8 items-center">Last Name</span>
                   <input type="text" value={lastName} onChange={(event) => setLastName(event.target.value)} placeholder="Last name" required disabled={loading} autoComplete="family-name" className={`${inputClass} mt-1.5`} />

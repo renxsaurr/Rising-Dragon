@@ -93,6 +93,7 @@ export default function StudentFilters({
   selectedBranchIds,
   selectedBelts,
   selectedStatus,
+  searchQuery,
 }: {
   branches: FilterOption[]
   belts: FilterOption[]
@@ -100,6 +101,7 @@ export default function StudentFilters({
   selectedBranchIds: string[]
   selectedBelts: string[]
   selectedStatus: StudentStatus
+  searchQuery: string
 }) {
   const [branchIds, setBranchIds] = useState(selectedBranchIds)
   const [beltValues, setBeltValues] = useState(selectedBelts)
@@ -140,6 +142,7 @@ export default function StudentFilters({
     setStatus(nextStatus)
 
     const params = new URLSearchParams()
+    if (searchQuery) params.set('q', searchQuery)
     if (canFilterStatus && nextStatus !== 'active') params.set('status', nextStatus)
     nextBranchIds.forEach((id) => params.append('branch', id))
     nextBeltValues.forEach((belt) => params.append('belt', belt))

@@ -430,6 +430,7 @@ export default async function PaymentsPage({
                 </p>
               )}
               <PaymentRecordsTable
+                key={`${month}:${selected.key}:${filter}`}
                 rows={visibleRows}
                 today={today}
                 reminderSchedule={reminderSchedule}
