@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { formatBranchOperatingSchedule, type BranchOperatingWindow } from '@/utils/branch-operating-hours'
 
 type Branch = {
   id: number
@@ -9,6 +10,7 @@ type Branch = {
   address: string
   description?: string | null
   photo_url?: string | null
+  operating_hours: BranchOperatingWindow[] | null
   is_active: boolean
   studentCount: number
   todayClasses: number
@@ -67,6 +69,7 @@ export default function BranchesView({ branches }: { branches: Branch[] }) {
                   </p>
                   {!branch.is_active && <span className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">Archived</span>}
                   <p className="text-[13px] text-gray-500 mt-0.5">{branch.address}</p>
+                  <p className="mt-1 max-w-3xl text-xs text-gray-500">{formatBranchOperatingSchedule(branch.operating_hours)}</p>
                   <div className="flex gap-3 mt-2 text-[12px] text-gray-500">
                     <span>{branch.studentCount} students</span>
                     <span>·</span>
@@ -102,6 +105,7 @@ export default function BranchesView({ branches }: { branches: Branch[] }) {
                 </h3>
                 {!branch.is_active && <span className="mt-1 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">Archived</span>}
                 <p className="text-[13px] text-gray-500">{branch.address}</p>
+                <p className="mt-1 line-clamp-2 text-xs text-gray-500">{formatBranchOperatingSchedule(branch.operating_hours)}</p>
                 {branch.description && (
                   <p className="text-[12px] text-gray-400 mt-1 line-clamp-2">{branch.description}</p>
                 )}

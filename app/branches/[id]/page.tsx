@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowRight, ArrowUpRight, CalendarDays, ChevronLeft, MapPin, Users } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, CalendarDays, ChevronLeft, Clock3, MapPin, Users } from 'lucide-react'
 import DashboardShell from '@/components/DashboardShell'
 import EditBranchModal from '@/components/EditBranchModal'
 import { Card, EmptyNote } from '@/components/DashboardWidgets'
@@ -10,6 +10,7 @@ import { createClient } from '@/utils/supabase/server'
 import { getCurrentUser } from '@/utils/getCurrentUser'
 import { dateInTimeZone, formatTimeRange, timeInTimeZone } from '@/utils/dates'
 import { BELT_COLORS, formatBeltLabel } from '@/utils/belts'
+import { BRANCH_WEEKDAYS, formatBranchOperatingHours, parseBranchOperatingHours } from '@/utils/branch-operating-hours'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,18 +65,23 @@ export default async function BranchDetailPage({ params, searchParams }: {
   const supabase = await createClient(await cookies())
   const { data: branch, error: branchError } = await supabase
     .from('branch')
-    .select('id, name, address, description, photo_url, is_active')
+    .select('id, name, address, description, photo_url, is_active, operating_hours')
     .eq('id', branchId)
     .maybeSingle()
 
   if (branchError) {
     return (
       <DashboardShell title="Branch" currentUser={currentUser}>
-        <p role="alert" className="text-sm text-red-600">Could not load this branch: {branchError.message}</p>
+        <p role="alert" className="text-sm text-red-600">
+          {branchError.message.includes('operating_hours')
+            ? 'Branch operating hours need a database update. Apply supabase/migrations/20261010100000_branch_operating_hours.sql in Supabase, then reload this page.'
+            : `Could not load this branch: ${branchError.message}`}
+        </p>
       </DashboardShell>
     )
   }
   if (!branch) notFound()
+  const operatingHours = parseBranchOperatingHours(branch.operating_hours)
 
   const today = dateInTimeZone()
   const now = timeInTimeZone()
@@ -146,7 +152,7 @@ export default async function BranchDetailPage({ params, searchParams }: {
           <ChevronLeft className="h-4 w-4" aria-hidden />
           {fromReports ? 'Back to reports' : 'Back to branches'}
         </Link>
-        <EditBranchModal branch={{ ...branch, address: branch.address ?? '' }} />
+        <EditBranchModal branch={{ ...branch, address: branch.address ?? '', operating_hours: operatingHours }} />
       </div>
 
       <section className="mt-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -160,6 +166,21 @@ export default async function BranchDetailPage({ params, searchParams }: {
           </p>
         )}
         {branch.description && <p className="mt-3 text-sm text-gray-700">{branch.description}</p>}
+        <div className="mt-5 border-t border-gray-100 pt-4">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+            <Clock3 className="h-4 w-4" aria-hidden />Operating hours
+          </h3>
+          <dl className="mt-3 grid grid-cols-1 gap-x-5 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
+            {BRANCH_WEEKDAYS.map((day) => (
+              <div key={day.value}>
+                <dt className="text-xs font-medium text-gray-500">{day.label}</dt>
+                <dd className="mt-0.5 text-sm font-medium text-gray-900">
+                  {formatBranchOperatingHours(operatingHours, day.value)}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
       </section>
 
       <div className="mt-6 grid items-start gap-5 lg:grid-cols-2">

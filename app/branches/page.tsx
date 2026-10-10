@@ -11,6 +11,7 @@ import PrintReportButton from '@/app/branches/_components/PrintReportButton'
 import { getCurrentUser } from '@/utils/getCurrentUser'
 import { dateInTimeZone } from '@/utils/dates'
 import { getBranchReportWithComparison, resolveReportRange } from '@/utils/branch-reports'
+import { parseBranchOperatingHours } from '@/utils/branch-operating-hours'
 
 export default async function BranchesPage({
   searchParams,
@@ -31,13 +32,17 @@ export default async function BranchesPage({
 
   const { data: branches, error } = await supabase
     .from('branch')
-    .select('id, name, address, description, photo_url, is_active')
+    .select('id, name, address, description, photo_url, is_active, operating_hours')
     .order('name')
 
   if (error) {
     return (
       <DashboardShell title="Branches" currentUser={currentUser}>
-        <p className="text-red-600 text-sm">Something went wrong: {error.message}</p>
+        <p role="alert" className="text-red-600 text-sm">
+          {error.message.includes('operating_hours')
+            ? 'Branch operating hours need a database update. Apply supabase/migrations/20261010100000_branch_operating_hours.sql in Supabase, then reload this page.'
+            : `Something went wrong: ${error.message}`}
+        </p>
       </DashboardShell>
     )
   }
@@ -97,6 +102,7 @@ export default async function BranchesPage({
   const branchesWithStats = branchRows.map((branch) => ({
     ...branch,
     address: branch.address ?? '',
+    operating_hours: parseBranchOperatingHours(branch.operating_hours),
     studentCount: studentsByBranch.get(Number(branch.id)) ?? 0,
     todayClasses: classesByBranch.get(Number(branch.id)) ?? 0,
   })).sort((a, b) => Number(b.is_active) - Number(a.is_active) || a.name.localeCompare(b.name))

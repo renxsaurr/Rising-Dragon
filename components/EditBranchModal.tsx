@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { uploadBranchPhoto } from '@/utils/uploadBranchPhoto'
 import { archiveBranch, deleteUnusedBranch, reactivateBranch, updateBranch } from '@/app/branches/actions'
+import BranchOperatingHoursFields from '@/components/BranchOperatingHoursFields'
+import { type BranchOperatingWindow } from '@/utils/branch-operating-hours'
 
 type Branch = {
   id: number
@@ -11,6 +13,7 @@ type Branch = {
   address: string
   description?: string | null
   photo_url?: string | null
+  operating_hours?: BranchOperatingWindow[] | null
   is_active: boolean
 }
 
@@ -22,6 +25,8 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
   const [name, setName] = useState(branch.name)
   const [address, setAddress] = useState(branch.address)
   const [description, setDescription] = useState(branch.description ?? '')
+  const [operatingHours, setOperatingHours] = useState<BranchOperatingWindow[]>(branch.operating_hours ?? [])
+  const [operatingHoursChanged, setOperatingHoursChanged] = useState(false)
 
   // -- photo state --
   // currentPhotoUrl: what's saved in the DB right now (or null if removed)
@@ -107,6 +112,7 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
       address,
       description: description || null,
       photoUrl: finalPhotoUrl,
+      operatingHours: operatingHoursChanged ? operatingHours : branch.operating_hours ?? null,
     })
 
     setLoading(false)
@@ -118,6 +124,8 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
 
     setCurrentPhotoUrl(finalPhotoUrl)
     setPhotoFile(null)
+    if (operatingHoursChanged) setOperatingHours(operatingHours)
+    setOperatingHoursChanged(false)
     setIsOpen(false)
     router.refresh()
   }
@@ -171,6 +179,14 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
                   className="w-full h-11 px-4 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all"
                 />
               </div>
+
+              <BranchOperatingHoursFields
+                value={operatingHours}
+                onChange={(nextHours) => {
+                  setOperatingHours(nextHours)
+                  setOperatingHoursChanged(true)
+                }}
+              />
 
               <div>
                 <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">

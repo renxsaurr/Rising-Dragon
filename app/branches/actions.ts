@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { dateInTimeZone } from '@/utils/dates'
 import { getCurrentUser } from '@/utils/getCurrentUser'
 import { createAdminClient } from '@/utils/supabase/admin'
+import { validateBranchOperatingHours, type BranchOperatingWindow } from '@/utils/branch-operating-hours'
 
 const BUCKET = 'branch-photos'
 
@@ -66,7 +67,7 @@ function refreshBranchViews() {
   revalidatePath('/dashboard')
 }
 
-export async function createBranch(input: { name: string; address: string; description: string | null; photoUrl: string | null }) {
+export async function createBranch(input: { name: string; address: string; description: string | null; photoUrl: string | null; operatingHours: BranchOperatingWindow[] }) {
   const access = await requireHeadCoach()
   if ('error' in access) return access
   if (!input || typeof input !== 'object') return { error: 'Branch details are invalid.' }
@@ -79,9 +80,18 @@ export async function createBranch(input: { name: string; address: string; descr
     await rollbackPhoto(input.photoUrl)
     return { error: 'The branch photo is invalid.' }
   }
+  const hours = validateBranchOperatingHours(input.operatingHours)
+  if ('error' in hours) {
+    await rollbackPhoto(input.photoUrl)
+    return hours
+  }
 
   const admin = createAdminClient()
-  const { error } = await admin.from('branch').insert({ ...cleaned.value, photo_url: input.photoUrl })
+  const { error } = await admin.from('branch').insert({
+    ...cleaned.value,
+    photo_url: input.photoUrl,
+    operating_hours: hours.value,
+  })
   if (error) {
     await rollbackPhoto(input.photoUrl)
     return { error: error.code === '23505' ? 'An active branch already uses that name.' : error.message }
@@ -90,13 +100,13 @@ export async function createBranch(input: { name: string; address: string; descr
   return { success: true }
 }
 
-export async function updateBranch(branchId: number, input: { name: string; address: string; description: string | null; photoUrl: string | null }) {
+export async function updateBranch(branchId: number, input: { name: string; address: string; description: string | null; photoUrl: string | null; operatingHours: BranchOperatingWindow[] | null }) {
   const access = await requireHeadCoach()
   if ('error' in access) return access
   if (!Number.isSafeInteger(branchId) || branchId <= 0) return { error: 'Branch not found.' }
   if (!input || typeof input !== 'object') return { error: 'Branch details are invalid.' }
   const admin = createAdminClient()
-  const { data: existing, error: lookupError } = await admin.from('branch').select('id, photo_url').eq('id', branchId).maybeSingle()
+  const { data: existing, error: lookupError } = await admin.from('branch').select('id, photo_url, operating_hours').eq('id', branchId).maybeSingle()
   if (lookupError || !existing) {
     if (input.photoUrl !== existing?.photo_url) await rollbackPhoto(input.photoUrl)
     return { error: lookupError?.message ?? 'Branch not found.' }
@@ -110,7 +120,20 @@ export async function updateBranch(branchId: number, input: { name: string; addr
     if (input.photoUrl !== existing.photo_url) await rollbackPhoto(input.photoUrl)
     return { error: 'The branch photo is invalid.' }
   }
-  const { data, error } = await admin.from('branch').update({ ...cleaned.value, photo_url: input.photoUrl }).eq('id', branchId).select('id').maybeSingle()
+  let operatingHours = existing.operating_hours
+  if (input.operatingHours !== null) {
+    const hours = validateBranchOperatingHours(input.operatingHours)
+    if ('error' in hours) {
+      if (input.photoUrl !== existing.photo_url) await rollbackPhoto(input.photoUrl)
+      return hours
+    }
+    operatingHours = hours.value
+  }
+  const { data, error } = await admin.from('branch').update({
+    ...cleaned.value,
+    photo_url: input.photoUrl,
+    operating_hours: operatingHours,
+  }).eq('id', branchId).select('id').maybeSingle()
   if (error || !data) {
     if (input.photoUrl !== existing.photo_url) await rollbackPhoto(input.photoUrl)
     return { error: error?.code === '23505' ? 'An active branch already uses that name.' : error?.message ?? 'Branch could not be updated.' }

@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { uploadBranchPhoto } from '@/utils/uploadBranchPhoto'
 import { createBranch } from '@/app/branches/actions'
+import BranchOperatingHoursFields from '@/components/BranchOperatingHoursFields'
+import type { BranchOperatingWindow } from '@/utils/branch-operating-hours'
 
 export default function AddBranchModal() {
   const [isOpen, setIsOpen] = useState(false)
@@ -12,6 +14,7 @@ export default function AddBranchModal() {
   const [name, setName] = useState('')
   const [address, setAddress] = useState('')
   const [description, setDescription] = useState('')
+  const [operatingHours, setOperatingHours] = useState<BranchOperatingWindow[]>([])
 
   // -- photo upload state --
   const [photoFile, setPhotoFile] = useState<File | null>(null)
@@ -43,7 +46,13 @@ export default function AddBranchModal() {
       }
     }
 
-    const result = await createBranch({ name, address, description: description || null, photoUrl })
+    const result = await createBranch({
+      name,
+      address,
+      description: description || null,
+      photoUrl,
+      operatingHours,
+    })
 
     setLoading(false)
 
@@ -55,6 +64,7 @@ export default function AddBranchModal() {
     setName('')
     setAddress('')
     setDescription('')
+    setOperatingHours([])
     setPhotoFile(null)
     setPhotoPreview(null)
     setIsOpen(false)
@@ -110,6 +120,8 @@ export default function AddBranchModal() {
                   className="w-full h-11 px-4 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all"
                 />
               </div>
+
+              <BranchOperatingHoursFields value={operatingHours} onChange={setOperatingHours} />
 
               <div>
                 <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
