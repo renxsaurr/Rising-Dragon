@@ -151,14 +151,14 @@ export async function getBranchReport({ start, end, branchIds }: {
         if (error) throw new Error(error.message)
         return (data ?? []) as { id: number; name: string }[]
       })(),
-      // today's snapshot, not range-based
+      // today's snapshot, not range-based. admin: billing_plan isn't granted to logged-in users (Head Coach checked above)
       fetchAllRows<{ id: number; branch_id: number; enrollment_date: string; billing_plan: string | null }>((from, to) => {
-        let query = supabase.from('student').select('id, branch_id, enrollment_date, billing_plan').eq('is_active', true)
+        let query = admin.from('student').select('id, branch_id, enrollment_date, billing_plan').eq('is_active', true)
         if (filterIds) query = query.in('branch_id', filterIds)
         return query.order('id').range(from, to)
       }),
       fetchAllRows<{ branch_id: number }>((from, to) => {
-        let query = supabase.from('student').select('branch_id')
+        let query = admin.from('student').select('branch_id')
           .gte('enrollment_date', start).lte('enrollment_date', effectiveEnd)
         if (filterIds) query = query.in('branch_id', filterIds)
         return query.order('id').range(from, to)
