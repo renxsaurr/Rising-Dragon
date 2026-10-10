@@ -16,6 +16,9 @@ export const PAYMENT_TABS = ['notpaid', 'missed', 'records'] as const
 
 export type PaymentTab = (typeof PAYMENT_TABS)[number]
 
+export const HISTORY_PAGES = ['business', 'payments', 'reminders'] as const
+export type HistoryPage = (typeof HISTORY_PAGES)[number]
+
 export const isPaymentTab = (value: unknown): value is PaymentTab =>
   PAYMENT_TABS.some((tab) => tab === value)
 
@@ -36,20 +39,23 @@ export function paymentsHref({
   tab,
   view,
   history,
+  historyPage,
 }: {
   month: string
   branch?: string
   filter?: PaymentFilterKey
   /** Left out = the page picks its default tab. */
   tab?: PaymentTab
-  view?: 'history'
+  view?: 'history' | 'reports'
   history?: HistoryQuery
+  historyPage?: HistoryPage
 }) {
   const params = new URLSearchParams({ month })
   if (branch && branch !== 'all') params.set('branch', branch)
   if (filter && filter !== 'all') params.set('filter', filter)
   if (tab) params.set('tab', tab)
   if (view) params.set('view', view)
+  if (view === 'history' && historyPage) params.set('historyPage', historyPage)
   if (view === 'history' && history) {
     if (history.hq) params.set('hq', history.hq)
     if (history.hstatus && history.hstatus !== 'all') params.set('hstatus', history.hstatus)

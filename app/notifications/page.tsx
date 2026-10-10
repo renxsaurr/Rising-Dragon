@@ -29,8 +29,8 @@ export default async function NotificationsPage() {
           <h2 className="text-xl font-semibold tracking-tight text-gray-950">Latest notifications</h2>
           <p className="mt-1 text-sm text-gray-700">
             {currentUser.role === 'head_coach'
-              ? 'Payment issues, attendance gaps, and recent student progress updates.'
-              : 'Your upcoming assigned classes and attendance tasks.'}
+              ? 'Payment issues, attendance gaps, schedule coverage requests, and recent student progress updates.'
+              : 'Your upcoming classes, attendance tasks, and time-away report updates.'}
           </p>
         </header>
 

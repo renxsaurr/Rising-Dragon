@@ -88,11 +88,12 @@ export default function AvailabilityPanel({
 
   return (
     <section className={`${isAssistantCoach ? 'mt-6' : ''} rounded-2xl border border-gray-200 bg-white shadow-sm`}>
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 px-5 py-4">
-        <div>
+      <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-5 py-4">
+        <div className="flex items-center gap-3">
+          <svg className="h-5 w-5 text-gray-800" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2m16 0v-2a4 4 0 0 0-3-3.87M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7-7.87a4 4 0 0 1 0 7.75" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
           <h2 className="text-base font-semibold text-gray-950">Coach availability</h2>
         </div>
-        <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">{weeklyEntries.length} weekly blocks</span>
+        <span className="min-w-9 rounded-lg bg-gray-100 px-2.5 py-1 text-center text-xs font-semibold text-gray-700">{weeklyEntries.length}</span>
       </div>
 
       {isAssistantCoach && (
@@ -112,19 +113,18 @@ export default function AvailabilityPanel({
         </form>
       )}
 
-      <div className="p-4 sm:p-5">
-        <h3 className="text-sm font-semibold text-gray-900">Weekly availability</h3>
+      <div className={isAssistantCoach ? 'p-4 sm:p-5' : ''}>
+        {isAssistantCoach && <h3 className="text-sm font-semibold text-gray-900">Weekly availability</h3>}
         {weeklyEntries.length === 0 ? (
-          <p className="mt-3 rounded-xl border border-dashed border-gray-300 px-4 py-6 text-center text-sm text-gray-500">No weekly availability submitted yet.</p>
+          <p className="m-4 rounded-xl border border-dashed border-gray-300 px-4 py-6 text-center text-sm font-medium text-gray-900">No weekly availability submitted yet.</p>
         ) : (
-          <div className="mt-3 divide-y divide-gray-100 rounded-xl border border-gray-200">
+          <div className={`divide-y divide-gray-100 ${isAssistantCoach ? 'mt-3 rounded-xl border border-gray-200' : ''}`}>
             {visibleEntries.map((entry) => (
-              <div key={entry.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                <div>
-                  {!isAssistantCoach && <p className="text-xs font-medium text-gray-500">{entry.coach?.name ?? 'Coach'}</p>}
-                  <p className="text-sm font-medium text-gray-900">{weekdays[entry.weekday - 1]} · {formatTimeRange(entry.time_start, entry.time_end)}</p>
-                  <p className="mt-0.5 text-xs text-gray-500">Repeats every week</p>
-                </div>
+              <div key={entry.id} className={`flex flex-wrap items-center justify-between gap-3 py-3 ${isAssistantCoach ? 'px-4' : 'min-h-[64px] px-5'}`}>
+                {isAssistantCoach
+                  ? <p className="text-sm font-medium text-gray-900">{weekdays[entry.weekday - 1]} · {formatTimeRange(entry.time_start, entry.time_end)}</p>
+                  : <p className="text-sm font-semibold text-gray-900">{entry.coach?.name ?? 'Coach'}</p>}
+                {!isAssistantCoach && <span className="rounded-full border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-900">{weekdays[entry.weekday - 1]} · {formatTimeRange(entry.time_start, entry.time_end)}</span>}
                 {isAssistantCoach && <div className="flex shrink-0 gap-2">
                   <button onClick={() => editWeekly(entry)} className="text-xs font-medium text-gray-600 hover:text-black">Edit</button>
                   <button onClick={() => removeWeekly(entry.id)} className="text-xs font-medium text-gray-400 hover:text-red-600">Remove</button>
@@ -134,10 +134,10 @@ export default function AvailabilityPanel({
           </div>
         )}
         {!isAssistantCoach && weeklyEntries.length > pageSize && (
-          <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 px-5 py-3">
+            <span className="text-xs font-medium text-gray-800">Page {safePage} of {pageCount}</span>
             <div className="flex items-center gap-1">
               <button type="button" onClick={() => setAvailabilityPage(Math.max(1, safePage - 1))} disabled={safePage === 1} aria-label="Previous coach availability page" className="grid h-9 w-9 place-items-center rounded-lg bg-black text-lg font-semibold text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400">‹</button>
-              <span className="min-w-20 px-2 text-center text-xs font-semibold text-gray-700">Page {safePage} of {pageCount}</span>
               <button type="button" onClick={() => setAvailabilityPage(Math.min(pageCount, safePage + 1))} disabled={safePage === pageCount} aria-label="Next coach availability page" className="grid h-9 w-9 place-items-center rounded-lg bg-black text-lg font-semibold text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400">›</button>
             </div>
           </div>

@@ -116,9 +116,9 @@ export default function AddUserModal({ branches }: { branches: Branch[] }) {
               <label className="block text-xs font-medium text-gray-700">Contact number
                 <input type="tel" value={contact} onChange={(event) => setContact(event.target.value)} required autoComplete="tel" className={`${inputClass} mt-1.5`} />
               </label>
-              <label className="block text-xs font-medium text-gray-700">Primary branch <span className="font-normal text-gray-400">(optional)</span>
-                <select value={branchId} onChange={(event) => setBranchId(event.target.value)} className={`${inputClass} mt-1.5 bg-white`}>
-                  <option value="">No primary branch</option>
+              <label className="block text-xs font-medium text-gray-700">Primary branch
+                <select required value={branchId} onChange={(event) => setBranchId(event.target.value)} className={`${inputClass} mt-1.5 bg-white`}>
+                  <option value="">Select a primary branch</option>
                   {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
                 </select>
               </label>

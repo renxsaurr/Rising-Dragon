@@ -70,13 +70,12 @@ export async function createUser(input: {
     return { error: 'Enter first and last name, a contact number, and a valid email address.' }
   }
   if (input.primary_branch_id !== null && (!Number.isSafeInteger(input.primary_branch_id) || input.primary_branch_id <= 0)) return { error: 'Select a valid primary branch.' }
+  if (input.primary_branch_id === null) return { error: 'Assign the Assistant Coach a primary branch.' }
 
   const temporaryPassword = generateTemporaryPassword()
   const admin = createAdminClient()
-  if (input.primary_branch_id !== null) {
-    const { data: branch, error: branchError } = await admin.from('branch').select('id').eq('id', input.primary_branch_id).eq('is_active', true).maybeSingle()
-    if (branchError || !branch) return { error: 'Select an active primary branch.' }
-  }
+  const { data: branch, error: branchError } = await admin.from('branch').select('id').eq('id', input.primary_branch_id).eq('is_active', true).maybeSingle()
+  if (branchError || !branch) return { error: 'Select an active primary branch.' }
   const { data: authResult, error: authError } = await admin.auth.admin.createUser({
     email,
     password: temporaryPassword,
@@ -124,6 +123,12 @@ export async function updateUser(userId: number, data: {
   if (data.primary_branch_id !== null && (!Number.isSafeInteger(data.primary_branch_id) || data.primary_branch_id <= 0)) return { error: 'Select a valid primary branch.' }
 
   const admin = createAdminClient()
+  const { data: existingUser, error: existingUserError } = await admin.from('user')
+    .select('id, role, primary_branch_id')
+    .eq('id', userId)
+    .maybeSingle()
+  if (existingUserError || !existingUser) return { error: 'User profile not found.' }
+  if (existingUser.role === 'assistant_coach' && data.primary_branch_id === null) return { error: 'Assistant Coaches must have a primary branch.' }
   if (data.primary_branch_id !== null) {
     const { data: branch, error: branchError } = await admin.from('branch').select('id').eq('id', data.primary_branch_id).eq('is_active', true).maybeSingle()
     if (branchError || !branch) return { error: 'Select an active primary branch.' }
@@ -139,6 +144,8 @@ export async function updateUser(userId: number, data: {
   if (!updatedUser) return { error: 'User profile not found.' }
 
   revalidatePath('/users')
+  revalidatePath('/scheduling')
+  revalidatePath('/attendance')
   return { success: true }
 }
 

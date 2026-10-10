@@ -119,6 +119,8 @@ export type MissedStudent = {
 
 export type PaymentMonth = {
   rows: PaymentRecord[]
+  /** Every unpaid attendance-generated per-session charge, across all dates. */
+  unpaidPerSession: PaymentRecord[]
   /** "All branches" first, then every branch by name, even branches with no payments. */
   branches: BranchPaymentStats[]
   /** Keyed like branches: 'all' and each branch id. */
@@ -318,7 +320,7 @@ export async function loadPaymentMonth(admin: Admin, month: string, today: strin
   const coverageTo = missedLast && monthEnd(missedLast) > end ? monthEnd(missedLast) : end
 
   try {
-    const [branchResult, payments, olderOverdue, students, nearbyMonthly, paidInRange] = await Promise.all([
+    const [branchResult, payments, olderOverdue, students, nearbyMonthly, paidInRange, unpaidPerSessionPayments] = await Promise.all([
       admin.from('branch').select('id, name').order('name'),
       fetchAllRows<RawPayment>((from, to) => admin.from('payment')
         .select(PAYMENT_SELECT)
@@ -358,6 +360,13 @@ export async function loadPaymentMonth(admin: Admin, month: string, today: strin
             .order('id')
             .range(from, to))
         : Promise.resolve([]),
+      fetchAllRows<RawPayment>((from, to) => admin.from('payment')
+        .select(PAYMENT_SELECT)
+        .eq('status', 'Unpaid')
+        .eq('payment_type', 'Per session')
+        .order('due_date')
+        .order('id')
+        .range(from, to)),
     ])
     if (branchResult.error) throw new Error(branchResult.error.message)
 
@@ -365,7 +374,7 @@ export async function loadPaymentMonth(admin: Admin, month: string, today: strin
     const branchNames = new Map(branchList.map((branch) => [Number(branch.id), branch.name]))
     const reminders = await loadReminders(admin, payments.map((payment) => Number(payment.id)))
 
-    const rows = payments.map((payment): PaymentRecord => {
+    const toPaymentRecord = (payment: RawPayment, paymentReminders: ReminderSummary[] = []): PaymentRecord => {
       const student = one(payment.student)
       const branchId = student?.branch_id == null ? null : Number(student.branch_id)
       const daysUntilDue = daysBetween(today, payment.due_date)
@@ -390,9 +399,11 @@ export async function loadPaymentMonth(admin: Admin, month: string, today: strin
         coverageStart: payment.coverage_start,
         enrollmentDate: student?.enrollment_date ?? null,
         notes: payment.notes?.trim() || null,
-        reminders: reminders.get(Number(payment.id)) ?? [],
+        reminders: paymentReminders,
       }
-    })
+    }
+    const rows = payments.map((payment) => toPaymentRecord(payment, reminders.get(Number(payment.id)) ?? []))
+    const unpaidPerSession = unpaidPerSessionPayments.map((payment) => toPaymentRecord(payment))
 
     const all = emptyStats('all', 'All branches')
     const byBranch = new Map(branchList.map((branch) => [Number(branch.id), emptyStats(String(branch.id), branch.name)]))
@@ -536,6 +547,7 @@ export async function loadPaymentMonth(admin: Admin, month: string, today: strin
     return {
       data: {
         rows,
+        unpaidPerSession,
         branches: [all, ...byBranch.values()].map((stats) => ({
           ...stats,
           expected: roundMoney(stats.expected),

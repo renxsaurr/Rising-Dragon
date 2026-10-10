@@ -177,6 +177,7 @@ type CurrentUser = {
 
 // Last known user, so loading screens can render the same sidebar while the next page is fetched.
 let lastKnownUser: CurrentUser = null;
+let sidebarOpenMemory = true;
 
 export function getLastKnownUser() {
   return lastKnownUser;
@@ -282,6 +283,7 @@ export default function DashboardShell({
   // Highlight the clicked link immediately instead of waiting for the server render to finish.
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [lastPathname, setLastPathname] = useState(pathname);
+  const [sidebarOpen, setSidebarOpen] = useState(sidebarOpenMemory);
   if (lastPathname !== pathname) {
     setLastPathname(pathname);
     setPendingHref(null);
@@ -291,6 +293,10 @@ export default function DashboardShell({
     path === href || path.startsWith(`${href}/`);
   const isActive = (href: string) =>
     pendingHref ? matches(pendingHref, href) : matches(pathname, href);
+  const toggleSidebar = () => {
+    sidebarOpenMemory = !sidebarOpen;
+    setSidebarOpen(sidebarOpenMemory);
+  };
 
   const handleNavClick =
     (href: string) => (event: MouseEvent<HTMLAnchorElement>) => {
@@ -318,10 +324,11 @@ export default function DashboardShell({
         href={href}
         onClick={handleNavClick(href)}
         aria-current={active ? "page" : undefined}
-        className={`relative flex items-center gap-3 rounded-lg px-3.5 py-2.5 text-[14px] font-medium transition-colors ${
+        title={!sidebarOpen ? label : undefined}
+        className={`relative flex items-center rounded-lg py-2.5 text-[14px] font-medium transition-colors ${sidebarOpen ? "gap-3 px-3.5" : "justify-center px-2"} ${
           active
             ? "bg-red-600 text-white"
-            : "text-gray-400 hover:bg-white/5 hover:text-white"
+            : "text-gray-700 hover:bg-gray-100 hover:text-gray-950"
         }`}
       >
         {active && (
@@ -331,7 +338,7 @@ export default function DashboardShell({
           />
         )}
         <Icon />
-        {label}
+        {sidebarOpen && <span>{label}</span>}
       </Link>
     );
   };
@@ -348,34 +355,36 @@ export default function DashboardShell({
       <div
         key={item.href}
         title="Coming soon"
-        className="flex cursor-not-allowed items-center justify-between rounded-lg px-3.5 py-2.5 text-[14px] font-medium text-gray-600"
+        className="flex cursor-not-allowed items-center justify-between rounded-lg px-3.5 py-2.5 text-[14px] font-medium text-gray-400"
       >
         <div className="flex items-center gap-3">
           <Icon />
           {item.label}
         </div>
-        <span className="rounded-md bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">
+        <span className="rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">
           Soon
         </span>
       </div>
     );
   };
 
-  const sectionLabel = (label: string) => (
-    <p className="mt-5 mb-1.5 border-t border-white/10 px-3.5 pt-5 text-[12px] font-medium text-gray-500">
-      {label}
-    </p>
-  );
+  const sectionLabel = (label: string) =>
+    sidebarOpen ? (
+      <p className="mt-5 mb-1.5 border-t border-gray-200 px-3.5 pt-5 text-[12px] font-medium text-gray-500">
+        {label}
+      </p>
+    ) : null;
 
   return (
     <div data-shell="root" className="flex h-dvh w-full overflow-hidden bg-white">
-      <aside data-shell="sidebar" className="flex h-full w-64 shrink-0 flex-col bg-black">
+      <aside data-shell="sidebar" className={`flex h-full shrink-0 flex-col border-r border-gray-200 bg-white transition-[width] duration-200 ${sidebarOpen ? "w-64" : "w-[72px]"}`}>
         <Link
           href="/dashboard"
           onClick={handleNavClick("/dashboard")}
-          className="flex items-center gap-3 px-6 pt-7 pb-6"
+          title={!sidebarOpen ? "Rising Dragon Taekwondo" : undefined}
+          className={`flex items-center pt-7 pb-5 ${sidebarOpen ? "gap-3 px-5" : "justify-center px-2"}`}
         >
-          <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full ring-2 ring-white/80">
+          <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded-full ring-2 ring-gray-200">
             <Image
               src="/logo.png"
               alt=""
@@ -385,17 +394,32 @@ export default function DashboardShell({
               priority
             />
           </span>
-          <span className="leading-tight">
-            <span className="block text-[15px] font-bold tracking-wide text-white">
-              RISING DRAGON
+          {sidebarOpen && (
+            <span className="leading-tight">
+              <span className="block text-[15px] font-bold tracking-wide text-gray-950">
+                RISING DRAGON
+              </span>
+              <span className="block text-[11px] font-medium tracking-[0.2em] text-gray-500">
+                TAEKWONDO
+              </span>
             </span>
-            <span className="block text-[11px] font-medium tracking-[0.2em] text-gray-400">
-              TAEKWONDO
-            </span>
-          </span>
+          )}
         </Link>
 
-        <nav className="no-scrollbar flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3">
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          aria-label={sidebarOpen ? "Collapse navigation drawer" : "Open navigation drawer"}
+          aria-expanded={sidebarOpen}
+          className={`mx-3 mb-2 flex h-9 items-center rounded-lg text-xs font-semibold uppercase tracking-[0.12em] text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 ${sidebarOpen ? "gap-2 px-2.5" : "justify-center"}`}
+        >
+          <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+            <path d="M4 6h16M4 12h16M4 18h16" strokeLinecap="round" strokeWidth="1.8" />
+          </svg>
+          {sidebarOpen && <span>Menu</span>}
+        </button>
+
+        <nav className={`no-scrollbar flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto ${sidebarOpen ? "px-3" : "px-2"}`}>
           {navLink("/dashboard", "Dashboard", GridIcon)}
           {workspaceItems.filter((item) => item.show).map(renderItem)}
           {isHeadCoach && (
@@ -411,10 +435,12 @@ export default function DashboardShell({
         <div className="p-4">
           <button
             onClick={handleLogout}
-            className="flex w-full items-center justify-center gap-2.5 rounded-lg border border-white/15 bg-white/5 px-4 py-2.5 text-[14px] font-medium text-gray-200 transition-colors hover:bg-white/10 hover:text-white"
+            title={!sidebarOpen ? "Logout" : undefined}
+            aria-label="Logout"
+            className={`flex w-full items-center justify-center rounded-lg border border-gray-200 bg-white py-2.5 text-[14px] font-medium text-gray-700 transition-colors hover:bg-gray-100 hover:text-gray-950 ${sidebarOpen ? "gap-2.5 px-4" : "px-2"}`}
           >
             <LogoutIcon />
-            Logout
+            {sidebarOpen && "Logout"}
           </button>
         </div>
       </aside>

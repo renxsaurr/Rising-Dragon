@@ -2,6 +2,7 @@ import 'server-only'
 
 import { createAdminClient } from '@/utils/supabase/admin'
 import { addDays, dateInTimeZone } from '@/utils/dates'
+import { branchOperatingHoursConflict, parseBranchOperatingHours } from '@/utils/branch-operating-hours'
 
 const overlaps = (startA: string, endA: string, startB: string, endB: string) =>
   startA.slice(0, 5) < endB.slice(0, 5) && endA.slice(0, 5) > startB.slice(0, 5)
@@ -18,8 +19,8 @@ type WeeklyTemplate = {
   weekday: number
   time_start: string
   time_end: string
-  branch: { name?: string } | null
-  coach: { first_name?: string | null; middle_name?: string | null; last_name?: string | null; role?: string } | null
+  branch: { name?: string; operating_hours?: unknown } | null
+  coach: { first_name?: string | null; middle_name?: string | null; last_name?: string | null; role?: string; primary_branch_id?: number | null } | null
 }
 
 type DatedSession = {
@@ -32,6 +33,26 @@ type DatedSession = {
   status: string
   weekly_template_id: number | null
   auto_cancelled: boolean
+  closure_id: number | null
+  is_manual_override: boolean
+  is_cross_branch_override: boolean
+  absence_report_id: number | null
+  branch: { name?: string; operating_hours?: unknown } | null
+  coach: {
+    role?: string
+    primary_branch_id?: number | null
+    primary_branch: { operating_hours?: unknown } | null
+    first_name?: string | null
+    middle_name?: string | null
+    last_name?: string | null
+  } | null
+}
+
+type ScheduleClosure = {
+  id: number
+  branch_id: number | null
+  starts_on: string
+  ends_on: string
 }
 
 export type WeeklySessionSyncResult = {
@@ -53,13 +74,20 @@ export async function syncWeeklySessions(startDate: string, endDate: string): Pr
 
   const admin = createAdminClient()
   const { data: templateData, error: templateError } = await admin.from('weekly_class_template')
-    .select('id, branch_id, coach_id, weekday, time_start, time_end, is_active, branch:branch!weekly_class_template_branch_id_fkey(name), coach:user!weekly_class_template_coach_id_fkey(first_name, middle_name, last_name, role)')
+    .select('id, branch_id, coach_id, weekday, time_start, time_end, is_active, branch:branch!weekly_class_template_branch_id_fkey(name, operating_hours), coach:user!weekly_class_template_coach_id_fkey(first_name, middle_name, last_name, role, primary_branch_id)')
     .eq('is_active', true)
   if (templateError) return { ...result, error: templateError.message }
 
   const templates = (templateData ?? []) as unknown as WeeklyTemplate[]
+  const { data: closureData, error: closureError } = await admin.from('schedule_closure')
+    .select('id, branch_id, starts_on, ends_on')
+    .eq('is_active', true)
+    .lte('starts_on', endDate)
+    .gte('ends_on', rangeStart)
+  if (closureError) return { ...result, error: closureError.message }
+  const closures = (closureData ?? []) as ScheduleClosure[]
   const { data: sessionData, error: sessionError } = await admin.from('class_schedule')
-    .select('id, date, time_start, time_end, branch_id, coach_id, status, weekly_template_id, auto_cancelled')
+    .select('id, date, time_start, time_end, branch_id, coach_id, status, weekly_template_id, auto_cancelled, closure_id, is_manual_override, is_cross_branch_override, absence_report_id, branch:branch!class_schedule_branch_id_fkey(name, operating_hours), coach:user!class_schedule_coach_id_fkey(first_name, middle_name, last_name, role, primary_branch_id, primary_branch:branch!user_primary_branch_id_fkey(operating_hours))')
     .gte('date', rangeStart)
     .lte('date', endDate)
   if (sessionError) return { ...result, error: sessionError.message }
@@ -75,9 +103,10 @@ export async function syncWeeklySessions(startDate: string, endDate: string): Pr
   }
 
   const templatesById = new Map(templates.map((template) => [Number(template.id), template]))
-  const availabilityCoachIds = [...new Set(templates
-    .filter((template) => template.coach?.role === 'assistant_coach')
-    .map((template) => Number(template.coach_id))) ]
+  const availabilityCoachIds = [...new Set([
+    ...templates.filter((template) => template.coach?.role === 'assistant_coach').map((template) => Number(template.coach_id)),
+    ...sessions.filter((session) => session.coach?.role === 'assistant_coach').map((session) => Number(session.coach_id)),
+  ])]
   let weeklyAvailability: { coach_id: number; weekday: number; time_start: string; time_end: string }[] = []
   if (availabilityCoachIds.length) {
     const { data, error } = await admin.from('coach_weekly_availability')
@@ -106,10 +135,36 @@ export async function syncWeeklySessions(startDate: string, endDate: string): Pr
     return true
   }
 
+  const closureForSession = (session: { date: string; branch_id: number }) => closures.find((closure) =>
+    closure.starts_on <= session.date
+    && closure.ends_on >= session.date
+    && (closure.branch_id === null || Number(closure.branch_id) === Number(session.branch_id)),
+  )
+
+  const cancelForClosure = async (session: DatedSession, closure: ScheduleClosure) => {
+    if (session.status !== 'Scheduled' || attendedSessionIds.has(Number(session.id))) return false
+    const { data, error } = await admin.from('class_schedule')
+      .update({ status: 'Cancelled', auto_cancelled: true, closure_id: Number(closure.id) })
+      .eq('id', session.id).eq('status', 'Scheduled').select('id')
+    if (error) throw new Error(error.message)
+    if (!data?.length) return false
+    session.status = 'Cancelled'
+    session.auto_cancelled = true
+    session.closure_id = Number(closure.id)
+    result.cancelled += 1
+    return true
+  }
+
   try {
+    // Apply one-time closures to both recurring and manually added sessions.
+    for (const session of sessions) {
+      const closure = closureForSession(session)
+      if (closure) await cancelForClosure(session, closure)
+    }
+
     // Stop stale future occurrences when a template was removed or moved to another weekday.
     for (const session of sessions) {
-      if (session.status !== 'Scheduled' || session.weekly_template_id === null || session.date <= today) continue
+      if (session.status !== 'Scheduled' || session.weekly_template_id === null || session.is_manual_override || session.date <= today) continue
       const template = templatesById.get(Number(session.weekly_template_id))
       if (!template || isoWeekday(session.date) !== Number(template.weekday)) {
         await cancelGeneratedSession(session)
@@ -123,6 +178,12 @@ export async function syncWeeklySessions(startDate: string, endDate: string): Pr
         if (Number(template.weekday) !== weekday) continue
         const templateId = Number(template.id)
         const existing = sessionsByTemplateDate.get(`${templateId}:${date}`)
+        const closure = closureForSession({ date, branch_id: Number(template.branch_id) })
+        if (closure) {
+          if (existing) await cancelForClosure(existing, closure)
+          continue
+        }
+        if (existing?.is_manual_override) continue
         if (existing && existing.status === 'Completed') continue
         if (existing?.status === 'Cancelled' && !existing.auto_cancelled) continue
 
@@ -135,6 +196,12 @@ export async function syncWeeklySessions(startDate: string, endDate: string): Pr
         const weeklySlots = weeklyAvailability.filter((slot) => Number(slot.coach_id) === coachId && Number(slot.weekday) === weekday)
         const outsideWeeklyAvailability = coachData?.role === 'assistant_coach'
           && !weeklySlots.some((slot) => slot.time_start.slice(0, 5) <= classStart && slot.time_end.slice(0, 5) >= classEnd)
+        const branchHours = parseBranchOperatingHours(template.branch?.operating_hours)
+        // A null value is a legacy branch with no hours recorded. Preserve its
+        // existing schedule until the Head Coach sets hours in Branches.
+        const branchHoursReason = branchHours === null
+          ? null
+          : branchOperatingHoursConflict(branchHours, weekday, classStart, classEnd)
 
         let reason: string | null = null
         if (usedSessions.some((session) => Number(session.id) !== Number(existing?.id)
@@ -145,6 +212,8 @@ export async function syncWeeklySessions(startDate: string, endDate: string): Pr
           reason = 'The coach already has an overlapping session.'
         } else if (outsideWeeklyAvailability) {
           reason = 'The class is outside the coach’s weekly availability.'
+        } else if (branchHoursReason) {
+          reason = branchHoursReason
         }
 
         if (reason) {
@@ -162,6 +231,9 @@ export async function syncWeeklySessions(startDate: string, endDate: string): Pr
           coach_id: coachId,
           status: 'Scheduled' as const,
           auto_cancelled: false,
+          closure_id: null,
+          is_manual_override: false,
+          is_cross_branch_override: false,
         }
         if (existing) {
           const hasChanges = existing.time_start.slice(0, 5) !== classStart
@@ -195,6 +267,61 @@ export async function syncWeeklySessions(startDate: string, endDate: string): Pr
           sessionsByTemplateDate.set(`${templateId}:${date}`, inserted)
           usedSessions.push(inserted)
           result.created += 1
+        }
+      }
+    }
+
+    // Recheck one-off edits and absence covers when coach availability or branch
+    // hours change. Keep the head coach's manual decision, but surface and
+    // automatically cancel a future session when it can no longer be covered.
+    for (const session of sessions) {
+      if (!session.is_manual_override || session.closure_id !== null) continue
+      if (session.status !== 'Scheduled' && !(session.status === 'Cancelled' && session.auto_cancelled)) continue
+
+      const weekday = isoWeekday(session.date)
+      const coachData = session.coach
+      const coachName = [coachData?.first_name, coachData?.middle_name, coachData?.last_name].filter(Boolean).join(' ') || 'Coach'
+      const branchName = session.branch?.name ?? 'Branch'
+      let reason: string | null = null
+      const branchHours = parseBranchOperatingHours(session.branch?.operating_hours)
+      if (branchHours !== null) {
+        reason = branchOperatingHoursConflict(branchHours, weekday, session.time_start, session.time_end)
+      }
+
+      if (!reason && coachData?.role === 'assistant_coach') {
+        const weeklySlots = weeklyAvailability.filter((slot) => Number(slot.coach_id) === Number(session.coach_id) && Number(slot.weekday) === weekday)
+        if (!reason && !weeklySlots.some((slot) =>
+          slot.time_start.slice(0, 5) <= session.time_start.slice(0, 5)
+          && slot.time_end.slice(0, 5) >= session.time_end.slice(0, 5),
+        )) {
+          reason = 'The class is outside the assistant coach’s weekly availability.'
+        }
+      }
+
+      if (!reason && usedSessions.some((other) =>
+        Number(other.id) !== Number(session.id)
+        && Number(other.coach_id) === Number(session.coach_id)
+        && other.date === session.date
+        && other.status === 'Scheduled'
+        && overlaps(session.time_start, session.time_end, other.time_start, other.time_end),
+      )) {
+        reason = 'The coach already has an overlapping session.'
+      }
+
+      if (reason) {
+        if (session.status === 'Scheduled' && session.date > today) await cancelGeneratedSession(session)
+        result.conflicts.push({ date: session.date, branch: branchName, coach: coachName, reason })
+        continue
+      }
+
+      if (session.status === 'Cancelled' && session.auto_cancelled && session.date > today && !attendedSessionIds.has(Number(session.id))) {
+        const { data, error } = await admin.from('class_schedule').update({ status: 'Scheduled', auto_cancelled: false })
+          .eq('id', session.id).eq('status', 'Cancelled').eq('auto_cancelled', true).select('id')
+        if (error) return { ...result, error: error.message }
+        if (data?.length) {
+          session.status = 'Scheduled'
+          session.auto_cancelled = false
+          result.updated += 1
         }
       }
     }

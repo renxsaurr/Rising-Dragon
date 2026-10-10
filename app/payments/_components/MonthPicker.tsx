@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { paymentsHref, type PaymentFilterKey, type PaymentTab } from './payments-url'
+import { paymentsHref, type HistoryPage, type PaymentFilterKey, type PaymentTab } from './payments-url'
 import { formatMonth, shiftMonth } from '@/utils/payment-records'
 
 const ARROW =
@@ -19,12 +19,16 @@ export default function MonthPicker({
   branch,
   filter,
   tab,
+  view,
+  historyPage,
 }: {
   month: string
   branch: string
   filter: PaymentFilterKey
   /** The tab chosen in the URL, kept in the links. Left out = the page's default tab. */
   tab?: PaymentTab
+  view?: 'history' | 'reports'
+  historyPage?: HistoryPage
 }) {
   const previous = shiftMonth(month, -1)
   const next = shiftMonth(month, 1)
@@ -32,7 +36,7 @@ export default function MonthPicker({
   return (
     <nav aria-label="Choose month" className="flex items-center gap-1.5">
       <Link
-        href={paymentsHref({ month: previous, branch, filter, tab })}
+        href={paymentsHref({ month: previous, branch, filter, tab, view, historyPage })}
         scroll={false}
         aria-label={`Previous month, ${formatMonth(previous)}`}
         className={ARROW}
@@ -46,7 +50,7 @@ export default function MonthPicker({
         {formatMonth(month)}
       </span>
       <Link
-        href={paymentsHref({ month: next, branch, filter, tab })}
+        href={paymentsHref({ month: next, branch, filter, tab, view, historyPage })}
         scroll={false}
         aria-label={`Next month, ${formatMonth(next)}`}
         className={ARROW}

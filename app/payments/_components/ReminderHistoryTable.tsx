@@ -11,7 +11,7 @@ import RowActionsMenu from '@/components/RowActionsMenu'
 import RowActionItem, { ROW_ACTION_CLASS } from '@/components/RowActionItem'
 import PaginatedTableRows from '@/components/PaginatedTableRows'
 
-const TH = 'px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-600'
+const TH = 'px-4 py-4 text-left text-xs font-medium text-gray-500'
 
 const STATUS_BADGES: Record<ReminderStatus, { label: string; className: string }> = {
   Sent: { label: 'Sent', className: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20' },
@@ -33,9 +33,9 @@ const formatPlainDate = (date: string | null) =>
 
 /** Sent rows show when they were sent; other rows when the attempt finished (or started, while sending). */
 function rowTime(row: HistoryRow) {
-  if (row.status === 'Sent' && row.sentAt) return { at: row.sentAt, label: null }
-  if (row.status === 'Scheduled') return { at: row.lastAttemptAt ?? row.createdAt, label: 'Sending since' }
-  return { at: row.completedAt ?? row.createdAt, label: row.status === 'Failed' ? 'Failed' : 'Closed' }
+  if (row.status === 'Sent' && row.sentAt) return row.sentAt
+  if (row.status === 'Scheduled') return row.lastAttemptAt ?? row.createdAt
+  return row.completedAt ?? row.createdAt
 }
 
 function StatusBadge({ status }: { status: ReminderStatus }) {
@@ -44,6 +44,19 @@ function StatusBadge({ status }: { status: ReminderStatus }) {
     <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${badge.className}`}>
       {badge.label}
     </span>
+  )
+}
+
+function ReminderRowActions({ row, onView, onRetry }: {
+  row: HistoryRow
+  onView: () => void
+  onRetry: () => void
+}) {
+  return (
+    <RowActionsMenu>
+      <RowActionItem onClick={onView}>View details</RowActionItem>
+      {row.status === 'Failed' && <RetryReminderButton onRetry={onRetry} className={ROW_ACTION_CLASS} />}
+    </RowActionsMenu>
   )
 }
 
@@ -99,82 +112,95 @@ function ReminderDetailsModal({ row, onClose }: { row: HistoryRow; onClose: () =
   )
 }
 
-export default function ReminderHistoryTable({ rows }: { rows: HistoryRow[] }) {
+export default function ReminderHistoryTable({ rows, searchQuery }: { rows: HistoryRow[]; searchQuery: string }) {
   const [detailsId, setDetailsId] = useState<number | null>(null)
   // The Retry popup lives here, not in the row, so it stays open after the list refreshes.
   const [retryId, setRetryId] = useState<number | null>(null)
   const closeDetails = useCallback(() => setDetailsId(null), [])
   const closeRetry = useCallback(() => setRetryId(null), [])
   const details = rows.find((row) => row.id === detailsId) ?? null
+  const searchTerms = searchQuery.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  const visibleRows = searchTerms.length
+    ? rows.filter((row) => {
+        const time = rowTime(row)
+        const searchableFields = [
+          row.studentName,
+          row.recipientEmail,
+          row.status,
+          row.reminderType,
+          formatDay(time),
+          formatTime(time),
+          row.amount === null ? '' : formatPeso(row.amount),
+        ].map((value) => value.toLowerCase())
+        return searchTerms.every((term) => searchableFields.some((field) => field.includes(term)))
+      })
+    : rows
 
   return (
     <>
-      {/* The table keeps its width and scrolls inside this box on small screens. */}
-      <div className="overflow-x-auto">
-        <table className="system-data-table w-full min-w-[900px] border-collapse text-left">
-          <thead className="border-b border-gray-100 bg-gray-50">
-            <tr>
-              <th className={`${TH} pl-5`}>Date</th>
-              <th className={TH}>Student</th>
-              <th className={TH}>Payment</th>
-              <th className={TH}>Type</th>
-              <th className={TH}>Sent to</th>
-              <th className={TH}>Status</th>
-              <th className={`${TH} pr-5`}><span className="sr-only">Actions</span></th>
-            </tr>
-          </thead>
-          <PaginatedTableRows itemLabel="reminder history" colSpan={7}>
-            {rows.map((row) => {
-              const time = rowTime(row)
-              return (
-                <tr
-                  key={row.id}
-                  onClick={() => setDetailsId(row.id)}
-                  className="cursor-pointer align-top transition-colors hover:bg-gray-50"
-                >
-                  <td className="whitespace-nowrap px-5 py-3">
-                    <p className="text-sm text-gray-900">{formatDay(time.at)}</p>
-                    <p className="mt-0.5 text-xs text-gray-500">
-                      {time.label ? `${time.label} · ${formatTime(time.at)}` : formatTime(time.at)}
-                    </p>
-                  </td>
-                  <td className="px-3 py-3">
-                    {/* A real button, so keyboard users can open the details too. */}
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        setDetailsId(row.id)
-                      }}
-                      className={`rounded text-left text-sm font-medium text-gray-900 hover:underline ${FOCUS_RING}`}
-                    >
-                      {row.studentName}
-                      <span className="sr-only">, show reminder details</span>
-                    </button>
-                    <p className="mt-0.5 text-xs text-gray-500">{row.branchName}</p>
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-3">
-                    <p className="text-sm font-medium text-gray-900">{row.amount === null ? '—' : formatPeso(row.amount)}</p>
-                    {row.dueDate && <p className="mt-0.5 text-xs text-gray-500">Due {formatPlainDate(row.dueDate)}</p>}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-700">{row.reminderType}</td>
-                  <td className="px-3 py-3">
-                    <p className="max-w-[220px] break-all text-sm text-gray-800">{row.recipientEmail}</p>
-                  </td>
-                  <td className="px-3 py-3"><StatusBadge status={row.status} /></td>
-                  {/* Clicks here (Retry) must not also open the details. */}
-                  <td className="px-3 py-3 pr-5 text-right" onClick={(event) => event.stopPropagation()}>
-                    <div className="flex justify-end"><RowActionsMenu>
-                      <RowActionItem onClick={() => setDetailsId(row.id)}>View details</RowActionItem>
-                      {row.status === 'Failed' && <RetryReminderButton onRetry={() => setRetryId(row.id)} className={ROW_ACTION_CLASS} />}
-                    </RowActionsMenu></div>
-                  </td>
-                </tr>
-              )
-            })}
-          </PaginatedTableRows>
-        </table>
+      <div className="border-b border-gray-100 px-5 py-3">
+        <p className="text-sm font-medium text-gray-950" aria-live="polite">
+          {visibleRows.length} of {rows.length} reminder{rows.length === 1 ? '' : 's'}
+        </p>
       </div>
+
+      {visibleRows.length === 0 ? (
+        <div className="px-5 py-12 text-center text-sm font-medium text-gray-800">
+          {rows.length === 0 ? 'No reminder history yet.' : `No reminders match “${searchQuery.trim()}”.`}
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table aria-label="Reminder history" className="w-full min-w-[1040px] table-fixed border-collapse bg-white text-left text-sm text-gray-950">
+            <thead className="border-b border-gray-200">
+              <tr>
+                <th scope="col" className={`${TH} w-[22%]`}>Date</th>
+                <th scope="col" className={`${TH} w-[18%]`}>Student</th>
+                <th scope="col" className={`${TH} w-[12%]`}>Payment</th>
+                <th scope="col" className={`${TH} w-[12%]`}>Type</th>
+                <th scope="col" className={`${TH} w-[18%]`}>Sent to</th>
+                <th scope="col" className={`${TH} w-[10%]`}>Status</th>
+                <th scope="col" className={`${TH} w-[8%] text-right`}>Actions</th>
+              </tr>
+            </thead>
+            <PaginatedTableRows itemLabel="reminder history" colSpan={7}>
+              {visibleRows.map((row) => {
+                const time = rowTime(row)
+                return (
+                  <tr
+                    key={row.id}
+                    onClick={() => setDetailsId(row.id)}
+                    className="cursor-pointer border-b border-gray-100 align-middle transition-colors last:border-b-0 hover:bg-gray-50/60"
+                  >
+                    <td className="whitespace-nowrap px-4 py-5 text-sm font-medium text-gray-950">{formatDay(time)} · {formatTime(time)}</td>
+                    <td className="break-words px-4 py-5">
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          setDetailsId(row.id)
+                        }}
+                        className={`rounded text-left text-sm font-medium text-gray-950 hover:underline ${FOCUS_RING}`}
+                      >
+                        {row.studentName}
+                        <span className="sr-only">, show reminder details</span>
+                      </button>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-5 text-sm font-medium text-gray-950">{row.amount === null ? '—' : formatPeso(row.amount)}</td>
+                    <td className="whitespace-nowrap px-4 py-5 text-sm font-medium text-gray-950">{row.reminderType}</td>
+                    <td className="break-all px-4 py-5 text-sm font-medium text-gray-950"><p className="max-w-[220px]">{row.recipientEmail}</p></td>
+                    <td className="px-4 py-5"><StatusBadge status={row.status} /></td>
+                    <td className="px-4 py-4 text-right" onClick={(event) => event.stopPropagation()}>
+                      <div className="flex w-full justify-end">
+                        <ReminderRowActions row={row} onView={() => setDetailsId(row.id)} onRetry={() => setRetryId(row.id)} />
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </PaginatedTableRows>
+          </table>
+        </div>
+      )}
 
       {details && <ReminderDetailsModal row={details} onClose={closeDetails} />}
       {retryId !== null && <ReminderReviewModal target={{ kind: 'retry', id: retryId }} onClose={closeRetry} />}

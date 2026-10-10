@@ -5,7 +5,7 @@ import { REMINDER_TYPES, type ReminderStatus, type ReminderType } from '@/utils/
 
 type Admin = ReturnType<typeof createAdminClient>
 
-export const HISTORY_PAGE_SIZE = 20
+const HISTORY_FETCH_BATCH_SIZE = 1000
 export const HISTORY_STATUSES: ReminderStatus[] = ['Sent', 'Failed', 'Skipped', 'Scheduled']
 const MAX_SEARCH_LENGTH = 60
 const MAX_SEARCH_WORDS = 3
@@ -16,7 +16,6 @@ export type HistoryFilters = {
   type: ReminderType | 'all'
   /** 'all' or a branch id. */
   branch: string
-  page: number
 }
 
 export type RawHistoryParams = {
@@ -51,7 +50,6 @@ export type ReminderHistory = {
   filters: HistoryFilters
   rows: HistoryRow[]
   total: number
-  pageCount: number
   /** Respects the branch filter only. */
   summary: { sent: number; failed: number; skipped: number }
   branches: { id: number; name: string }[]
@@ -93,13 +91,11 @@ const one = <T,>(value: T | T[] | null | undefined) => (Array.isArray(value) ? (
 
 /** Turn the h* URL params into safe filters. Anything invalid falls back to the default. */
 function parseFilters(raw: RawHistoryParams, branchIds: Set<string>): HistoryFilters {
-  const page = raw.hpage && /^\d{1,5}$/.test(raw.hpage) ? Number(raw.hpage) : 1
   return {
     q: (raw.hq ?? '').trim().slice(0, MAX_SEARCH_LENGTH),
     status: HISTORY_STATUSES.find((status) => status === raw.hstatus) ?? 'all',
     type: REMINDER_TYPES.find((type) => type === raw.htype) ?? 'all',
     branch: raw.hbranch && branchIds.has(raw.hbranch) ? raw.hbranch : 'all',
-    page: page >= 1 ? page : 1,
   }
 }
 
@@ -157,7 +153,7 @@ export async function countFailedReminders(admin: Admin) {
   return error ? { count: 0, error: error.message } : { count: count ?? 0, error: null }
 }
 
-/** One page of reminder history (20 rows, newest first) with filters, total count and status counts. */
+/** All filtered reminder history, newest first, with status counts. */
 export async function loadReminderHistory(
   admin: Admin,
   raw: RawHistoryParams,
@@ -170,38 +166,40 @@ export async function loadReminderHistory(
       name: branch.name,
     }))
     const filters = parseFilters(raw, new Set(branches.map((branch) => String(branch.id))))
+    // Search is applied to the loaded rows so it can match both student and branch names.
+    const queryFilters = { ...filters, q: '' }
 
-    const fetchPage = (page: number) =>
-      historyQuery(admin, filters)
+    const fetchBatch = (start: number) =>
+      historyQuery(admin, queryFilters)
         .order('created_at', { ascending: false })
         .order('id', { ascending: false })
-        .range((page - 1) * HISTORY_PAGE_SIZE, page * HISTORY_PAGE_SIZE - 1)
+        .range(start, start + HISTORY_FETCH_BATCH_SIZE - 1)
 
-    const [firstTry, sent, failed, skipped] = await Promise.all([
-      fetchPage(filters.page),
+    const [firstBatch, sent, failed, skipped] = await Promise.all([
+      fetchBatch(0),
       statusCount(admin, 'Sent', filters.branch),
       statusCount(admin, 'Failed', filters.branch),
       statusCount(admin, 'Skipped', filters.branch),
     ])
+    if (firstBatch.error) throw new Error(firstBatch.error.message)
     for (const result of [sent, failed, skipped]) {
       if (result.error) throw new Error(result.error.message)
     }
 
-    let result = firstTry
-    // A page past the end (an old link, or rows changed): show the last page instead.
-    // PostgREST answers PGRST103 when the requested range starts after the last row.
-    if (result.error?.code === 'PGRST103' || (!result.error && filters.page > 1 && !result.data?.length)) {
-      const { count, error } = await historyQuery(admin, filters, true)
-      if (error) throw new Error(error.message)
-      filters.page = Math.max(1, Math.ceil((count ?? 0) / HISTORY_PAGE_SIZE))
-      result = await fetchPage(filters.page)
-    }
-    if (result.error) throw new Error(result.error.message)
+    const total = firstBatch.count ?? firstBatch.data?.length ?? 0
+    const batchStarts = Array.from(
+      { length: Math.ceil(total / HISTORY_FETCH_BATCH_SIZE) - 1 },
+      (_, index) => (index + 1) * HISTORY_FETCH_BATCH_SIZE,
+    )
+    const laterBatches = await Promise.all(batchStarts.map(fetchBatch))
+    const batchError = laterBatches.find((batch) => batch.error)
+    if (batchError?.error) throw new Error(batchError.error.message)
+    const rawRows = [
+      ...(firstBatch.data ?? []),
+      ...laterBatches.flatMap((batch) => batch.data ?? []),
+    ] as unknown as RawHistoryRow[]
 
-    const rawRows = (result.data ?? []) as unknown as RawHistoryRow[]
-    const total = result.count ?? rawRows.length
-
-    // sent_by is a user id. The names come from one small query (at most 20 ids).
+    // sent_by is a user id. Resolve names for all loaded reminder records.
     const userIds = [...new Set(rawRows.map((row) => row.sent_by).filter((id): id is number => id != null).map(Number))]
     const userNames = new Map<number, string>()
     if (userIds.length) {
@@ -244,7 +242,6 @@ export async function loadReminderHistory(
         filters,
         rows,
         total,
-        pageCount: Math.max(1, Math.ceil(total / HISTORY_PAGE_SIZE)),
         summary: { sent: sent.count ?? 0, failed: failed.count ?? 0, skipped: skipped.count ?? 0 },
         branches,
       },

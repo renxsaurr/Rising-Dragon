@@ -532,6 +532,40 @@ export async function markPaymentPaid(input: {
   return { ok: true };
 }
 
+/** Marks selected unpaid attendance charges for one student as Paid in a single update. */
+export async function markPerSessionChargesPaid(input: {
+  studentId: number;
+  paymentIds: number[];
+  paidDate: string;
+  method: string;
+}): Promise<{ ok: true; updatedCount: number } | { error: string }> {
+  const auth = await requireHeadCoach();
+  if ("error" in auth) return auth;
+  if (!input || !isValidId(input.studentId) || !Array.isArray(input.paymentIds) ||
+    input.paymentIds.length < 1 || input.paymentIds.length > 100 ||
+    input.paymentIds.some((id) => !isValidId(id)) || new Set(input.paymentIds).size !== input.paymentIds.length) {
+    return { error: "Choose valid unpaid sessions." };
+  }
+  if (!isRealDate(input.paidDate) || input.paidDate < "2020-01-01" || input.paidDate > dateInTimeZone()) {
+    return { error: "Enter a valid payment date no later than today." };
+  }
+  if (!isPaymentMethod(input.method)) return { error: "Choose how the payment was made." };
+
+  const admin = createAdminClient();
+  const { data, error } = await admin.from("payment")
+    .update({ status: "Paid", paid_date: input.paidDate, method: input.method })
+    .eq("student_id", input.studentId)
+    .eq("payment_type", "Per session")
+    .eq("status", "Unpaid")
+    .in("id", input.paymentIds)
+    .select("id");
+  if (error) return { error: error.message };
+  if (!data?.length) return { error: "These session charges are no longer unpaid. Refresh the page and try again." };
+
+  revalidatePath("/payments");
+  return { ok: true, updatedCount: data.length };
+}
+
 export type AdvanceBillOption = {
   dueDate: string;
   coverage: string;

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useState, type ReactNode } from 'react'
 import AddPaymentModal from './AddPaymentModal'
 import { FOCUS_RING } from './ModalShell'
 import type { StudentChoice } from './StudentCombobox'
@@ -15,6 +15,7 @@ export default function AddPaymentButton({
   initialStudent,
   label = '+ Add payment',
   compact = false,
+  trigger,
 }: {
   students: StudentChoice[]
   /** Set when a branch card is selected, so the popup can say whose students it lists. */
@@ -28,6 +29,8 @@ export default function AddPaymentButton({
   label?: string
   /** Small row button instead of the header button. */
   compact?: boolean
+  /** Custom trigger for a row action menu. */
+  trigger?: ReactNode
 }) {
   const [open, setOpen] = useState(false)
   const close = useCallback(() => setOpen(false), [])
@@ -39,15 +42,13 @@ export default function AddPaymentButton({
 
   return (
     <>
-      <button
+      {trigger ? <div onClick={() => setOpen(true)}>{trigger}</div> : <button
         type="button"
         onClick={() => setOpen(true)}
         className={`whitespace-nowrap rounded-lg bg-black font-semibold text-white hover:bg-gray-800 ${FOCUS_RING} ${
           compact ? 'px-3 py-2 text-xs' : 'h-9 px-3.5 text-sm'
         }`}
-      >
-        {label}
-      </button>
+      >{label}</button>}
       {open && (
         <AddPaymentModal
           students={choices}

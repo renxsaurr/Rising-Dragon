@@ -84,6 +84,22 @@ export function branchOperatingWindowsForDay(
   return hours?.filter((window) => window.weekday === weekday) ?? []
 }
 
+export function branchOperatingHoursConflict(
+  hours: BranchOperatingWindow[] | null,
+  weekday: number,
+  start: string,
+  end: string,
+) {
+  if (hours === null) return 'Set this branch’s operating hours before scheduling classes.'
+  const windows = branchOperatingWindowsForDay(hours, weekday)
+  const day = BRANCH_WEEKDAYS.find((item) => item.value === weekday)?.label ?? 'selected day'
+  if (windows.length === 0) return `This branch is closed on ${day}.`
+  if (!windows.some((window) => window.time_start <= start.slice(0, 5) && window.time_end >= end.slice(0, 5))) {
+    return `The class must fit within this branch’s operating hours on ${day}.`
+  }
+  return null
+}
+
 export function formatBranchOperatingHours(hours: BranchOperatingWindow[] | null, weekday: number) {
   if (hours === null) return 'Hours not set'
   const windows = branchOperatingWindowsForDay(hours, weekday)

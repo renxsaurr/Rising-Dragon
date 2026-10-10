@@ -24,7 +24,7 @@ export default function AddScheduleModal({
 }: {
   weekDates?: string[]
   branches: { id: number; name: string }[]
-  coaches: { id: number; name: string; role: string }[]
+  coaches: { id: number; name: string; role: string; primary_branch_id: number | null; primary_branch_name: string | null }[]
   editingSchedule?: Schedule | null
   initialDate?: string
   onClose: () => void
@@ -33,6 +33,7 @@ export default function AddScheduleModal({
   onDeleted?: (scheduleId: number) => void
 }) {
   const isEditing = !!editingSchedule
+  const isRecurringOccurrence = editingSchedule?.weekly_template_id !== null && editingSchedule?.weekly_template_id !== undefined
 
   const defaultDate =
     editingSchedule?.date ?? initialDate ?? weekDates?.[0] ?? toDateISO(new Date())
@@ -152,9 +153,16 @@ export default function AddScheduleModal({
         </div>
 
         <div className="space-y-4">
+          {isEditing && (
+            <p className="-mt-2 text-[12px] leading-relaxed text-gray-500">
+              {isRecurringOccurrence
+                ? 'Changes here apply to this session only. The weekly class pattern stays the same; set the status to Cancelled if this session will not run.'
+                : 'Changes here apply to this date only; set the status to Cancelled if this session will not run.'}
+            </p>
+          )}
           <div>
             <label className={labelClass}>Date</label>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputClass} />
+            <input type="date" value={date} disabled={isRecurringOccurrence} onChange={(e) => setDate(e.target.value)} className={`${inputClass} disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500`} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -177,7 +185,7 @@ export default function AddScheduleModal({
               <select value={coachId} onChange={(e) => setCoachId(Number(e.target.value))} className={inputClass}>
                 {coaches.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name}
+                    {c.name}{c.role === 'head_coach' ? ' · Head Coach' : ''}
                   </option>
                 ))}
               </select>

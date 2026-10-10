@@ -1,5 +1,3 @@
-import Link from 'next/link'
-import { paymentsHref, type PaymentFilterKey, type PaymentTab } from './payments-url'
 import { formatAmount } from '@/utils/payment-reminders'
 import type { BranchPaymentStats, NotPaidGroup } from '@/utils/payment-records'
 
@@ -7,33 +5,20 @@ import type { BranchPaymentStats, NotPaidGroup } from '@/utils/payment-records'
 export default function BranchCards({
   branches,
   notPaid,
-  selectedKey,
-  month,
-  filter,
-  tab,
 }: {
   branches: BranchPaymentStats[]
   notPaid: Record<string, NotPaidGroup>
-  selectedKey: string
-  month: string
-  filter: PaymentFilterKey
-  /** The tab chosen in the URL, kept in the links. Left out = the page's default tab. */
-  tab?: PaymentTab
 }) {
   return (
     <div className="grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {branches.map((branch) => {
-        const active = branch.key === selectedKey
         // floor, so 99.6% never shows as 100% while something is still unpaid
         const percent = branch.expected > 0 ? Math.floor((branch.collected / branch.expected) * 100) : null
         const group = notPaid[branch.key]
         return (
-          <Link
+          <article
             key={branch.key}
-            href={paymentsHref({ month, branch: branch.key, filter, tab })}
-            scroll={false}
-            aria-current={active ? 'true' : undefined}
-            className={`flex min-w-0 flex-col rounded-2xl border bg-white p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 ${active ? 'border-black shadow-sm ring-1 ring-black' : 'border-gray-200'}`}
+            className="flex min-w-0 flex-col rounded-2xl border border-gray-200 bg-white p-5"
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
@@ -80,7 +65,7 @@ export default function BranchCards({
                 )}
               </p>
             )}
-          </Link>
+          </article>
         )
       })}
     </div>

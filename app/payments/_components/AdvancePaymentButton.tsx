@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useId, useState, type FormEvent } from 'react'
+import { useCallback, useId, useState, type FormEvent, type ReactNode } from 'react'
 import { getAdvanceBillOptions, recordAdvancePayment, type AdvanceBillOption } from '@/app/payments/actions'
 import { PAYMENT_METHODS } from '@/utils/payment-methods'
 import type { StudentChoice } from './StudentCombobox'
@@ -12,7 +12,17 @@ const formatDate = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateS
 })
 const money = (amount: number) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(amount)
 
-export default function AdvancePaymentButton({ students, today }: { students: StudentChoice[]; today: string }) {
+export default function AdvancePaymentButton({
+  students,
+  today,
+  initialStudent,
+  trigger,
+}: {
+  students: StudentChoice[]
+  today: string
+  initialStudent?: StudentChoice
+  trigger?: ReactNode
+}) {
   const [open, setOpen] = useState(false)
   const [studentId, setStudentId] = useState<number | null>(null)
   const [options, setOptions] = useState<AdvanceBillOption[]>([])
@@ -55,6 +65,11 @@ export default function AdvancePaymentButton({ students, today }: { students: St
     }
   }
 
+  const openForStudent = () => {
+    setOpen(true)
+    if (initialStudent) void selectStudent(initialStudent.id)
+  }
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (saving || studentId === null || !selectedDate) return
@@ -79,13 +94,11 @@ export default function AdvancePaymentButton({ students, today }: { students: St
   const selected = options.find((option) => option.dueDate === selectedDate)
   return (
     <>
-      <button
+      {trigger ? <div onClick={openForStudent}>{trigger}</div> : <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={openForStudent}
         className={`inline-flex h-9 items-center justify-center rounded-lg border border-gray-300 bg-white px-3.5 text-[13px] font-semibold text-gray-950 hover:bg-gray-50 ${FOCUS_RING}`}
-      >
-        Record advance payment
-      </button>
+      >Record advance payment</button>}
       {open && (
         <ModalShell title="Record advance payment" description="Choose a student and one of their upcoming monthly bills." busy={saving} onClose={close}>
           <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
