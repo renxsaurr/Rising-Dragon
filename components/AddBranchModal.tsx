@@ -156,7 +156,6 @@ export default function AddBranchModal() {
                   onChange={handlePhotoChange}
                   className="w-full text-[13px] text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-[13px] file:font-semibold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200"
                 />
-                <p className="mt-1.5 text-xs text-gray-600">For a sharp branch header, use the original photo at least 1600 px wide. Screenshots and chat-compressed copies may look blurry.</p>
               </div>
               {/* --- end photo upload field --- */}
 

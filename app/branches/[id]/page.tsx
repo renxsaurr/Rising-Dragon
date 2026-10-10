@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowRight, ArrowUpRight, CalendarDays, ChevronLeft, Clock3, MapPin, Users } from 'lucide-react'
+import { ArrowUpRight, CalendarDays, ChevronLeft, Clock3, MapPin, Users } from 'lucide-react'
 import DashboardShell from '@/components/DashboardShell'
 import EditBranchModal from '@/components/EditBranchModal'
 import { Card, EmptyNote } from '@/components/DashboardWidgets'
@@ -218,18 +218,15 @@ export default async function BranchDetailPage({ params, searchParams }: {
             ? <p role="alert" className="px-5 pb-5 text-sm text-red-600">Could not load students: {studentResult.error.message}</p>
             : students.length
               ? <div className="divide-y divide-gray-100">
-                <PaginatedListItems itemLabel="students" pageSize={6} showSummary>
+                <PaginatedListItems itemLabel="students" pageSize={6}>
                 {students.map((student) => (
                   <div key={student.id} className="flex items-center justify-between gap-3 px-5 py-3">
-                    <span className="min-w-0 flex-1 break-words text-sm text-gray-900">{fullName(student)}</span>
+                    <span className="min-w-0 flex-1 break-words text-sm font-semibold text-gray-900">{fullName(student)}</span>
                     {student.belt_level
                       ? <span className={`inline-flex shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${BELT_COLORS[student.belt_level] ?? 'bg-gray-100 text-gray-700'}`}>
                         {formatBeltLabel(student.belt_level)}
                       </span>
                       : <span className="text-xs text-gray-400">—</span>}
-                    <Link href={`/students/${student.id}/progress`} aria-label={`View ${fullName(student)} progress`} title="View student progress" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-600 transition-colors hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2">
-                      <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                    </Link>
                   </div>
                 ))}
                 </PaginatedListItems>

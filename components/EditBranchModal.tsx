@@ -238,7 +238,6 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
                     className="hidden"
                   />
                 </label>
-                <p className="mt-1.5 text-xs text-gray-600">For a sharp branch header, use the original photo at least 1600 px wide. Screenshots and chat-compressed copies may look blurry.</p>
               </div>
               {/* --- end photo field --- */}
 
