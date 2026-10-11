@@ -3,7 +3,7 @@
 import { useId, useRef, useState, type FormEvent } from 'react'
 import { createPayment } from '@/app/payments/actions'
 import { monthlyDueDate } from '@/utils/billing-cycle'
-import { findCoverageOverlap, formatCoverage, overlapMessage, type MonthlyCoverage } from '@/utils/payment-fees'
+import { findCoverageOverlap, formatCoverage, formatPeso, overlapMessage, type MonthlyCoverage } from '@/utils/payment-fees'
 import type { NotPaidStudent, StudentPaymentSummary } from '@/utils/payment-records'
 import { reminderWindowFor, type ReminderSchedule, type ReminderWindow } from '@/utils/reminder-timing'
 import ModalShell, { BUTTON_PRIMARY, BUTTON_SECONDARY, INPUT, LABEL } from './ModalShell'
