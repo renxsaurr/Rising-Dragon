@@ -21,8 +21,28 @@ export async function updateSession(request: NextRequest) {
     },
   })
 
-  // Refresh the Supabase session cookie when needed; route guards still verify
-  // the user profile and role in the server-rendered pages and actions.
-  await supabase.auth.getUser()
+  // Validate the Supabase session before serving application pages. This is an
+  // optimistic front-door check only: pages, Server Actions, and Route
+  // Handlers still verify the user's staff profile and role before accessing
+  // data or performing mutations.
+  const { data: { user } } = await supabase.auth.getUser()
+
+  const pathname = request.nextUrl.pathname
+  const isPublicPage = pathname === '/' || pathname === '/login'
+  const isApiRoute = pathname === '/api' || pathname.startsWith('/api/')
+
+  if (!user && !isPublicPage && !isApiRoute) {
+    const loginUrl = new URL('/login', request.url)
+    const redirectResponse = NextResponse.redirect(loginUrl)
+
+    // Preserve any cookie refresh or cleanup performed while validating the
+    // session so stale auth cookies do not keep sending the browser in circles.
+    response.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie)
+    })
+
+    return redirectResponse
+  }
+
   return response
 }

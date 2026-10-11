@@ -1,5 +1,5 @@
 import DashboardLoading from '@/components/DashboardLoading'
 
 export default function Loading() {
-  return <DashboardLoading title="Users & roles" />
+  return <DashboardLoading title="Users & roles" variant="users" />
 }

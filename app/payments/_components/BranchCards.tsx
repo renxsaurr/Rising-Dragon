@@ -1,20 +1,17 @@
 import { formatAmount } from '@/utils/payment-reminders'
-import type { BranchPaymentStats, NotPaidGroup } from '@/utils/payment-records'
+import type { BranchPaymentStats } from '@/utils/payment-records'
 
 // Card classes copied from the Attendance class cards.
 export default function BranchCards({
   branches,
-  notPaid,
 }: {
   branches: BranchPaymentStats[]
-  notPaid: Record<string, NotPaidGroup>
 }) {
   return (
     <div className="grid items-stretch gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {branches.map((branch) => {
         // floor, so 99.6% never shows as 100% while something is still unpaid
         const percent = branch.expected > 0 ? Math.floor((branch.collected / branch.expected) * 100) : null
-        const group = notPaid[branch.key]
         return (
           <article
             key={branch.key}
@@ -53,18 +50,6 @@ export default function BranchCards({
               </div>
             </div>
 
-            {group && group.activeCount > 0 && (
-              <p className="mt-2 text-xs text-gray-600">
-                {group.notPaidCount > 0 ? (
-                  <>
-                    <span className="font-semibold text-amber-700">{group.notPaidCount}</span> of {group.activeCount}{' '}
-                    students not paid yet
-                  </>
-                ) : (
-                  <span className="font-medium text-emerald-700">All students paid</span>
-                )}
-              </p>
-            )}
           </article>
         )
       })}

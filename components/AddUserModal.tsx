@@ -117,10 +117,15 @@ export default function AddUserModal({ branches }: { branches: Branch[] }) {
                 <input type="tel" value={contact} onChange={(event) => setContact(event.target.value)} required autoComplete="tel" className={`${inputClass} mt-1.5`} />
               </label>
               <label className="block text-xs font-medium text-gray-700">Primary branch
-                <select required value={branchId} onChange={(event) => setBranchId(event.target.value)} className={`${inputClass} mt-1.5 bg-white`}>
-                  <option value="">Select a primary branch</option>
-                  {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
-                </select>
+                <div className="relative mt-1.5">
+                  <select required value={branchId} onChange={(event) => setBranchId(event.target.value)} className={`${inputClass} appearance-none bg-white pr-10`}>
+                    <option value="">Select a primary branch</option>
+                    {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+                  </select>
+                  <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-700">
+                    <path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
               </label>
 
               {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

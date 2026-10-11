@@ -46,7 +46,7 @@ export function paymentsHref({
   filter?: PaymentFilterKey
   /** Left out = the page picks its default tab. */
   tab?: PaymentTab
-  view?: 'history' | 'reports'
+  view?: 'advance' | 'history' | 'reports'
   history?: HistoryQuery
   historyPage?: HistoryPage
 }) {

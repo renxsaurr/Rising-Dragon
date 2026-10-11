@@ -46,12 +46,9 @@ export default async function SettingsPage() {
     <DashboardShell title="Settings" currentUser={currentUser}>
       <div className="mx-auto w-full max-w-5xl space-y-6">
         <header>
-          <h2 className="text-xl font-semibold tracking-tight text-gray-950">Settings</h2>
-          <p className="mt-1 text-sm text-gray-700">
-            {currentUser.role === 'head_coach'
-              ? 'Manage your account and academy-wide payment preferences.'
-              : 'Manage your own account details and password.'}
-          </p>
+          <h2 className="text-xl font-semibold tracking-tight text-gray-950">
+            {currentUser.role === 'head_coach' ? 'Manage your account and academy-wide payment preferences.' : 'Manage your personal account details and account security.'}
+          </h2>
         </header>
 
         {currentUser.role === 'head_coach' && (

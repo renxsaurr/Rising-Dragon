@@ -46,8 +46,8 @@ export default function ScheduleClosuresPanel({
       reason,
     })
     setBusy(false)
-    if ('error' in result) { setError(result.error); return }
-    setNotice(result.message)
+    if ('error' in result) { setError(result.error ?? 'Could not save the closure.'); return }
+    setNotice(result.message ?? 'Closure saved.')
     setReason('')
     router.refresh()
   }
@@ -58,8 +58,8 @@ export default function ScheduleClosuresPanel({
     setNotice('')
     const result = await removeScheduleClosure(id)
     setBusy(false)
-    if ('error' in result) { setError(result.error); return }
-    setNotice(result.message)
+    if ('error' in result) { setError(result.error ?? 'Could not remove the closure.'); return }
+    setNotice(result.message ?? 'Closure removed.')
     setClosures((current) => current.filter((closure) => closure.id !== id))
     router.refresh()
   }

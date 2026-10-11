@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { paymentsHref, type PaymentFilterKey, type PaymentTab } from './payments-url'
 
-type PaymentsView = 'payments' | 'history'
+type PaymentsView = 'payments' | 'advance' | 'history'
 
 export default function PaymentsViewTabs({
   active,
@@ -20,6 +20,7 @@ export default function PaymentsViewTabs({
 }) {
   const tabs = [
     { id: 'payments' as const, label: 'Payments', href: paymentsHref({ month, branch, filter, tab }) },
+    { id: 'advance' as const, label: 'Advance Payments', href: paymentsHref({ month, branch, filter, view: 'advance' }) },
     { id: 'history' as const, label: 'History', href: paymentsHref({ month, branch, filter, tab, view: 'history', historyPage: 'business' }) },
   ]
 

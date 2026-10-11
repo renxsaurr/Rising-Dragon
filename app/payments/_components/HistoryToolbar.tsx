@@ -2,11 +2,12 @@
 
 import { useId, useState, useTransition, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
+import { ChevronDown } from 'lucide-react'
 import { FOCUS_RING } from './ModalShell'
 import { paymentsHref, type HistoryPage, type HistoryQuery, type PaymentFilterKey } from './payments-url'
 
 const CONTROL =
-  'h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-950 outline-none focus:border-gray-400 focus-visible:ring-2 focus-visible:ring-black/10'
+  'h-10 rounded-lg border border-gray-200 bg-white py-2 pl-3 pr-11 text-sm font-medium text-gray-950 outline-none focus:border-gray-400 focus-visible:ring-2 focus-visible:ring-black/10'
 
 /** Search + Status/Type/Branch filters. Every change updates the URL and goes back to page 1. */
 export default function HistoryToolbar({
@@ -75,28 +76,37 @@ export default function HistoryToolbar({
       </form>
 
       <label htmlFor={branchId} className="sr-only">Branch</label>
-      <select id={branchId} defaultValue={current.hbranch} onChange={(event) => go({ hbranch: event.target.value })} className={`${CONTROL} w-[22%] min-w-[180px]`}>
-        <option value="all">All branches</option>
-        {branches.map((branch) => (
-          <option key={branch.id} value={String(branch.id)}>{branch.name}</option>
-        ))}
-      </select>
+      <div className="relative w-[22%] min-w-[180px]">
+        <select id={branchId} defaultValue={current.hbranch} onChange={(event) => go({ hbranch: event.target.value })} className={`${CONTROL} w-full appearance-none`}>
+          <option value="all">All branches</option>
+          {branches.map((branch) => (
+            <option key={branch.id} value={String(branch.id)}>{branch.name}</option>
+          ))}
+        </select>
+        <ChevronDown aria-hidden="true" size={16} className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-700" />
+      </div>
 
       <label htmlFor={typeId} className="sr-only">Reminder type</label>
-      <select id={typeId} defaultValue={current.htype} onChange={(event) => go({ htype: event.target.value })} className={`${CONTROL} w-[15%] min-w-[150px]`}>
-        <option value="all">All types</option>
-        {types.map((type) => (
-          <option key={type} value={type}>{type}</option>
-        ))}
-      </select>
+      <div className="relative w-[15%] min-w-[150px]">
+        <select id={typeId} defaultValue={current.htype} onChange={(event) => go({ htype: event.target.value })} className={`${CONTROL} w-full appearance-none`}>
+          <option value="all">All types</option>
+          {types.map((type) => (
+            <option key={type} value={type}>{type}</option>
+          ))}
+        </select>
+        <ChevronDown aria-hidden="true" size={16} className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-700" />
+      </div>
 
       <label htmlFor={statusId} className="sr-only">Status</label>
-      <select id={statusId} defaultValue={current.hstatus} onChange={(event) => go({ hstatus: event.target.value })} className={`${CONTROL} w-[14%] min-w-[140px]`}>
-        <option value="all">All statuses</option>
-        {statuses.map((status) => (
-          <option key={status} value={status}>{status === 'Scheduled' ? 'Sending' : status}</option>
-        ))}
-      </select>
+      <div className="relative w-[14%] min-w-[140px]">
+        <select id={statusId} defaultValue={current.hstatus} onChange={(event) => go({ hstatus: event.target.value })} className={`${CONTROL} w-full appearance-none`}>
+          <option value="all">All statuses</option>
+          {statuses.map((status) => (
+            <option key={status} value={status}>{status === 'Scheduled' ? 'Sending' : status}</option>
+          ))}
+        </select>
+        <ChevronDown aria-hidden="true" size={16} className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-700" />
+      </div>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronDown } from 'lucide-react'
 import type { ReportRange } from '@/utils/branch-reports'
@@ -18,12 +18,9 @@ export default function BranchReportFilters({ range, start, end, branches, selec
   const [selectedRange, setSelectedRange] = useState(range)
   const [from, setFrom] = useState(start)
   const [to, setTo] = useState(end)
-  const [selectedBranches, setSelectedBranches] = useState(selectedIds)
+  const [selectedBranchId, setSelectedBranchId] = useState(selectedIds.length === 1 ? String(selectedIds[0]) : '')
   const [busy, startTransition] = useTransition()
   const firstRender = useRef(true)
-  const allIds = useMemo(() => branches.map((branch) => branch.id), [branches])
-  const isAllBranches = selectedBranches.length === 0 || selectedBranches.length === allIds.length
-  const branchLabel = isAllBranches ? 'All branches' : `${selectedBranches.length} selected`
 
   useEffect(() => {
     if (firstRender.current) {
@@ -38,19 +35,12 @@ export default function BranchReportFilters({ range, start, end, branches, selec
         query.set('from', from)
         query.set('to', to)
       }
-      if (!isAllBranches && selectedBranches.length) query.set('branches', selectedBranches.join(','))
+      if (selectedBranchId) query.set('branches', selectedBranchId)
       startTransition(() => router.replace(`/branches?${query.toString().replace(/%2C/g, ',')}`, { scroll: false }))
     }, 200)
 
     return () => window.clearTimeout(timer)
-  }, [from, isAllBranches, router, selectedBranches, selectedRange, to])
-
-  function toggleBranch(id: number) {
-    setSelectedBranches((current) => {
-      if (current.length === 0 || current.length === allIds.length) return allIds.filter((branchId) => branchId !== id)
-      return current.includes(id) ? current.filter((branchId) => branchId !== id) : [...current, id]
-    })
-  }
+  }, [from, router, selectedBranchId, selectedRange, to])
 
   return (
     <div className="grid items-end gap-3 sm:grid-cols-2 print:hidden" aria-busy={busy}>
@@ -67,24 +57,15 @@ export default function BranchReportFilters({ range, start, end, branches, selec
         </span>
       </label>
 
-      <div className="relative">
-        <p className="text-xs font-medium text-gray-700">Branches</p>
-        <details className="group relative mt-1">
-          <summary className="flex h-10 cursor-pointer list-none items-center justify-between rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 hover:border-gray-300 [&::-webkit-details-marker]:hidden">
-            <span>{branchLabel}</span><ChevronDown className="h-4 w-4 text-gray-500 transition-transform group-open:rotate-180" aria-hidden />
-          </summary>
-          <div className="absolute left-0 right-0 top-11 z-30 max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2 shadow-lg">
-            <button type="button" onClick={() => setSelectedBranches([])} className="mb-1 w-full rounded-md px-2.5 py-2 text-left text-xs font-semibold text-gray-700 hover:bg-gray-100">All branches</button>
-            {branches.map((branch) => {
-              const checked = isAllBranches || selectedBranches.includes(branch.id)
-              return <label key={branch.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-sm text-gray-800 hover:bg-gray-50">
-                <input type="checkbox" checked={checked} onChange={() => toggleBranch(branch.id)} className="h-4 w-4 accent-black" />
-                <span>{branch.name}</span>
-              </label>
-            })}
-          </div>
-        </details>
-      </div>
+      <label className="block text-xs font-medium text-gray-700">Branch
+        <span className="relative mt-1 block">
+          <select className={`${inputClass} appearance-none pr-9`} value={selectedBranchId} onChange={(event) => setSelectedBranchId(event.target.value)}>
+            <option value="">All branches</option>
+            {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-gray-500" aria-hidden />
+        </span>
+      </label>
 
       {selectedRange === 'custom' && <>
         <label className="block text-xs font-medium text-gray-700">From<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} className={`${inputClass} mt-1`} /></label>

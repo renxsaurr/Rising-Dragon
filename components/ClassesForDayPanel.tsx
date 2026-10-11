@@ -32,8 +32,8 @@ export default function ClassesForDayPanel({
           <p className="mt-1 text-sm font-medium text-gray-800">{formatTimeRange(schedule.time_start, schedule.time_end)}{schedule.status !== 'Scheduled' ? ` · ${schedule.status}` : ''}{schedule.absence_report_id ? ' · Cover' : ''}</p>
         </>
         return isHeadCoach
-          ? <button key={schedule.id} type="button" onClick={() => onEdit(schedule)} className={`block w-full rounded-xl border border-gray-200 border-l-4 ${accent} bg-gray-50/70 px-3.5 py-3 text-left transition-colors hover:bg-white`}>{content}</button>
-          : <article key={schedule.id} className={`rounded-xl border border-gray-200 border-l-4 ${accent} bg-gray-50/70 px-3.5 py-3`}>{content}</article>
+          ? <button id={`class-session-${schedule.id}`} key={schedule.id} type="button" onClick={() => onEdit(schedule)} className={`block w-full rounded-xl border border-gray-200 border-l-4 ${accent} bg-gray-50/70 px-3.5 py-3 text-left transition-colors hover:bg-white`}>{content}</button>
+          : <article id={`class-session-${schedule.id}`} key={schedule.id} className={`rounded-xl border border-gray-200 border-l-4 ${accent} bg-gray-50/70 px-3.5 py-3`}>{content}</article>
       })}
     </div>
   </section>

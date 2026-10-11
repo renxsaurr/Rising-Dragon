@@ -11,7 +11,7 @@ import { getCurrentUser } from "@/utils/getCurrentUser";
 import { getCoachBranchIdsForDate } from "@/utils/coach-access";
 import { dateInTimeZone } from "@/utils/dates";
 import { redirect } from "next/navigation";
-import { BELT_COLORS, BELT_LABELS, formatBeltLabel } from "@/utils/belts";
+import { BELT_LABELS, beltTextColorClass, formatBeltLabel } from "@/utils/belts";
 import RowActionsMenu from "@/components/RowActionsMenu";
 import RowActionItem, { ROW_ACTION_CLASS } from "@/components/RowActionItem";
 import PaginatedTableRows from "@/components/PaginatedTableRows";
@@ -41,6 +41,7 @@ export default async function StudentsPage({
     status?: string | string[];
     branch?: string | string[];
     belt?: string | string[];
+    plan?: string | string[];
     q?: string | string[];
   }>;
 }) {
@@ -60,6 +61,11 @@ export default async function StudentsPage({
   const requestedStatus = Array.isArray(params.status)
     ? params.status[0]
     : params.status;
+  const requestedPlan = Array.isArray(params.plan) ? params.plan[0] : params.plan;
+  const selectedBillingPlan =
+    requestedPlan === "Monthly" || requestedPlan === "Per session"
+      ? requestedPlan
+      : "all";
   const statusFilter =
     isHeadCoach && ["active", "archived", "all"].includes(requestedStatus ?? "")
       ? (requestedStatus as "active" | "archived" | "all")
@@ -154,6 +160,8 @@ export default async function StudentsPage({
     studentQuery = studentQuery.in("branch_id", selectedBranchIds.map(Number));
   if (selectedBelts.length > 0)
     studentQuery = studentQuery.in("belt_level", selectedBelts);
+  if (selectedBillingPlan !== "all")
+    studentQuery = studentQuery.eq("billing_plan", selectedBillingPlan);
   const { data: studentData, error } = await studentQuery;
   const students = (studentData ?? []) as unknown as StudentRow[];
   if (error) {
@@ -189,19 +197,13 @@ export default async function StudentsPage({
   const assistantHasNoSchedule =
     currentUser.role === "assistant_coach" &&
     (assignedBranchIds?.length ?? 0) === 0;
-  const summary = assistantHasNoSchedule
-    ? "Your roster appears here when you are scheduled at a branch."
-    : searchQuery
-      ? `${visibleTotal} of ${total} student record${total === 1 ? "" : "s"} match “${searchQuery}”.`
-      : isHeadCoach
-      ? `${total} student record${total === 1 ? " matches" : "s match"} the selected filters.`
-      : `${total} student${total === 1 ? "" : "s"} at your assigned branches today.`;
-
   const clearSearchParams = new URLSearchParams();
   if (isHeadCoach && statusFilter !== "active")
     clearSearchParams.set("status", statusFilter);
   selectedBranchIds.forEach((id) => clearSearchParams.append("branch", id));
   selectedBelts.forEach((belt) => clearSearchParams.append("belt", belt));
+  if (selectedBillingPlan !== "all")
+    clearSearchParams.set("plan", selectedBillingPlan);
   const clearSearchQuery = clearSearchParams.toString();
   const clearSearchHref = clearSearchQuery
     ? `/students?${clearSearchQuery}`
@@ -209,7 +211,7 @@ export default async function StudentsPage({
 
   return (
     <DashboardShell title="Students" currentUser={currentUser}>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-4 border-b border-gray-200 pb-4">
         <div>
           <h2 className="text-xl font-semibold tracking-tight text-gray-950">
             {isHeadCoach
@@ -220,63 +222,82 @@ export default async function StudentsPage({
                   : "Active students"
               : "Assigned branch roster"}
           </h2>
-          <p className="text-[13px] text-gray-500 mt-0.5">{summary}</p>
         </div>
         {isHeadCoach && statusFilter !== "archived" && (
           <StudentModal branches={activeBranches} />
         )}
       </div>
 
-      <Form action="/students" scroll={false} className="mb-3 flex max-w-2xl flex-wrap items-center gap-2">
-        {isHeadCoach && statusFilter !== "active" && (
-          <input type="hidden" name="status" value={statusFilter} />
-        )}
-        {selectedBranchIds.map((id) => (
-          <input key={id} type="hidden" name="branch" value={id} />
-        ))}
-        {selectedBelts.map((belt) => (
-          <input key={belt} type="hidden" name="belt" value={belt} />
-        ))}
-        <label htmlFor="student-search" className="sr-only">Search students</label>
-        <div className="relative min-w-[220px] flex-1">
-          <Search aria-hidden="true" size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            id="student-search"
-            name="q"
-            type="search"
-            maxLength={80}
-            defaultValue={searchQuery}
-            placeholder="Search by name, branch, or belt"
-            className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-900 outline-none transition focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
-          />
-        </div>
-        <button type="submit" className="h-10 rounded-lg bg-gray-900 px-4 text-sm font-medium text-white transition hover:bg-gray-700">
-          Search
-        </button>
-        {searchQuery && (
-          <Link href={clearSearchHref} scroll={false} className="px-2 py-2 text-sm font-medium text-gray-600 hover:text-gray-950">
-            Clear
-          </Link>
-        )}
-      </Form>
+      <div className="mb-3 flex w-full flex-wrap items-center gap-2">
+        <Form
+          action="/students"
+          scroll={false}
+          className="min-w-[220px] flex-1"
+        >
+          {isHeadCoach && statusFilter !== "active" && (
+            <input type="hidden" name="status" value={statusFilter} />
+          )}
+          {selectedBranchIds.map((id) => (
+            <input key={id} type="hidden" name="branch" value={id} />
+          ))}
+          {selectedBelts.map((belt) => (
+            <input key={belt} type="hidden" name="belt" value={belt} />
+          ))}
+          {selectedBillingPlan !== "all" && (
+            <input type="hidden" name="plan" value={selectedBillingPlan} />
+          )}
+          <label htmlFor="student-search" className="sr-only">
+            Search students
+          </label>
+          <div className="relative w-full">
+            <Search
+              aria-hidden="true"
+              size={17}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+            />
+            <input
+              id="student-search"
+              name="q"
+              type="search"
+              maxLength={80}
+              defaultValue={searchQuery}
+              placeholder="Search student or branch"
+              className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-10 text-sm font-medium text-gray-950 outline-none transition placeholder:font-normal placeholder:text-gray-500 focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
+            />
+            {searchQuery && (
+              <Link
+                href={clearSearchHref}
+                scroll={false}
+                aria-label="Clear student search"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-gray-500 hover:text-gray-950"
+              >
+                Clear
+              </Link>
+            )}
+          </div>
+          <button type="submit" className="sr-only">
+            Search students
+          </button>
+        </Form>
 
-      <StudentFilters
-        branches={filterBranches.map((branch) => ({
-          value: String(branch.id),
-          label: branch.name,
-        }))}
-        belts={Object.entries(BELT_LABELS).map(([value, label]) => ({
-          value,
-          label,
-        }))}
-        canFilterStatus={currentUser.role === "head_coach"}
-        selectedBranchIds={selectedBranchIds}
-        selectedBelts={selectedBelts}
-        selectedStatus={statusFilter}
-        searchQuery={searchQuery}
-      />
-
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+        <StudentFilters
+          branches={filterBranches.map((branch) => ({
+            value: String(branch.id),
+            label: branch.name,
+          }))}
+          belts={Object.entries(BELT_LABELS).map(([value, label]) => ({
+            value,
+            label,
+          }))}
+          canFilterStatus={currentUser.role === "head_coach"}
+          selectedBranchIds={selectedBranchIds}
+          selectedBelts={selectedBelts}
+          selectedBillingPlan={selectedBillingPlan}
+          selectedStatus={statusFilter}
+          searchQuery={searchQuery}
+        />
+      </div>
+      <div className="overflow-hidden border-y border-gray-200 bg-white">
         {visibleTotal === 0 ? (
           <div className="px-6 py-16 text-center">
             <p className="text-sm font-medium text-gray-700">
@@ -301,63 +322,53 @@ export default async function StudentsPage({
         ) : (
           <>
             <div className="hidden xl:block">
-              <table className="system-data-table w-full table-fixed border-collapse text-left">
+              <div className="overflow-x-auto">
+              <table aria-label="Students" className="w-full min-w-[1120px] table-fixed border-collapse bg-white text-left text-sm text-gray-950">
                 <colgroup>
                   {isHeadCoach ? (
                     <>
-                      <col className="w-[16%]" />
-                      <col className="w-[15%]" />
+                      <col className="w-[5%]" />
+                      <col className="w-[18%]" />
+                      <col className="w-[12%]" />
                       <col className="w-[10%]" />
+                      <col className="w-[12%]" />
+                      <col className="w-[12%]" />
+                      <col className="w-[15%]" />
                       <col className="w-[9%]" />
-                      <col className="w-[11%]" />
-                      <col className="w-[15%]" />
-                      <col className="w-[10%]" />
-                      <col className="w-[14%]" />
+                      <col className="w-[7%]" />
                     </>
                   ) : (
                     <>
-                      <col className="w-[38%]" />
-                      <col className="w-[22%]" />
-                      <col className="w-[25%]" />
-                      <col className="w-[15%]" />
+                      <col className="w-[6%]" />
+                      <col className="w-[40%]" />
+                      <col className="w-[20%]" />
+                      <col className="w-[24%]" />
+                      <col className="w-[10%]" />
                     </>
                   )}
                 </colgroup>
-                <thead className="border-b border-gray-200 bg-gray-50">
+                <thead className="border-b border-gray-200">
                   <tr>
-                    <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                      Student
-                    </th>
-                    <th className="px-3 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                      Belt level
-                    </th>
-                    {isHeadCoach && <th className="px-3 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">Plan</th>}
-                    <th className="px-3 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                      Branch
-                    </th>
+                    <th scope="col" className="px-4 py-4 text-xs font-medium text-gray-500">#</th>
+                    <th scope="col" className="px-4 py-4 text-xs font-medium text-gray-500">Student</th>
+                    <th scope="col" className="px-4 py-4 text-xs font-medium text-gray-500">Belt level</th>
+                    {isHeadCoach && <th scope="col" className="px-4 py-4 text-xs font-medium text-gray-500">Plan</th>}
+                    <th scope="col" className="px-4 py-4 text-xs font-medium text-gray-500">Branch</th>
                     {isHeadCoach && (
                       <>
-                        <th className="px-3 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                          Guardian
-                        </th>
-                        <th className="px-3 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                          Guardian contact
-                        </th>
-                        <th className="px-3 py-3 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                          Enrolled
-                        </th>
-                        <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                          Actions
-                        </th>
+                        <th scope="col" className="px-4 py-4 text-xs font-medium text-gray-500">Guardian</th>
+                        <th scope="col" className="px-4 py-4 text-xs font-medium text-gray-500">Guardian contact</th>
+                        <th scope="col" className="px-4 py-4 text-xs font-medium text-gray-500">Enrolled</th>
+                        <th scope="col" className="px-4 py-4 text-right text-xs font-medium text-gray-500">Actions</th>
                       </>
                     )}
                     {!isHeadCoach && (
-                      <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-600">Actions</th>
+                      <th scope="col" className="px-4 py-4 text-right text-xs font-medium text-gray-500">Actions</th>
                     )}
                   </tr>
                 </thead>
-                <PaginatedTableRows itemLabel="students" pageSize={6} colSpan={isHeadCoach ? 8 : 4}>
-                  {visibleStudents.map((student) => {
+                <PaginatedTableRows itemLabel="students" pageSize={6} colSpan={isHeadCoach ? 9 : 5}>
+                  {visibleStudents.map((student, index) => {
                     const fullName = [
                       student.first_name,
                       student.middle_name,
@@ -365,36 +376,29 @@ export default async function StudentsPage({
                     ]
                       .filter(Boolean)
                       .join(" ");
-                    const beltStyle =
-                      BELT_COLORS[student.belt_level] ??
-                      "bg-gray-100 text-gray-700";
-
                     return (
                       <tr
                         id={`student-${student.id}-desktop`}
                         key={student.id}
-                        className="transition-colors hover:bg-gray-50/70"
+                        className="border-b border-gray-100 transition-colors last:border-b-0 hover:bg-gray-50/60"
                       >
-                        <td className="break-words px-5 py-4 text-sm font-medium text-gray-950">
+                        <td className="px-4 py-5 text-sm font-medium tabular-nums text-gray-700">{index + 1}</td>
+                        <td className="break-words px-4 py-5 text-sm font-medium text-gray-950">
                           <span className="block">{fullName}</span>
                         </td>
-                        <td className="px-3 py-4 text-sm font-medium text-gray-950">
-                          <span
-                            className={`inline-flex max-w-full whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${beltStyle}`}
-                          >
-                            {formatBeltLabel(student.belt_level)}
-                          </span>
+                        <td className={`px-4 py-5 text-sm font-medium ${beltTextColorClass(student.belt_level)}`}>
+                          {formatBeltLabel(student.belt_level)}
                         </td>
-                        {isHeadCoach && <td className="whitespace-normal px-3 py-4 text-sm font-medium text-gray-950">{student.billing_plan === "Per session" ? "Per session" : "Monthly"}</td>}
-                        <td className="whitespace-normal break-words px-3 py-4 text-sm font-medium text-gray-950">
+                        {isHeadCoach && <td className="whitespace-normal px-4 py-5 text-sm font-medium text-gray-950">{student.billing_plan === "Per session" ? "Per session" : "Monthly"}</td>}
+                        <td className="whitespace-normal break-words px-4 py-5 text-sm font-medium text-gray-950">
                           {student.branch?.name || "—"}
                         </td>
                         {isHeadCoach && (
                           <>
-                            <td className="whitespace-normal break-words px-3 py-4 text-sm font-medium text-gray-950">
+                            <td className="whitespace-normal break-words px-4 py-5 text-sm font-medium text-gray-950">
                               {student.guardian_name || "—"}
                             </td>
-                            <td className="whitespace-normal px-3 py-4 text-sm font-medium text-gray-950">
+                            <td className="whitespace-normal break-words px-4 py-5 text-sm font-medium text-gray-950">
                               <span className="block break-words">
                                 {student.guardian_contact || "—"}
                               </span>
@@ -402,7 +406,7 @@ export default async function StudentsPage({
                                 {student.guardian_email}
                               </span>
                             </td>
-                            <td className="whitespace-nowrap px-3 py-4 text-sm font-medium text-gray-950">
+                            <td className="whitespace-nowrap px-4 py-5 text-sm font-medium text-gray-950">
                               {new Date(
                                 student.enrollment_date,
                               ).toLocaleDateString("en-US", {
@@ -411,11 +415,10 @@ export default async function StudentsPage({
                                 year: "numeric",
                               })}
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-4 py-4">
                               <div className="flex justify-end">
                                 <RowActionsMenu>
                                   <Link className={ROW_ACTION_CLASS} href={`/attendance/history?studentId=${student.id}`}>Attendance history</Link>
-                                  <Link className={ROW_ACTION_CLASS} href={`/students/${student.id}/progress`}>Student progress</Link>
                                   {student.is_active && <StudentModal branches={branchOptionsForStudent(student)} student={student} trigger={<RowActionItem>Edit student</RowActionItem>} />}
                                   <StudentStatusButton
                                     studentId={student.id}
@@ -428,12 +431,13 @@ export default async function StudentsPage({
                             </td>
                           </>
                         )}
-                        {!isHeadCoach && <td className="px-4 py-3 text-right"><RowActionsMenu><Link className={ROW_ACTION_CLASS} href={`/attendance/history?studentId=${student.id}`}>Attendance history</Link><Link className={ROW_ACTION_CLASS} href={`/students/${student.id}/progress`}>Student progress</Link></RowActionsMenu></td>}
+                        {!isHeadCoach && <td className="px-4 py-4"><div className="flex justify-end"><RowActionsMenu><Link className={ROW_ACTION_CLASS} href={`/attendance/history?studentId=${student.id}`}>Attendance history</Link></RowActionsMenu></div></td>}
                       </tr>
                     );
                   })}
                 </PaginatedTableRows>
               </table>
+              </div>
             </div>
 
             <div className="divide-y divide-gray-100 overflow-hidden rounded-b-xl xl:hidden">
@@ -446,10 +450,6 @@ export default async function StudentsPage({
                 ]
                   .filter(Boolean)
                   .join(" ");
-                const beltStyle =
-                  BELT_COLORS[student.belt_level] ??
-                  "bg-gray-100 text-gray-700";
-
                 return (
                   <div
                     id={`student-${student.id}-mobile`}
@@ -466,13 +466,12 @@ export default async function StudentsPage({
                         <div className="flex shrink-0 items-center gap-2">
                           <RowActionsMenu>
                             <Link className={ROW_ACTION_CLASS} href={`/attendance/history?studentId=${student.id}`}>Attendance history</Link>
-                            <Link className={ROW_ACTION_CLASS} href={`/students/${student.id}/progress`}>Student progress</Link>
                             {student.is_active && <StudentModal branches={branchOptionsForStudent(student)} student={student} trigger={<RowActionItem>Edit student</RowActionItem>} />}
                             <StudentStatusButton studentId={student.id} studentName={fullName} isActive={student.is_active} className={`${ROW_ACTION_CLASS} ${student.is_active ? "text-red-700 hover:bg-red-50" : "text-emerald-700 hover:bg-emerald-50"}`} />
                           </RowActionsMenu>
                         </div>
                       )}
-                      {!isHeadCoach && <RowActionsMenu><Link className={ROW_ACTION_CLASS} href={`/attendance/history?studentId=${student.id}`}>Attendance history</Link><Link className={ROW_ACTION_CLASS} href={`/students/${student.id}/progress`}>Student progress</Link></RowActionsMenu>}
+                      {!isHeadCoach && <RowActionsMenu><Link className={ROW_ACTION_CLASS} href={`/attendance/history?studentId=${student.id}`}>Attendance history</Link></RowActionsMenu>}
                     </div>
 
                     <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
@@ -480,12 +479,8 @@ export default async function StudentsPage({
                         <dt className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
                           Belt Level
                         </dt>
-                        <dd className="mt-1">
-                          <span
-                            className={`inline-flex max-w-full whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${beltStyle}`}
-                          >
-                            {formatBeltLabel(student.belt_level)}
-                          </span>
+                        <dd className={`mt-1 text-sm font-medium ${beltTextColorClass(student.belt_level)}`}>
+                          {formatBeltLabel(student.belt_level)}
                         </dd>
                       </div>
                       <div className="min-w-0">

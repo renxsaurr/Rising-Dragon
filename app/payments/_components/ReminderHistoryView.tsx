@@ -32,7 +32,6 @@ export default function ReminderHistoryView({
   const href = (next: Partial<HistoryQuery>) =>
     paymentsHref({ ...base, view: 'history', history: { ...current, ...next } })
   const hasFilters = Boolean(filters.q) || filters.status !== 'all' || filters.type !== 'all' || filters.branch !== 'all'
-  const branchName = branches.find((branch) => String(branch.id) === filters.branch)?.name
 
   return (
     <>
@@ -49,14 +48,10 @@ export default function ReminderHistoryView({
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-gray-950">Reminder history</h2>
-          <p className="mt-0.5 text-[13px] text-gray-500">
-            Every reminder email, newest first{branchName ? ` · counts for ${branchName}` : ''}.
-          </p>
         </div>
-        <div className="grid w-full grid-cols-3 gap-2 sm:w-auto sm:min-w-[320px]">
+        <div className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:min-w-[220px]">
           <StatBox label="Sent" value={summary.sent} />
           <StatBox label="Failed" value={summary.failed} danger />
-          <StatBox label="Skipped" value={summary.skipped} />
         </div>
       </div>
 

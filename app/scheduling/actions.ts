@@ -630,7 +630,6 @@ export async function reportScheduleAbsence(input: ScheduleAbsenceInput) {
 
   revalidatePath('/scheduling')
   revalidatePath('/attendance')
-  revalidatePath('/notifications')
   return {
     success: true,
     message: 'Time away reported. The Head Coach can now review the affected classes and arrange coverage.',
@@ -681,7 +680,6 @@ export async function assignAbsenceCover(reportId: number, substituteCoachId: nu
     }).eq('id', reportId).eq('status', 'pending')
     if (error) return { error: error.message }
     revalidatePath('/scheduling')
-    revalidatePath('/notifications')
     return { success: true, message: 'No scheduled classes need coverage during these dates. The report was marked reviewed.' }
   }
 
@@ -795,7 +793,6 @@ export async function assignAbsenceCover(reportId: number, substituteCoachId: nu
 
   revalidatePath('/scheduling')
   revalidatePath('/attendance')
-  revalidatePath('/notifications')
   return { success: true, message: `${affectedSessions.length} scheduled class${affectedSessions.length === 1 ? '' : 'es'} assigned to the substitute for these dates.` }
 }
 
@@ -859,7 +856,6 @@ export async function cancelAbsenceClasses(reportId: number) {
 
   revalidatePath('/scheduling')
   revalidatePath('/attendance')
-  revalidatePath('/notifications')
   return {
     success: true,
     message: sessionIds.length
@@ -1045,7 +1041,6 @@ export async function resolveAbsenceReport(reportId: number, decisions: AbsenceC
     const { error } = await admin.from('schedule_absence_report').update({ status: 'resolved', resolution: 'no_sessions', resolved_by: currentUser.id, resolved_at: new Date().toISOString() }).eq('id', reportId).eq('status', 'pending')
     if (error) return { error: error.message }
     revalidatePath('/scheduling')
-    revalidatePath('/notifications')
     return { success: true, message: 'No scheduled classes need coverage during these dates. The report was marked reviewed.' }
   }
 
@@ -1073,6 +1068,5 @@ export async function resolveAbsenceReport(reportId: number, decisions: AbsenceC
 
   revalidatePath('/scheduling')
   revalidatePath('/attendance')
-  revalidatePath('/notifications')
   return { success: true, message: `${coveredCount} class${coveredCount === 1 ? '' : 'es'} covered${cancelledCount ? `; ${cancelledCount} class${cancelledCount === 1 ? '' : 'es'} cancelled` : ''}.` }
 }

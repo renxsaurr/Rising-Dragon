@@ -3,12 +3,14 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import DashboardShell from '@/components/DashboardShell'
 import { Card, EmptyNote } from '@/components/DashboardWidgets'
+import DashboardMetrics, { type DashboardMetric } from '@/components/DashboardMetrics'
 import { createClient } from '@/utils/supabase/server'
 import { getCurrentUser } from '@/utils/getCurrentUser'
 import { getCoachBranchIdsForDate } from '@/utils/coach-access'
 import { addDays, dateInTimeZone, formatTime } from '@/utils/dates'
-import { formatBeltLabel } from '@/utils/belts'
-import { Activity, ArrowUpRight, CalendarDays, ClipboardCheck, Medal, UsersRound, WalletCards } from 'lucide-react'
+import { beltTextColorClass, formatBeltLabel } from '@/utils/belts'
+import { formatPeso } from '@/utils/payment-fees'
+import { Activity, ArrowUpRight, CalendarDays, Medal } from 'lucide-react'
 
 type ScheduleRow = {
   id: number
@@ -101,12 +103,11 @@ export default async function DashboardPage() {
     return {
       date,
       label: new Date(`${date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short' }),
-      count: attendance.filter((row) => row.date === date && row.status === 'Present').length,
+      count: attendance.filter((row) => row.date === date && (row.status === 'Present' || row.status === 'Late')).length,
     }
   })
   const maxDailyAttendance = Math.max(1, ...dailyAttendance.map((day) => day.count))
   const weeklyCheckIns = dailyAttendance.reduce((total, day) => total + day.count, 0)
-
   const beltCounts = new Map<string, number>()
   for (const student of beltResult.data ?? []) beltCounts.set(student.belt_level, (beltCounts.get(student.belt_level) ?? 0) + 1)
   const sortedBelts = [...beltCounts.entries()].sort((a, b) => b[1] - a[1])
@@ -114,11 +115,31 @@ export default async function DashboardPage() {
   const otherBelts = sortedBelts.slice(5).reduce((total, [, count]) => total + count, 0)
   if (otherBelts) shownBelts.push(['other', otherBelts])
 
-  const metrics = [
-    { label: isHeadCoach ? 'Active students' : 'Students at today’s branches', value: studentResult.count ?? 0, note: 'Current enrollment', Icon: UsersRound },
-    { label: isHeadCoach ? 'Classes today' : 'My classes today', value: todaysSchedules.length, note: todaysSchedules.length ? 'On the schedule today' : 'No classes scheduled', Icon: CalendarDays },
-    { label: 'Attendance to record', value: pendingAttendance.length, note: pendingAttendance.length ? 'Completed classes need attention' : 'No completed classes waiting', Icon: ClipboardCheck },
-    ...(isHeadCoach ? [{ label: 'Payments due or overdue', value: paymentResult.count ?? 0, note: paymentResult.count ? 'Needs follow-up' : 'No payments due today', Icon: WalletCards }] : []),
+  const metrics: DashboardMetric[] = [
+    {
+      id: 'students',
+      label: isHeadCoach ? 'Active students' : 'Students at today’s branches',
+      value: studentResult.count ?? 0,
+      note: 'Current enrollment',
+    },
+    {
+      id: 'classes',
+      label: isHeadCoach ? 'Classes today' : 'My classes today',
+      value: todaysSchedules.length,
+      note: todaysSchedules.length ? 'On the schedule today' : 'No classes scheduled',
+    },
+    {
+      id: 'attendance',
+      label: 'Attendance to record',
+      value: pendingAttendance.length,
+      note: pendingAttendance.length ? 'Completed classes need attention' : 'No completed classes waiting',
+    },
+    ...(isHeadCoach ? [{
+      id: 'payments' as const,
+      label: 'Payments due or overdue',
+      value: paymentResult.count ?? 0,
+      note: paymentResult.count ? 'Needs follow-up' : 'No payments due today',
+    }] : []),
   ]
   const todayLabel = new Date(`${today}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
 
@@ -135,22 +156,7 @@ export default async function DashboardPage() {
               <CalendarDays className="h-4 w-4 text-gray-950" aria-hidden />{todayLabel}
             </span>
           </div>
-          <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 xl:gap-5 ${isHeadCoach ? 'xl:grid-cols-4' : 'xl:grid-cols-3'}`}>
-            {metrics.map((metric) => (
-              <article key={metric.label} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm shadow-gray-900/[0.03] transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium leading-5 text-gray-900">{metric.label}</p>
-                    <p className="mt-3 text-3xl font-semibold tracking-tight text-gray-950 tabular-nums">{metric.value}</p>
-                  </div>
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gray-100 text-gray-950 ring-1 ring-inset ring-gray-200/80">
-                    <metric.Icon className="h-[18px] w-[18px]" aria-hidden />
-                  </span>
-                </div>
-                <p className="mt-3 border-t border-gray-100 pt-3 text-xs leading-5 text-gray-700">{metric.note}</p>
-              </article>
-            ))}
-          </div>
+          <DashboardMetrics metrics={metrics} isHeadCoach={isHeadCoach} />
         </section>
 
         <div className="grid items-stretch gap-5 xl:grid-cols-3">
@@ -216,7 +222,7 @@ export default async function DashboardPage() {
                   return (
                     <li key={belt}>
                       <div className="mb-1.5 flex items-start justify-between gap-2 text-xs">
-                        <span className="min-w-0 whitespace-normal break-words font-medium leading-5 text-gray-900">{label}</span>
+                        <span className={`min-w-0 whitespace-normal break-words font-medium leading-5 ${belt === 'other' ? 'text-gray-900' : beltTextColorClass(belt)}`}>{label}</span>
                         <span className="shrink-0 tabular-nums text-gray-800">{count}<span className="ml-1 text-gray-700">· {percent}%</span></span>
                       </div>
                       <div className="h-2 overflow-hidden rounded-full bg-gray-100">

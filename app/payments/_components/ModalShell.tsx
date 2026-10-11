@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 
 // Shared classes for the payment popups, copied from Attendance's buttons and dropdown.
 export const FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2'
@@ -77,7 +78,7 @@ export default function ModalShell({
     }
   }, [])
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 px-3 py-3 text-left sm:flex sm:items-center sm:justify-center sm:px-4 sm:py-4">
       <div
         ref={dialogRef}
@@ -91,11 +92,12 @@ export default function ModalShell({
         <div className="shrink-0 border-b border-gray-200 px-4 py-3 sm:px-6 sm:py-4">
           <h2 id={titleId} className="break-words text-[17px] font-semibold text-gray-950">{title}</h2>
           {description && (
-            <p id={descriptionId} className="mt-0.5 break-words text-[13px] text-gray-700">{description}</p>
+            <p id={descriptionId} className="mt-0.5 break-words text-[13px] font-medium text-gray-950">{description}</p>
           )}
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

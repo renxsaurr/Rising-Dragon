@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import DashboardShell from "@/components/DashboardShell";
 import AttendanceRoster from "@/components/AttendanceRoster";
 import AttendanceDatePicker from "@/components/AttendanceDatePicker";
+import AttendanceBranchSelector, { type AttendanceBranchOption } from "@/components/AttendanceBranchSelector";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { getCurrentUser } from "@/utils/getCurrentUser";
@@ -41,12 +41,12 @@ function fullName(
 export default async function AttendancePage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string; scheduleId?: string }>;
+  searchParams: Promise<{ date?: string; branchId?: string; scheduleId?: string }>;
 }) {
   const currentUser = await getCurrentUser();
   if (!currentUser) redirect("/login");
 
-  const { date: requestedDate, scheduleId: requestedScheduleId } =
+  const { date: requestedDate, branchId: requestedBranchId, scheduleId: requestedScheduleId } =
     await searchParams;
   const today = dateInTimeZone();
   const currentTime = timeInTimeZone();
@@ -83,60 +83,46 @@ export default async function AttendancePage({
   }
 
   const schedules = (weekData ?? []) as unknown as ScheduleRow[];
-  const selectedSchedule =
-    schedules.find((schedule) => String(schedule.id) === requestedScheduleId) ??
-    schedules[0] ??
-    null;
-
-  // progress per session: marked records vs students enrolled at that branch
-  const branchIds = [
-    ...new Set(schedules.map((schedule) => Number(schedule.branch_id))),
-  ];
-  const [branchStudentsResult, dayAttendanceResult] = schedules.length
-    ? await Promise.all([
-        admin
-          .from("student")
-          .select("id, branch_id, enrollment_date, billing_plan")
-          .eq("is_active", true)
-          .lte("enrollment_date", date)
-          .in("branch_id", branchIds),
-        supabase
-          .from("attendance")
-          .select("schedule_id, student_id, status")
-          .in(
-            "schedule_id",
-            schedules.map((schedule) => schedule.id),
-          ),
-      ])
-    : [{ data: [], error: null }, { data: [], error: null }];
-  const progressError =
-    branchStudentsResult.error?.message ?? dayAttendanceResult.error?.message ?? "";
-  const activeStudentIdsPerBranch = new Map<number, Set<number>>();
-  for (const row of branchStudentsResult.data ?? [])
-    if (row.billing_plan !== "Per session") activeStudentIdsPerBranch.set(Number(row.branch_id), new Set([
-      ...(activeStudentIdsPerBranch.get(Number(row.branch_id)) ?? []),
-      Number(row.id),
-    ]));
-  const markedStudentIdsPerSchedule = new Map<number, Set<number>>();
-  for (const row of (dayAttendanceResult.data ?? []) as { schedule_id: number; student_id: number; status: string }[])
-    markedStudentIdsPerSchedule.set(Number(row.schedule_id), new Set([
-      ...(markedStudentIdsPerSchedule.get(Number(row.schedule_id)) ?? []),
-      Number(row.student_id),
-    ]));
-
-  const presentPerSchedule = new Map<number, number>();
-  const absentPerSchedule = new Map<number, number>();
-  for (const row of (dayAttendanceResult.data ?? []) as {
-    schedule_id: number;
-    status: string;
-  }[]) {
-    const target =
-      row.status === "Present" ? presentPerSchedule : absentPerSchedule;
-    target.set(
-      Number(row.schedule_id),
-      (target.get(Number(row.schedule_id)) ?? 0) + 1,
+  const requestedSchedule = schedules.find((schedule) => String(schedule.id) === requestedScheduleId) ?? null;
+  const scheduledBranchIds = [...new Set(schedules.map((schedule) => Number(schedule.branch_id)))];
+  const branchResult = isAssistant
+    ? { data: [], error: null }
+    : await supabase.from("branch").select("id, name").eq("is_active", true).order("name");
+  if (branchResult.error) {
+    return (
+      <DashboardShell title="Attendance" currentUser={currentUser}>
+        <p role="alert" className="text-sm text-red-600">
+          Could not load branches: {branchResult.error.message}
+        </p>
+      </DashboardShell>
     );
   }
+  const scheduledBranches = new Map<number, string>();
+  for (const schedule of schedules)
+    scheduledBranches.set(Number(schedule.branch_id), schedule.branch?.name ?? "Branch");
+  const branchRows = isAssistant
+    ? scheduledBranchIds.map((id) => ({ id, name: scheduledBranches.get(id) ?? "Branch" }))
+    : (branchResult.data ?? []).map((branch) => ({ id: Number(branch.id), name: branch.name }));
+  const branchOptions: AttendanceBranchOption[] = branchRows.map((branch) => ({
+    id: branch.id,
+    name: branch.name,
+    sessions: schedules
+      .filter((schedule) => Number(schedule.branch_id) === branch.id)
+      .map((schedule) => ({
+        id: Number(schedule.id),
+        timeStart: schedule.time_start,
+        timeEnd: schedule.time_end,
+        coachName: fullName(schedule.coach) || "Coach",
+      })),
+  }));
+  const parsedBranchId = Number(requestedBranchId);
+  const selectedBranchId = branchOptions.some((branch) => branch.id === parsedBranchId)
+    ? parsedBranchId
+    : requestedSchedule?.branch_id ?? branchOptions.find((branch) => branch.sessions.length > 0)?.id ?? branchOptions[0]?.id ?? null;
+  const selectedBranchSchedules = schedules.filter((schedule) => Number(schedule.branch_id) === selectedBranchId);
+  const selectedSchedule = selectedBranchSchedules.find((schedule) => String(schedule.id) === requestedScheduleId)
+    ?? selectedBranchSchedules[0]
+    ?? null;
 
   let students: {
     id: number;
@@ -148,7 +134,7 @@ export default async function AttendancePage({
     billing_plan: "Monthly" | "Per session";
   }[] = [];
   let availableWalkIns: { id: number; name: string; belt: string }[] = [];
-  let attendance: { student_id: number; status: "Present" | "Absent" }[] = [];
+  let attendance: { student_id: number; status: "Present" | "Late" | "Absent" | "Excused" }[] = [];
   let rosterError = "";
 
   if (selectedSchedule) {
@@ -216,97 +202,26 @@ export default async function AttendancePage({
         <AttendanceDatePicker date={date} />
       </section>
 
-      <div className="mb-3">
-          <h3 className="text-sm font-semibold text-black">Classes on this date</h3>
-      </div>
+      {branchOptions.length > 0 && selectedBranchId !== null && (
+          <AttendanceBranchSelector
+            date={date}
+            branches={branchOptions}
+            selectedBranchId={selectedBranchId}
+            selectedScheduleId={selectedSchedule ? Number(selectedSchedule.id) : null}
+          />
+      )}
 
-      {schedules.length === 0 ? (
+      {!selectedSchedule && (
         <div className="mb-5 rounded-xl border border-dashed border-gray-300 bg-white px-5 py-12 text-center">
           <p className="text-sm font-medium text-gray-800">
-            No classes on this day
+            {branchOptions.length === 0 ? "No classes on this day" : `No class at ${branchOptions.find((branch) => branch.id === selectedBranchId)?.name ?? "this branch"} on this day`}
           </p>
           <p className="mt-1 text-sm text-gray-500">
             {isAssistant
               ? "Only your assigned classes appear here. Pick another day above."
-              : "Pick another day above, or add a session in the calendar."}
+              : "Choose a branch with a class or pick another date."}
           </p>
         </div>
-      ) : (
-        <>
-        {progressError && (
-          <p role="alert" className="mb-3 rounded-lg bg-gray-50 px-4 py-3 text-sm text-black">
-            Class attendance totals could not be loaded. You can still open a class roster.
-          </p>
-        )}
-        <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {schedules.map((schedule) => {
-            const active = selectedSchedule?.id === schedule.id;
-            const activeStudentIds = activeStudentIdsPerBranch.get(Number(schedule.branch_id)) ?? new Set<number>();
-            const markedStudentIds = markedStudentIdsPerSchedule.get(Number(schedule.id)) ?? new Set<number>();
-            const historicalMarkedCount = [...markedStudentIds].filter((studentId) => !activeStudentIds.has(studentId)).length;
-            const total = activeStudentIds.size + historicalMarkedCount;
-            const marked = markedStudentIds.size;
-            const presentCount =
-              presentPerSchedule.get(Number(schedule.id)) ?? 0;
-            const absentCount = absentPerSchedule.get(Number(schedule.id)) ?? 0;
-            const done = total > 0 && marked >= total;
-            const upcoming = schedule.date > today ||
-              (schedule.date === today && schedule.time_start > currentTime);
-            const assignedName = fullName(schedule.coach) || "Coach";
-            return (
-              <Link
-                key={schedule.id}
-                href={`/attendance?date=${date}&scheduleId=${schedule.id}`}
-                aria-current={active ? "true" : undefined}
-                className={`min-w-0 rounded-xl border bg-white p-4 transition-all ${active ? "border-black shadow-sm ring-1 ring-black" : "border-gray-200 hover:border-gray-300"}`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-black">
-                      {schedule.branch?.name ?? "Branch"}
-                    </p>
-                    <p className="mt-0.5 truncate text-xs text-black">
-                      {formatTime(schedule.time_start)}–{formatTime(schedule.time_end)}
-                    </p>
-                    <p className="mt-1 break-words text-xs text-black">
-                      Coach: <span className="font-medium text-black">{assignedName}</span>
-                    </p>
-                  </div>
-                  {upcoming ? (
-                    <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-black">
-                      Upcoming
-                    </span>
-                  ) : done ? (
-                    <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-black">
-                      ✓ Done
-                    </span>
-                  ) : (
-                    <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-black">
-                      {marked ? "In progress" : "To do"}
-                    </span>
-                  )}
-                </div>
-                {!progressError && (
-                  <div className="mt-3 grid grid-cols-3 gap-2 border-t border-gray-100 pt-3">
-                    <div className="min-w-0 rounded-lg border border-gray-200 bg-white px-2.5 py-2">
-                      <p className="text-lg font-bold leading-none text-black">{presentCount}</p>
-                      <p className="mt-1 text-[11px] font-semibold text-black">Present</p>
-                    </div>
-                    <div className="min-w-0 rounded-lg border border-red-200 bg-white px-2.5 py-2">
-                      <p className="text-lg font-bold leading-none text-red-600">{absentCount}</p>
-                      <p className="mt-1 text-[11px] font-semibold text-black">Absent</p>
-                    </div>
-                    <div className="min-w-0 rounded-lg border border-gray-200 bg-white px-2.5 py-2">
-                      <p className="text-lg font-bold leading-none text-black">{marked}<span className="text-sm font-medium text-gray-500">/{total}</span></p>
-                      <p className="mt-1 text-[11px] font-semibold text-black">Marked <span className="font-normal text-gray-600">· {Math.max(total - marked, 0)} left</span></p>
-                    </div>
-                  </div>
-                )}
-              </Link>
-            );
-          })}
-        </div>
-        </>
       )}
 
       {/* 3 — mark the roster */}

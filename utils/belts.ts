@@ -32,4 +32,24 @@ export const BELT_COLORS: Record<string, string> = {
   fourth_dan_black_belt: "bg-gray-900 text-white ring-amber-500",
 };
 
+/** Text-only belt colors stay readable without the badge backgrounds. */
+export const BELT_TEXT_COLORS: Record<string, string> = {
+  practitioner: "text-green-800",
+  white_belt: "text-gray-800",
+  low_yellow: "text-yellow-800",
+  high_yellow: "text-yellow-900",
+  low_blue: "text-blue-800",
+  high_blue: "text-blue-700",
+  low_red: "text-red-800",
+  high_red: "text-red-700",
+  low_brown: "text-orange-800",
+  high_brown: "text-orange-900",
+  first_dan_black_belt: "text-gray-950",
+  second_dan_black_belt: "text-gray-950",
+  third_dan_black_belt: "text-gray-950",
+  fourth_dan_black_belt: "text-gray-950",
+};
+
+export const beltTextColorClass = (belt: string) => BELT_TEXT_COLORS[belt] ?? "text-gray-700";
+
 export const formatBeltLabel = (belt: string) => BELT_LABELS[belt] ?? belt;

@@ -9,7 +9,7 @@ import PaginatedListItems from '@/components/PaginatedListItems'
 import { createClient } from '@/utils/supabase/server'
 import { getCurrentUser } from '@/utils/getCurrentUser'
 import { dateInTimeZone, formatTimeRange, timeInTimeZone } from '@/utils/dates'
-import { BELT_COLORS, formatBeltLabel } from '@/utils/belts'
+import { beltTextColorClass, formatBeltLabel } from '@/utils/belts'
 import { BRANCH_WEEKDAYS, formatBranchOperatingHours, parseBranchOperatingHours } from '@/utils/branch-operating-hours'
 
 export const dynamic = 'force-dynamic'
@@ -184,11 +184,12 @@ export default async function BranchDetailPage({ params, searchParams }: {
       </section>
 
       <div className="mt-6 grid items-start gap-5 lg:grid-cols-2">
-        <Card title={<><CalendarDays className="h-4 w-4 text-gray-950" aria-hidden />Today’s schedule</>} chip={schedule.error ? undefined : String(schedule.rows.length)} flush className="rounded-xl border border-gray-200 bg-white shadow-sm">
+        <Card title={<><CalendarDays className="h-4 w-4 text-gray-950" aria-hidden />Today’s schedule</>} chip={schedule.error ? undefined : String(schedule.rows.length)} flush contentClassName="flex min-h-0 flex-1 flex-col" className="flex h-[360px] min-h-0 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
           {schedule.error
             ? <p role="alert" className="px-5 pb-5 text-sm text-red-600">Could not load today’s schedule: {schedule.error}</p>
             : schedule.rows.length
-              ? <ul className="divide-y divide-gray-100 pb-1">
+              ? <div className="min-h-0 flex-1 divide-y divide-gray-100">
+                <PaginatedListItems itemLabel="classes" pageSize={3}>
                 {schedule.rows.map((row) => {
                   const status = classStatus(row, now, schedule.attendance.get(Number(row.id)) ?? { complete: false, marked: 0 })
                   const content = <>
@@ -199,31 +200,32 @@ export default async function BranchDetailPage({ params, searchParams }: {
                     <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-medium ${status.tone}`}>{status.label}</span>
                   </>
                   return (
-                    <li key={row.id}>
+                    <div key={row.id}>
                       {row.status === 'Cancelled'
                         ? <div className="flex items-center gap-3 px-5 py-3.5 opacity-70">{content}</div>
                         : <Link href={`/attendance?date=${row.date}&scheduleId=${row.id}`} className="group/row flex items-center gap-3 px-5 py-3.5 transition-colors duration-200 hover:bg-red-600/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-red-500">
                           {content}
                           <ArrowUpRight className="h-4 w-4 shrink-0 text-gray-400 transition group-hover/row:text-gray-950" aria-hidden />
                         </Link>}
-                    </li>
+                    </div>
                   )
                 })}
-              </ul>
+                </PaginatedListItems>
+              </div>
               : <div className="px-5 pb-5"><EmptyNote>No classes scheduled today.</EmptyNote></div>}
         </Card>
 
-        <Card title={<><Users className="h-4 w-4 text-gray-950" aria-hidden />Active students</>} chip={studentResult.error ? undefined : String(students.length)} flush className="rounded-xl border border-gray-200 bg-white shadow-sm">
+        <Card title={<><Users className="h-4 w-4 text-gray-950" aria-hidden />Active students</>} chip={studentResult.error ? undefined : String(students.length)} flush contentClassName="flex min-h-0 flex-1 flex-col" className="flex h-[360px] min-h-0 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
           {studentResult.error
             ? <p role="alert" className="px-5 pb-5 text-sm text-red-600">Could not load students: {studentResult.error.message}</p>
             : students.length
-              ? <div className="divide-y divide-gray-100">
-                <PaginatedListItems itemLabel="students" pageSize={6}>
+              ? <div className="min-h-0 flex-1 divide-y divide-gray-100">
+                <PaginatedListItems itemLabel="students" pageSize={3}>
                 {students.map((student) => (
                   <div key={student.id} className="flex items-center justify-between gap-3 px-5 py-3">
                     <span className="min-w-0 flex-1 break-words text-sm font-semibold text-gray-900">{fullName(student)}</span>
                     {student.belt_level
-                      ? <span className={`inline-flex shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${BELT_COLORS[student.belt_level] ?? 'bg-gray-100 text-gray-700'}`}>
+                      ? <span className={`shrink-0 whitespace-nowrap text-sm font-medium ${beltTextColorClass(student.belt_level)}`}>
                         {formatBeltLabel(student.belt_level)}
                       </span>
                       : <span className="text-xs text-gray-400">—</span>}

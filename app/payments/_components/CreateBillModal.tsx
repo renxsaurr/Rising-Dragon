@@ -25,8 +25,8 @@ function dueDateForMonth(enrollmentDate: string | null, month: string) {
 /** Which reminder the chosen due date allows, in words. */
 const timingText = (timing: ReminderWindow) =>
   timing.open
-    ? `The ${timing.type} reminder can be sent now.`
-    : `The ${timing.nextType} reminder opens on ${formatDate(timing.opensOn)}.`
+    ? `${timing.type} reminder · Available now`
+    : `${timing.nextType} reminder · Available ${formatDate(timing.opensOn)}`
 
 /** "Send reminder" for a student with no bill this month: create a 1-month Monthly bill first. */
 export default function CreateBillModal({
@@ -106,15 +106,16 @@ export default function CreateBillModal({
 
   return (
     <ModalShell
-      title="Create bill and send reminder"
-      description={`${student.name} · ${coverageStart ? formatCoverage(coverageStart, 1, student.enrollmentDate ?? coverageStart) : 'No enrollment billing date'} monthly fee`}
+      title="Create bill"
+      description={`Monthly · ${student.name} · ${coverageStart ? formatCoverage(coverageStart, 1, student.enrollmentDate ?? coverageStart) : 'No enrollment date'}`}
       busy={saving}
       onClose={onClose}
     >
       <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
-          <p className="text-[13px] text-gray-700">
-            The reminder goes to <span className="break-all font-medium text-gray-950">{student.guardianEmail}</span>.
+          <p className="break-all text-[13px] text-gray-700">
+            <span className="font-medium text-gray-500">Reminder email:</span>{' '}
+            <span className="font-medium text-gray-950">{student.guardianEmail}</span>
           </p>
           <StudentInfoCard studentId={student.id} onLoaded={handleSummary} />
 
@@ -138,21 +139,18 @@ export default function CreateBillModal({
               </div>
             </div>
             <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5">
-              <p className="text-xs font-medium text-gray-600">Scheduled due date</p>
-              <p className="mt-0.5 text-sm font-semibold text-gray-950">{dueDate ? formatDate(dueDate) : 'Student enrollment date is required'}</p>
+              <p className="text-xs font-medium text-gray-600">Due date</p>
+              <p className="mt-0.5 text-sm font-semibold text-gray-950">{dueDate ? formatDate(dueDate) : 'Enrollment date required'}</p>
             </div>
           </div>
 
           {monthlyFee === null && (
             <p role="alert" className="rounded-lg bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
-              Set the academy monthly fee in Payment settings before creating this bill.
+              Set the monthly fee in Payment settings to create this bill.
             </p>
           )}
 
           {timing && <p className="text-xs text-gray-600">{timingText(timing)}</p>}
-          <p className="text-xs text-gray-500">
-            Monthly · 1 billing cycle · covers {coverageStart ? formatCoverage(coverageStart, 1, student.enrollmentDate ?? coverageStart) : 'no billing cycle available'}. The bill starts as Unpaid.
-          </p>
 
           {warning && (
             <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">

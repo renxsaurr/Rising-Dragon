@@ -9,7 +9,7 @@ import ReminderReviewModal from './ReminderReviewModal'
 import SendReminderButton from './SendReminderButton'
 import type { StudentChoice } from './StudentCombobox'
 import { sendButtonState } from './reminder-button-state'
-import { formatBeltLabel } from '@/utils/belts'
+import { beltTextColorClass, formatBeltLabel } from '@/utils/belts'
 import { isValidEmail } from '@/utils/email'
 import { formatPeso } from '@/utils/payment-fees'
 import type { NotPaidStudent } from '@/utils/payment-records'
@@ -86,14 +86,15 @@ export default function NotPaidSection({
               <div className="min-w-0">
                 <p className="break-words text-sm font-medium text-gray-900">{student.name}</p>
                 <p className="mt-0.5 text-xs text-gray-500">
-                  {[
-                    choice.belt,
-                    showBranch ? student.branchName : null,
+                  <span className={`font-medium ${beltTextColorClass(student.beltLevel)}`}>{choice.belt}</span>
+                  {[showBranch ? student.branchName : null,
                     student.enrollmentDate ? `Enrolled ${formatDate(student.enrollmentDate)}` : null,
                     bill ? `Unpaid bill ${formatPeso(bill.amount)} due ${formatDate(bill.dueDate)}` : null,
                   ]
                     .filter(Boolean)
-                    .join(' · ')}
+                    .map((item) => <span key={item}>
+                      {' · '}{item}
+                    </span>)}
                 </p>
               </div>
 

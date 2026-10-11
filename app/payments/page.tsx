@@ -4,6 +4,7 @@ import BranchCards from "./_components/BranchCards";
 import MonthPicker from "./_components/MonthPicker";
 import HistoryPageTabs from "./_components/HistoryPageTabs";
 import PaymentRecordsTable from "./_components/PaymentRecordsTable";
+import AdvancePaymentsWorkspace from "./_components/AdvancePaymentsWorkspace";
 import PaymentReport from "./_components/PaymentReport";
 import PaymentsViewTabs from "./_components/PaymentsViewTabs";
 import UnpaidStudentsTable from "./_components/UnpaidStudentsTable";
@@ -12,7 +13,6 @@ import ReminderHistoryView from "./_components/ReminderHistoryView";
 import {
   HISTORY_PAGES,
   isPaymentFilter,
-  paymentsHref,
   type HistoryPage,
   type HistoryQuery,
 } from "./_components/payments-url";
@@ -27,6 +27,8 @@ import {
   formatMonth,
   isMonthKey,
   loadPaymentMonth,
+  loadPaidPaymentHistory,
+  shiftMonth,
 } from "@/utils/payment-records";
 import { loadReminderHistory } from "@/utils/reminder-history";
 
@@ -58,9 +60,24 @@ export default async function PaymentsPage({
   const filter = isPaymentFilter(filterParam)
     ? filterParam
     : "all";
+  const requestedStudentId = Number(param("studentId"));
   // Treat the old reports URL as History too, so existing bookmarks keep working.
   const showHistory = param("view") === "history" || param("view") === "reports";
-  const month = showHistory ? requestedMonth : today.slice(0, 7);
+  const showAdvance = param("view") === "advance";
+  const month = showHistory || requestedStudentId > 0 ? requestedMonth : today.slice(0, 7);
+  const currentMonth = today.slice(0, 7);
+  const earliestHistoryMonth =
+    TRACKING_START_MONTH && TRACKING_START_MONTH <= currentMonth
+      ? TRACKING_START_MONTH
+      : shiftMonth(currentMonth, -11);
+  const historyMonths: { key: string; label: string }[] = [];
+  for (let key = currentMonth; key >= earliestHistoryMonth; key = shiftMonth(key, -1)) {
+    historyMonths.push({ key, label: formatMonth(key) });
+  }
+  if (!historyMonths.some((option) => option.key === month)) {
+    historyMonths.push({ key: month, label: formatMonth(month) });
+    historyMonths.sort((a, b) => b.key.localeCompare(a.key));
+  }
   const historyPageParam = param("historyPage");
   const historyPage: HistoryPage = HISTORY_PAGES.includes(historyPageParam as HistoryPage)
     ? historyPageParam as HistoryPage
@@ -80,7 +97,7 @@ export default async function PaymentsPage({
   // There is no daily job any more, so clean up interrupted sends whenever the page loads.
   const stuckError = await failStuckReminders(admin);
 
-  const [monthResult, historyResult, settingsResult] =
+  const [monthResult, historyResult, paidHistoryResult, settingsResult] =
     await Promise.all([
     // Both tabs use the same monthly payment data; History also needs the reminder log.
     loadPaymentMonth(admin, month, today),
@@ -91,7 +108,11 @@ export default async function PaymentsPage({
           htype: param("htype"),
           hbranch: param("hbranch"),
           hpage: param("hpage"),
+          hid: param("hid"),
         })
+      : null,
+    showHistory && historyPage === "payments"
+      ? loadPaidPaymentHistory(admin, month, today)
       : null,
     admin.from("payment_settings").select("monthly_fee, per_session_fee, reminder_before_due_days, reminder_after_due_days").eq("singleton", true).maybeSingle(),
   ]);
@@ -99,6 +120,7 @@ export default async function PaymentsPage({
   const loadError =
     monthResult?.error ??
     historyResult?.error ??
+    paidHistoryResult?.error ??
     settingsResult.error?.message;
   if (loadError) {
     const billingMigrationMissing =
@@ -166,6 +188,18 @@ export default async function PaymentsPage({
       branch: branchNames.get(String(student.branchId)) ?? "No branch",
       billingPlan: student.billingPlan,
     }));
+  const notificationStudent = Number.isSafeInteger(requestedStudentId) && requestedStudentId > 0
+    ? studentChoices.find((student) => student.id === requestedStudentId)
+    : undefined;
+  const advanceStudentChoices = monthData.activeStudents
+    .filter((student) => student.billingPlan === "Monthly")
+    .map((student) => ({
+      id: student.id,
+      name: student.name,
+      belt: formatBeltLabel(student.beltLevel),
+      branch: branchNames.get(String(student.branchId)) ?? "No branch",
+      billingPlan: student.billingPlan,
+    }));
   const notPaid = monthData.notPaid[selected.key] ?? {
     activeCount: 0,
     notPaidCount: 0,
@@ -178,10 +212,22 @@ export default async function PaymentsPage({
   const trackingStarted = !TRACKING_START_MONTH || month >= TRACKING_START_MONTH;
   const missed = monthData.missedMonths[selected.key] ?? [];
 
+  if (showAdvance) {
+    return (
+      <DashboardShell title="Payments" currentUser={currentUser}>
+        <PaymentsViewTabs active="advance" month={month} branch={selected.key} filter={filter} />
+        <AdvancePaymentsWorkspace students={advanceStudentChoices} today={today} />
+      </DashboardShell>
+    );
+  }
+
   if (showHistory) {
     return (
       <DashboardShell title="Payments" currentUser={currentUser}>
-        <PaymentsViewTabs active="history" month={month} branch={selected.key} filter={filter} />
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <PaymentsViewTabs active="history" month={month} branch={selected.key} filter={filter} className="mb-0" />
+          {historyPage === "business" && <MonthPicker month={month} branch={selected.key} filter={filter} view="history" historyPage={historyPage} />}
+        </div>
         <HistoryPageTabs active={historyPage} month={month} branch={selected.key} filter={filter} history={reminderQuery} />
         <div className="space-y-6">
           {stuckError && (
@@ -190,17 +236,14 @@ export default async function PaymentsPage({
             </p>
           )}
 
-          {historyPage === "business" && <section aria-labelledby="business-intelligence-title" className="space-y-4">
+          {historyPage === "business" && <section aria-labelledby="monthly-payment-summary-title" className="space-y-4">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <h2 id="business-intelligence-title" className="text-lg font-semibold tracking-tight text-gray-950">Business intelligence</h2>
-                <p className="mt-1 text-sm text-gray-700">Compare collected, expected, unpaid, and overdue payments by branch.</p>
+                <h2 id="monthly-payment-summary-title" className="text-lg font-semibold tracking-tight text-gray-950">Monthly payment summary</h2>
               </div>
-              <MonthPicker month={month} branch={selected.key} filter={filter} view="history" historyPage={historyPage} />
             </div>
             <BranchCards
               branches={monthData.branches}
-              notPaid={trackingStarted ? monthData.notPaid : {}}
             />
           </section>}
 
@@ -208,17 +251,18 @@ export default async function PaymentsPage({
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <h2 id="payment-history-title" className="text-lg font-semibold tracking-tight text-gray-950">Payment history</h2>
-                <p className="mt-1 text-sm text-gray-700">Payment records for {formatMonth(month)}{selected.key === "all" ? " across all branches" : ` at ${selected.name}`}.</p>
               </div>
-              <MonthPicker month={month} branch={selected.key} filter={filter} view="history" historyPage={historyPage} />
             </div>
             <div className="overflow-hidden border-y border-gray-200 bg-white">
               <PaymentRecordsTable
-                rows={branchRows}
-                today={today}
-                reminderSchedule={reminderSchedule}
-                showBranch={selected.key === "all"}
-                emptyText="No payment records for this month."
+                rows={(paidHistoryResult?.data ?? []).filter((row) =>
+                  selected.key === "all" || String(row.branchId) === selected.key,
+                )}
+                emptyText="No successful payments for this month."
+                branches={monthData.branches.map(({ key, name }) => ({ key, name }))}
+                branch={selected.key}
+                month={month}
+                months={historyMonths}
               />
             </div>
           </section>}
@@ -277,7 +321,7 @@ export default async function PaymentsPage({
           className="w-full min-w-0 max-w-full overflow-hidden border-y border-gray-200 bg-white"
         >
           <UnpaidStudentsTable
-            key={`${month}:${selected.key}`}
+            key={`${month}:${selected.key}:${requestedStudentId > 0 ? requestedStudentId : "all"}:${filter}`}
             monthlyStudents={notPaid.students}
             sessionPayments={sessionPayments}
             branches={monthData.branches.map(({ key, name }) => ({ key, name }))}
@@ -288,6 +332,9 @@ export default async function PaymentsPage({
             monthlyFee={monthlyFee}
             perSessionFee={perSessionFee}
             reminderSchedule={reminderSchedule}
+            initialSearch={notificationStudent?.name ?? ""}
+            initialStudentId={requestedStudentId > 0 ? requestedStudentId : null}
+            initialStatusFilter={filter === "overdue" ? "overdue" : filter === "soon" ? "due-soon" : "all"}
           />
         </section>
       </div>

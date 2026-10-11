@@ -7,7 +7,7 @@ export type SystemNotification = {
   id: string
   title: string
   detail: string
-  category: 'Payment' | 'Attendance' | 'Student progress' | 'Schedule'
+  category: 'Payment' | 'Attendance' | 'Schedule'
   status: 'Action needed' | 'Upcoming' | 'Update'
   date: string
   href: string
@@ -17,6 +17,11 @@ type Relation<T> = T | T[] | null
 const one = <T,>(value: Relation<T>): T | null => Array.isArray(value) ? value[0] ?? null : value
 const fullName = (person: { first_name?: string | null; middle_name?: string | null; last_name?: string | null } | null) =>
   [person?.first_name, person?.middle_name, person?.last_name].filter(Boolean).join(' ') || 'Student'
+const displayDate = (value: string) => new Intl.DateTimeFormat('en-PH', {
+  day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Manila',
+}).format(new Date(`${value}T00:00:00+08:00`))
+const displayDateRange = (startsOn: string, endsOn: string) =>
+  startsOn === endsOn ? displayDate(startsOn) : `${displayDate(startsOn)} – ${displayDate(endsOn)}`
 
 export async function loadNotifications(user: { id: number; role: 'head_coach' | 'assistant_coach' }) {
   const admin = createAdminClient()
@@ -24,19 +29,15 @@ export async function loadNotifications(user: { id: number; role: 'head_coach' |
   const notifications: SystemNotification[] = []
 
   if (user.role === 'head_coach') {
-    const [failedResult, overdueResult, sessionsResult, progressResult, absenceResult] = await Promise.all([
+    const [failedResult, overdueResult, sessionsResult, absenceResult] = await Promise.all([
       admin.from('payment_reminder').select('id, created_at, reminder_type')
         .eq('status', 'Failed').order('created_at', { ascending: false }).limit(12),
-      admin.from('payment').select('id, due_date, student:student(first_name, middle_name, last_name)')
+      admin.from('payment').select('id, student_id, due_date, student:student(first_name, middle_name, last_name)')
         .eq('status', 'Unpaid').or('payment_type.eq.Monthly,payment_type.is.null').lt('due_date', today).order('due_date').limit(12),
       admin.from('class_schedule')
-        .select('id, date, time_start, branch:branch!class_schedule_branch_id_fkey(name)')
+        .select('id, date, time_start, branch_id, branch:branch!class_schedule_branch_id_fkey(name)')
         .lt('date', today).neq('status', 'Cancelled').neq('status', 'Draft')
         .order('date', { ascending: false }).order('time_start', { ascending: false }).limit(30),
-      admin.from('student_progress')
-        .select('id, assessed_on, focus_area, coach_id, student:student(first_name, middle_name, last_name), coach:user!student_progress_coach_id_fkey(first_name, middle_name, last_name)')
-        .gte('assessed_on', addDays(today, -14)).neq('coach_id', user.id)
-        .order('assessed_on', { ascending: false }).limit(12),
       admin.from('schedule_absence_report')
         .select('id, starts_on, ends_on, created_at, coach:user!schedule_absence_report_coach_id_fkey(first_name, middle_name, last_name, primary_branch:branch!user_primary_branch_id_fkey(name))')
         .eq('status', 'pending').order('created_at', { ascending: false }).limit(20),
@@ -44,19 +45,18 @@ export async function loadNotifications(user: { id: number; role: 'head_coach' |
     const failedError = failedResult.error?.message
     const overdueError = overdueResult.error?.message
     const sessionsError = sessionsResult.error?.message
-    const progressError = progressResult.error?.message
     const absenceError = absenceResult.error?.message
-    if (failedError || overdueError || sessionsError || progressError || absenceError) {
-      return { notifications: [], error: failedError ?? overdueError ?? sessionsError ?? progressError ?? absenceError }
+    if (failedError || overdueError || sessionsError || absenceError) {
+      return { notifications: [], error: failedError ?? overdueError ?? sessionsError ?? absenceError }
     }
 
     for (const reminder of failedResult.data ?? []) {
       notifications.push({
         id: `failed-reminder-${reminder.id}`,
         title: 'Payment reminder failed',
-        detail: `The ${reminder.reminder_type.toLowerCase()} reminder could not be sent. Review it and retry if appropriate.`,
+        detail: `${reminder.reminder_type} reminder`,
         category: 'Payment', status: 'Action needed', date: reminder.created_at,
-        href: '/payments?view=history&hstatus=Failed',
+        href: `/payments?view=history&historyPage=reminders&hstatus=Failed&hid=${reminder.id}#reminder-${reminder.id}`,
       })
     }
 
@@ -65,9 +65,9 @@ export async function loadNotifications(user: { id: number; role: 'head_coach' |
       notifications.push({
         id: `overdue-payment-${payment.id}`,
         title: 'Monthly payment is overdue',
-        detail: `${fullName(student)} · due ${payment.due_date}. Check payment status or contact the guardian.`,
+        detail: `${fullName(student)} · Due ${displayDate(payment.due_date)}`,
         category: 'Payment', status: 'Action needed', date: `${payment.due_date}T00:00:00+08:00`,
-        href: '/payments?filter=overdue',
+        href: `/payments?month=${payment.due_date.slice(0, 7)}&filter=overdue&studentId=${payment.student_id}`,
       })
     }
 
@@ -83,23 +83,11 @@ export async function loadNotifications(user: { id: number; role: 'head_coach' |
         notifications.push({
           id: `missing-attendance-${session.id}`,
           title: 'Attendance has not been recorded',
-          detail: `${branch?.name ?? 'Branch'} · class on ${session.date}.`,
+          detail: `${branch?.name ?? 'Branch'} · ${displayDate(session.date)}`,
           category: 'Attendance', status: 'Action needed', date: `${session.date}T${session.time_start}+08:00`,
-          href: `/attendance?date=${session.date}`,
+          href: `/attendance?date=${session.date}&branchId=${session.branch_id}&scheduleId=${session.id}`,
         })
       }
-    }
-
-    for (const progress of progressResult.data ?? []) {
-      const student = one(progress.student as Relation<{ first_name: string | null; middle_name: string | null; last_name: string | null }>)
-      const coach = one(progress.coach as Relation<{ first_name: string | null; middle_name: string | null; last_name: string | null }>)
-      notifications.push({
-        id: `progress-${progress.id}`,
-        title: 'Student progress check recorded',
-        detail: `${fullName(student)} · ${progress.focus_area} · recorded by ${fullName(coach)}.`,
-        category: 'Student progress', status: 'Update', date: `${progress.assessed_on}T12:00:00+08:00`,
-        href: '/branches',
-      })
     }
 
     for (const report of absenceResult.data ?? []) {
@@ -113,9 +101,9 @@ export async function loadNotifications(user: { id: number; role: 'head_coach' |
       notifications.push({
         id: `absence-report-${report.id}`,
         title: 'Coach time away needs coverage',
-        detail: `${fullName(coach)}${branch?.name ? ` · ${branch.name}` : ''} · ${report.starts_on === report.ends_on ? report.starts_on : `${report.starts_on}–${report.ends_on}`}.`,
+        detail: `${fullName(coach)}${branch?.name ? ` · ${branch.name}` : ''} · ${displayDateRange(report.starts_on, report.ends_on)}`,
         category: 'Schedule', status: 'Action needed', date: report.created_at,
-        href: '/scheduling',
+        href: `/scheduling?view=week&date=${report.starts_on}#absence-report-${report.id}`,
       })
     }
   } else {
@@ -142,9 +130,9 @@ export async function loadNotifications(user: { id: number; role: 'head_coach' |
       notifications.push({
         id: `assigned-class-${session.id}`,
         title: session.date === today ? 'Assigned class today' : 'Upcoming assigned class',
-        detail: `${branch?.name ?? 'Branch'} · ${session.time_start.slice(0, 5)}–${session.time_end.slice(0, 5)}.`,
+        detail: `${branch?.name ?? 'Branch'} · ${displayDate(session.date)} · ${session.time_start.slice(0, 5)}–${session.time_end.slice(0, 5)}`,
         category: 'Schedule', status: 'Upcoming', date: `${session.date}T${session.time_start}+08:00`,
-        href: '/scheduling',
+        href: `/scheduling?view=week&date=${session.date}#class-session-${session.id}`,
       })
     }
 
@@ -160,9 +148,9 @@ export async function loadNotifications(user: { id: number; role: 'head_coach' |
         notifications.push({
           id: `coach-missing-attendance-${session.id}`,
           title: 'Attendance still needs recording',
-          detail: `${branch?.name ?? 'Branch'} · assigned class on ${session.date}.`,
+          detail: `${branch?.name ?? 'Branch'} · ${displayDate(session.date)}`,
           category: 'Attendance', status: 'Action needed', date: `${session.date}T${session.time_start}+08:00`,
-          href: `/attendance?date=${session.date}`,
+          href: `/attendance?date=${session.date}&scheduleId=${session.id}`,
         })
       }
     }
@@ -171,9 +159,9 @@ export async function loadNotifications(user: { id: number; role: 'head_coach' |
       notifications.push({
         id: `absence-report-status-${report.id}`,
         title: 'Time-away report sent to the Head Coach',
-        detail: report.starts_on === report.ends_on ? report.starts_on : `${report.starts_on}–${report.ends_on}`,
+        detail: displayDateRange(report.starts_on, report.ends_on),
         category: 'Schedule', status: 'Update', date: report.created_at,
-        href: '/scheduling',
+        href: `/scheduling?view=week&date=${report.starts_on}#absence-report-${report.id}`,
       })
     }
   }

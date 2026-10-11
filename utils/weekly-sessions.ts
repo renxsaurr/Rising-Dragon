@@ -23,6 +23,12 @@ type WeeklyTemplate = {
   coach: { first_name?: string | null; middle_name?: string | null; last_name?: string | null; role?: string; primary_branch_id?: number | null } | null
 }
 
+type Relation<T> = T | T[] | null
+
+function firstRelation<T>(value: Relation<T>): T | null {
+  return Array.isArray(value) ? value[0] ?? null : value
+}
+
 type DatedSession = {
   id: number
   date: string
@@ -78,7 +84,17 @@ export async function syncWeeklySessions(startDate: string, endDate: string): Pr
     .eq('is_active', true)
   if (templateError) return { ...result, error: templateError.message }
 
-  const templates = (templateData ?? []) as unknown as WeeklyTemplate[]
+  const templateRows = (templateData ?? []) as unknown as Array<
+    Omit<WeeklyTemplate, 'branch' | 'coach'> & {
+      branch: Relation<NonNullable<WeeklyTemplate['branch']>>
+      coach: Relation<NonNullable<WeeklyTemplate['coach']>>
+    }
+  >
+  const templates: WeeklyTemplate[] = templateRows.map((template) => ({
+    ...template,
+    branch: firstRelation(template.branch),
+    coach: firstRelation(template.coach),
+  }))
   const { data: closureData, error: closureError } = await admin.from('schedule_closure')
     .select('id, branch_id, starts_on, ends_on')
     .eq('is_active', true)
@@ -92,7 +108,25 @@ export async function syncWeeklySessions(startDate: string, endDate: string): Pr
     .lte('date', endDate)
   if (sessionError) return { ...result, error: sessionError.message }
 
-  const sessions = (sessionData ?? []) as DatedSession[]
+  type RawSessionCoach = Omit<NonNullable<DatedSession['coach']>, 'primary_branch'> & {
+    primary_branch: Relation<{ operating_hours?: unknown }>
+  }
+  const sessionRows = (sessionData ?? []) as unknown as Array<
+    Omit<DatedSession, 'branch' | 'coach'> & {
+      branch: Relation<NonNullable<DatedSession['branch']>>
+      coach: Relation<RawSessionCoach>
+    }
+  >
+  const sessions: DatedSession[] = sessionRows.map(({ branch, coach, ...session }) => {
+    const coachRow = firstRelation(coach)
+    return {
+      ...session,
+      branch: firstRelation(branch),
+      coach: coachRow
+        ? { ...coachRow, primary_branch: firstRelation(coachRow.primary_branch) }
+        : null,
+    }
+  })
   const attendedSessionIds = new Set<number>()
   if (sessions.length) {
     const { data: attendanceRows, error: attendanceError } = await admin.from('attendance')
@@ -263,7 +297,13 @@ export async function syncWeeklySessions(startDate: string, endDate: string): Pr
             if (error.code === '23505') continue
             return { ...result, error: error.message }
           }
-          const inserted = { ...payload, id: Number(data.id) }
+          const inserted: DatedSession = {
+            ...payload,
+            id: Number(data.id),
+            absence_report_id: null,
+            branch: template.branch,
+            coach: template.coach ? { ...template.coach, primary_branch: null } : null,
+          }
           sessionsByTemplateDate.set(`${templateId}:${date}`, inserted)
           usedSessions.push(inserted)
           result.created += 1

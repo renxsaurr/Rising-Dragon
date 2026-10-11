@@ -1,5 +1,5 @@
 import DashboardLoading from "@/components/DashboardLoading";
 
 export default function Loading() {
-  return <DashboardLoading title="Promotions" />;
+  return <DashboardLoading title="Promotions" variant="promotions" />;
 }

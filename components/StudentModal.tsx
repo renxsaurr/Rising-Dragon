@@ -4,7 +4,7 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { saveStudent } from "@/app/students/actions";
-import { BELT_LABELS, } from "@/utils/belts";
+import { BELT_LABELS, beltTextColorClass } from "@/utils/belts";
 
 type Branch = {
   id: number;
@@ -242,7 +242,7 @@ export default function StudentModal({
                   </label>
                   {isEditMode ? (
                     <div>
-                      <p className="flex h-11 items-center rounded-lg border border-gray-200 bg-gray-50 px-4 text-[14px] text-gray-800">
+                      <p className={`flex h-11 items-center rounded-lg border border-gray-200 bg-gray-50 px-4 text-[14px] font-medium ${beltTextColorClass(beltLevel)}`}>
                         {BELT_LEVELS.find(([value]) => value === beltLevel)?.[1] ?? beltLevel}
                       </p>
                       <p className="mt-1 text-xs text-gray-500">
@@ -250,36 +250,56 @@ export default function StudentModal({
                       </p>
                     </div>
                   ) : (
-                    <select
-                      value={beltLevel}
-                      onChange={(e) => setBeltLevel(e.target.value)}
-                      required
-                      className="w-full h-11 px-4 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all bg-white"
-                    >
-                      <option value="" disabled>
-                        Select belt
-                      </option>
-                      {BELT_LEVELS.map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
+                    <div className="relative">
+                      <select
+                        value={beltLevel}
+                        onChange={(e) => setBeltLevel(e.target.value)}
+                        required
+                        className={`h-11 w-full appearance-none rounded-lg border border-gray-200 bg-white py-0 pl-4 pr-10 text-[14px] outline-none transition-all focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 ${beltTextColorClass(beltLevel)}`}
+                      >
+                        <option value="" disabled>
+                          Select belt
                         </option>
-                      ))}
-                    </select>
+                        {BELT_LEVELS.map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                      <svg
+                        aria-hidden="true"
+                        viewBox="0 0 20 20"
+                        fill="none"
+                        className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-700"
+                      >
+                        <path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </div>
                   )}
                 </div>
                 <div>
                   <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
                     Billing plan
                   </label>
-                  <select
-                    value={billingPlan}
-                    onChange={(e) => setBillingPlan(e.target.value as "Monthly" | "Per session")}
-                    required
-                    className="w-full h-11 px-4 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all bg-white"
-                  >
-                    <option value="Monthly">Monthly</option>
-                    <option value="Per session">Pay per session</option>
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={billingPlan}
+                      onChange={(e) => setBillingPlan(e.target.value as "Monthly" | "Per session")}
+                      required
+                      className="h-11 w-full appearance-none rounded-lg border border-gray-200 bg-white py-0 pl-4 pr-10 text-[14px] outline-none transition-all focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10"
+                    >
+                      <option value="Monthly">Monthly</option>
+                      <option value="Per session">Pay per session</option>
+                    </select>
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-700"
+                    >
+                      <path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
                 </div>
                 <div>
                   <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
@@ -299,21 +319,31 @@ export default function StudentModal({
                 <label className="text-[13px] font-medium text-gray-700 mb-1.5 block">
                   Branch
                 </label>
-                <select
-                  value={branchId}
-                  onChange={(e) => setBranchId(e.target.value)}
-                  required
-                  className="w-full h-11 px-4 border border-gray-200 rounded-lg text-[14px] outline-none focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10 transition-all bg-white"
-                >
-                  <option value="" disabled>
-                    Select a branch
-                  </option>
-                  {branches.map((branch) => (
-                    <option key={branch.id} value={branch.id}>
-                      {branch.name}
+                <div className="relative">
+                  <select
+                    value={branchId}
+                    onChange={(e) => setBranchId(e.target.value)}
+                    required
+                    className="h-11 w-full appearance-none rounded-lg border border-gray-200 bg-white py-0 pl-4 pr-10 text-[14px] outline-none transition-all focus:border-red-600 focus:ring-[3px] focus:ring-red-600/10"
+                  >
+                    <option value="" disabled>
+                      Select a branch
                     </option>
-                  ))}
-                </select>
+                    {branches.map((branch) => (
+                      <option key={branch.id} value={branch.id}>
+                        {branch.name}
+                      </option>
+                    ))}
+                  </select>
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-700"
+                  >
+                    <path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
               </div>
 
               {error && (

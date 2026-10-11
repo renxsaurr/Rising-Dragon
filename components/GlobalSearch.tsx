@@ -4,12 +4,14 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, X } from 'lucide-react'
 import { searchDirectory } from '@/app/header-actions'
+import { beltTextColorClass, formatBeltLabel } from '@/utils/belts'
 
 type SearchResult = {
   id: number
   type: 'student' | 'staff'
   name: string
   detail: string
+  belt?: string
   href: string
 }
 
@@ -91,15 +93,13 @@ export default function GlobalSearch({ canSearchStaff }: { canSearchStaff: boole
           aria-label={canSearchStaff ? 'Search students and staff' : 'Search students'}
           aria-controls="global-search-results"
           aria-expanded={isOpen}
-          className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-red-400 focus:ring-2 focus:ring-red-500/10 xl:pr-12"
+          className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-red-400 focus:ring-2 focus:ring-red-500/10"
         />
         {query ? (
           <button type="button" aria-label="Clear search" onClick={() => { setQuery(''); inputRef.current?.focus() }} className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-1.5 py-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
             <X className="h-4 w-4" />
           </button>
-        ) : (
-          <kbd className="absolute right-2 top-1/2 hidden -translate-y-1/2 rounded border border-gray-200 bg-gray-50 px-1 py-0.5 text-[9px] text-gray-400 xl:block">Ctrl K</kbd>
-        )}
+        ) : null}
       </div>
 
       {isOpen && query.trim().length < 2 && (
@@ -127,7 +127,9 @@ export default function GlobalSearch({ canSearchStaff }: { canSearchStaff: boole
                       <button key={`${result.type}-${result.id}`} type="button" role="option" aria-selected="false" onClick={() => selectResult(result)} className="flex w-full items-start justify-between gap-4 rounded-lg px-3 py-2.5 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none">
                         <span className="min-w-0">
                           <span className="block truncate text-sm font-medium text-gray-900">{result.name}</span>
-                          <span className="mt-0.5 block truncate text-xs capitalize text-gray-500">{result.detail}</span>
+                          <span className="mt-0.5 block truncate text-xs text-gray-500">
+                            {result.detail}{result.belt && <> · <span className={`font-medium ${beltTextColorClass(result.belt)}`}>{formatBeltLabel(result.belt)}</span></>}
+                          </span>
                         </span>
                         <span className="shrink-0 pt-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-400">{type}</span>
                       </button>

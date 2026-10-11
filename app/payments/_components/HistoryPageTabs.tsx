@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { paymentsHref, type HistoryPage, type HistoryQuery, type PaymentFilterKey } from './payments-url'
 
 const PAGES: { id: HistoryPage; label: string }[] = [
-  { id: 'business', label: 'Business intelligence' },
+  { id: 'business', label: 'Monthly payment summary' },
   { id: 'payments', label: 'Payment history' },
   { id: 'reminders', label: 'Reminder history' },
 ]

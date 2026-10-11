@@ -4,7 +4,7 @@ import { cookies } from 'next/headers'
 import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { getCurrentUser } from '@/utils/getCurrentUser'
-import { addDays, dateInTimeZone } from '@/utils/dates'
+import { addDays, dateInTimeZone, timeInTimeZone } from '@/utils/dates'
 import { fetchAllRows } from '@/utils/fetch-all-rows'
 
 const MAX_RANGE_DAYS = 366
@@ -37,43 +37,54 @@ type RawCounts = {
   newStudents: number
   classes: number
   cancelledClasses: number
-  classesWithAttendance: number
-  incompletePastClasses: number
   unmarkedStudentMarks: number
+  expectedMarks: number
+  recordedDueMarks: number
+  recordedMarks: number
   present: number
+  late: number
   absent: number
-  progressEntries: number
-  assessedStudents: number
-  readyForAssessment: number
+  excused: number
 }
 
 export type BranchCounts = RawCounts & {
   attendanceRate: number | null
-  avgPresentPerClass: number | null
+  recordingCoverage: number | null
 }
 
 export type BranchReportRow = BranchCounts & { branchId: number; branchName: string }
-
-export type ProgressReportCheck = {
-  id: number
-  branchId: number
-  branchName: string
-  studentId: number
-  studentName: string
-  coachName: string
-  assessedOn: string
-  focusArea: string
-  progressLevel: string
-  assessmentReadiness: string
-  observation: string
-  nextSteps: string | null
-}
 
 export type BranchReport = {
   range: { start: string; end: string; requestedEnd: string; endClampedToToday: boolean }
   branches: BranchReportRow[]
   totals: BranchCounts
-  progressChecks: ProgressReportCheck[]
+  sessions: BranchReportSession[]
+}
+
+export type BranchReportSessionMark = {
+  studentId: number
+  studentName: string
+  status: 'Present' | 'Late' | 'Absent' | 'Excused' | null
+}
+
+export type BranchReportSession = {
+  id: number
+  date: string
+  timeStart: string
+  timeEnd: string
+  branchId: number
+  branchName: string
+  coachName: string
+  cancelled: boolean
+  ended: boolean
+  expectedMarks: number | null
+  recordedMarks: number
+  unrecordedMarks: number
+  present: number
+  late: number
+  absent: number
+  excused: number
+  students: BranchReportSessionMark[]
 }
 
 export type BranchReportResult =
@@ -82,9 +93,17 @@ export type BranchReportResult =
 
 const emptyCounts = (): RawCounts => ({
   activeStudents: 0, newStudents: 0, classes: 0, cancelledClasses: 0,
-  classesWithAttendance: 0, incompletePastClasses: 0, unmarkedStudentMarks: 0,
-  present: 0, absent: 0, progressEntries: 0, assessedStudents: 0, readyForAssessment: 0,
+  unmarkedStudentMarks: 0,
+  expectedMarks: 0, recordedDueMarks: 0, recordedMarks: 0,
+  present: 0, late: 0, absent: 0, excused: 0,
 })
+
+function firstRelation<T>(value: T | T[] | null) {
+  return Array.isArray(value) ? value[0] ?? null : value
+}
+
+const studentName = (student: { first_name: string | null; middle_name: string | null; last_name: string | null }) =>
+  [student.first_name, student.middle_name, student.last_name].filter(Boolean).join(' ') || 'Student'
 
 // real calendar dates only — rejects 2026-02-30, 2026-13-01, etc.
 function isIsoDate(value: string) {
@@ -109,20 +128,21 @@ export function previousRange(start: string, end: string) {
 }
 
 function finishCounts(counts: RawCounts): BranchCounts {
-  const marked = counts.present + counts.absent
+  const marked = counts.present + counts.late + counts.absent
   return {
     ...counts,
     // null instead of 0% when nobody has been marked yet
-    attendanceRate: marked ? counts.present / marked : null,
-    avgPresentPerClass: counts.classesWithAttendance ? counts.present / counts.classesWithAttendance : null,
+    attendanceRate: marked ? (counts.present + counts.late) / marked : null,
+    recordingCoverage: counts.expectedMarks ? counts.recordedDueMarks / counts.expectedMarks : null,
   }
 }
 
 /** Per-branch activity for a date range. Callers must do the head coach check first. */
-export async function getBranchReport({ start, end, branchIds }: {
+export async function getBranchReport({ start, end, branchIds, includeSessions = false }: {
   start: string
   end: string
   branchIds?: number[]
+  includeSessions?: boolean
 }): Promise<BranchReportResult> {
   if (!isIsoDate(start) || !isIsoDate(end)) return { data: null, error: 'Dates must be in YYYY-MM-DD format.' }
   if (start > end) return { data: null, error: 'The start date must be on or before the end date.' }
@@ -133,6 +153,7 @@ export async function getBranchReport({ start, end, branchIds }: {
   if (!currentUser || currentUser.role !== 'head_coach') return { data: null, error: 'Only the Head Coach can view branch reports.' }
 
   const today = dateInTimeZone()
+  const currentTime = timeInTimeZone()
   // classes after today haven't happened yet, so the report stops at today
   const effectiveEnd = end > today ? today : end
   if (start > effectiveEnd) return { data: null, error: 'The report range starts after today.' }
@@ -143,7 +164,7 @@ export async function getBranchReport({ start, end, branchIds }: {
   const filterIds = branchIds?.length ? branchIds : null
 
   try {
-    const [branchRows, activeRows, newRows, scheduleRows, attendanceRows, progressRows] = await Promise.all([
+    const [branchRows, activeRows, newRows, scheduleRows, attendanceRows] = await Promise.all([
       (async () => {
         let query = supabase.from('branch').select('id, name').order('name')
         if (filterIds) query = query.in('id', filterIds)
@@ -152,8 +173,8 @@ export async function getBranchReport({ start, end, branchIds }: {
         return (data ?? []) as { id: number; name: string }[]
       })(),
       // today's snapshot, not range-based. admin: billing_plan isn't granted to logged-in users (Head Coach checked above)
-      fetchAllRows<{ id: number; branch_id: number; enrollment_date: string; billing_plan: string | null }>((from, to) => {
-        let query = admin.from('student').select('id, branch_id, enrollment_date, billing_plan').eq('is_active', true)
+      fetchAllRows<{ id: number; branch_id: number; enrollment_date: string; billing_plan: string | null; first_name: string | null; middle_name: string | null; last_name: string | null }>((from, to) => {
+        let query = admin.from('student').select('id, branch_id, enrollment_date, billing_plan, first_name, middle_name, last_name').eq('is_active', true)
         if (filterIds) query = query.in('branch_id', filterIds)
         return query.order('id').range(from, to)
       }),
@@ -164,53 +185,29 @@ export async function getBranchReport({ start, end, branchIds }: {
         return query.order('id').range(from, to)
       }),
       // Cancelled is kept here so it can be counted separately; Draft never counts
-      fetchAllRows<{ id: number; date: string; branch_id: number; status: string }>((from, to) => {
-        let query = supabase.from('class_schedule').select('id, date, branch_id, status')
+      fetchAllRows<{ id: number; date: string; time_start: string; time_end: string; branch_id: number; status: string; coach: { first_name: string | null; middle_name: string | null; last_name: string | null } | { first_name: string | null; middle_name: string | null; last_name: string | null }[] | null }>((from, to) => {
+        let query = supabase.from('class_schedule').select('id, date, time_start, time_end, branch_id, status, coach:user!class_schedule_coach_id_fkey(first_name, middle_name, last_name)')
           .gte('date', start).lte('date', effectiveEnd).neq('status', 'Draft')
         if (filterIds) query = query.in('branch_id', filterIds)
         return query.order('id').range(from, to)
       }),
       // by date range instead of a huge .in() list; matched to counted classes below
       fetchAllRows<{ schedule_id: number; student_id: number; status: string }>((from, to) =>
-        supabase.from('attendance').select('schedule_id, student_id, status')
+        admin.from('attendance').select('schedule_id, student_id, status')
           .gte('date', start).lte('date', effectiveEnd)
           .order('schedule_id').order('student_id').range(from, to)),
-      fetchAllRows<{ branch_id: number; student_id: number; assessed_on: string; id: number; coach_id: number; assessment_readiness: string; focus_area: string; progress_level: string; observation: string; next_steps: string | null }>((from, to) => {
-        let query = admin.from('student_progress')
-          .select('branch_id, student_id, assessed_on, id, coach_id, assessment_readiness, focus_area, progress_level, observation, next_steps')
-          .gte('assessed_on', start).lte('assessed_on', effectiveEnd)
-        if (filterIds) query = query.in('branch_id', filterIds)
-        return query.order('branch_id').order('assessed_on').order('id').range(from, to)
-      }),
     ])
-
-    const progressStudentIds = [...new Set(progressRows.map((row) => Number(row.student_id)))]
-    const progressCoachIds = [...new Set(progressRows.map((row) => Number(row.coach_id)))]
-    const [progressStudents, progressCoaches] = await Promise.all([
-      progressStudentIds.length
-        ? admin.from('student').select('id, first_name, middle_name, last_name').in('id', progressStudentIds)
-        : Promise.resolve({ data: [], error: null }),
-      progressCoachIds.length
-        ? admin.from('user').select('id, first_name, middle_name, last_name').in('id', progressCoachIds)
-        : Promise.resolve({ data: [], error: null }),
-    ])
-    if (progressStudents.error) throw new Error(progressStudents.error.message)
-    if (progressCoaches.error) throw new Error(progressCoaches.error.message)
-    const displayName = (person: { first_name: string; middle_name: string | null; last_name: string }) =>
-      [person.first_name, person.middle_name, person.last_name].filter(Boolean).join(' ')
-    const studentNameById = new Map((progressStudents.data ?? []).map((row) => [Number(row.id), displayName(row)]))
-    const coachNameById = new Map((progressCoaches.data ?? []).map((row) => [Number(row.id), displayName(row)]))
 
     const countsByBranch = new Map<number, RawCounts>(branchRows.map((branch) => [Number(branch.id), emptyCounts()]))
 
-    const activeRosterByBranch = new Map<number, { id: number; enrollmentDate: string }[]>()
+    const activeRosterByBranch = new Map<number, { id: number; enrollmentDate: string; name: string }[]>()
     for (const row of activeRows) {
       const counts = countsByBranch.get(Number(row.branch_id))
       if (counts) counts.activeStudents += 1
       if (row.billing_plan !== 'Per session') {
         activeRosterByBranch.set(Number(row.branch_id), [
           ...(activeRosterByBranch.get(Number(row.branch_id)) ?? []),
-          { id: Number(row.id), enrollmentDate: row.enrollment_date },
+          { id: Number(row.id), enrollmentDate: row.enrollment_date, name: studentName(row) },
         ])
       }
     }
@@ -220,106 +217,137 @@ export async function getBranchReport({ start, end, branchIds }: {
     }
 
     // counted (not Cancelled / Draft) classes, keyed by id, so attendance can find its branch
-    const countedClasses = new Map<number, { branchId: number; date: string }>()
+    const branchNames = new Map(branchRows.map((branch) => [Number(branch.id), branch.name]))
+    const countedClasses = new Map<number, {
+      branchId: number
+      date: string
+      ended: boolean
+    }>()
+    const sessions: BranchReportSession[] = []
     for (const schedule of scheduleRows) {
       const counts = countsByBranch.get(Number(schedule.branch_id))
       if (!counts) continue
+      const coach = firstRelation(schedule.coach)
+      const cancelled = schedule.status === 'Cancelled'
+      const ended = schedule.date < today || (schedule.date === today && schedule.time_end <= currentTime)
+      const session: BranchReportSession = {
+        id: Number(schedule.id),
+        date: schedule.date,
+        timeStart: schedule.time_start,
+        timeEnd: schedule.time_end,
+        branchId: Number(schedule.branch_id),
+        branchName: branchNames.get(Number(schedule.branch_id)) ?? 'Branch',
+        coachName: coach ? studentName(coach) : 'Unassigned',
+        cancelled,
+        ended,
+        expectedMarks: null,
+        recordedMarks: 0,
+        unrecordedMarks: 0,
+        present: 0,
+        late: 0,
+        absent: 0,
+        excused: 0,
+        students: [],
+      }
+      sessions.push(session)
       if (schedule.status === 'Cancelled') {
         counts.cancelledClasses += 1
       } else {
         counts.classes += 1
-        countedClasses.set(Number(schedule.id), { branchId: Number(schedule.branch_id), date: schedule.date })
+        countedClasses.set(Number(schedule.id), {
+          branchId: Number(schedule.branch_id),
+          date: schedule.date,
+          ended,
+        })
       }
     }
 
-    // only real attendance rows count — students with no record are left out entirely
-    const markedStudentIdsByClass = new Map<number, Set<number>>()
+    const sessionById = new Map(sessions.map((session) => [session.id, session]))
+    // Only actual saved statuses count. An absent attendance row is never treated as an Absent status.
+    const markedByClass = new Map<number, Map<number, 'Present' | 'Late' | 'Absent' | 'Excused'>>()
     for (const row of attendanceRows) {
       const scheduleId = Number(row.schedule_id)
       const schedule = countedClasses.get(scheduleId)
       if (!schedule) continue // cancelled, draft, or a branch outside the filter
       const counts = countsByBranch.get(schedule.branchId)!
       if (row.status === 'Present') counts.present += 1
+      else if (row.status === 'Late') counts.late += 1
       else if (row.status === 'Absent') counts.absent += 1
+      else if (row.status === 'Excused') counts.excused += 1
       else continue
-      markedStudentIdsByClass.set(scheduleId, new Set([
-        ...(markedStudentIdsByClass.get(scheduleId) ?? []), Number(row.student_id),
-      ]))
+      counts.recordedMarks += 1
+      const session = sessionById.get(scheduleId)
+      if (session) {
+        session.recordedMarks += 1
+        if (row.status === 'Present') session.present += 1
+        else if (row.status === 'Late') session.late += 1
+        else if (row.status === 'Absent') session.absent += 1
+        else session.excused += 1
+      }
+      const classMarks = markedByClass.get(scheduleId) ?? new Map()
+      classMarks.set(Number(row.student_id), row.status as 'Present' | 'Late' | 'Absent' | 'Excused')
+      markedByClass.set(scheduleId, classMarks)
+    }
+
+    const studentNamesById = new Map<number, string>(activeRows.map((student) => [Number(student.id), studentName(student)]))
+    const markedStudentIds = [...new Set([...markedByClass.values()].flatMap((marks) => [...marks.keys()]))]
+    const unknownNameIds = markedStudentIds.filter((studentId) => !studentNamesById.has(studentId))
+    for (let offset = 0; offset < unknownNameIds.length; offset += 500) {
+      const batch = unknownNameIds.slice(offset, offset + 500)
+      const { data, error } = await admin.from('student')
+        .select('id, first_name, middle_name, last_name')
+        .in('id', batch)
+      if (error) throw new Error(error.message)
+      for (const row of data ?? []) studentNamesById.set(Number(row.id), studentName(row))
     }
 
     for (const [scheduleId, schedule] of countedClasses) {
       const counts = countsByBranch.get(schedule.branchId)!
-      const markedIds = markedStudentIdsByClass.get(scheduleId) ?? new Set<number>()
-      if (markedIds.size) counts.classesWithAttendance += 1
-      if (schedule.date < today) {
-        const expectedIds = new Set(
-          (activeRosterByBranch.get(schedule.branchId) ?? [])
-            .filter((student) => student.enrollmentDate <= schedule.date)
-            .map((student) => student.id),
-        )
-        // Existing marks are evidence for students who are now inactive or
-        // whose current branch differs from the branch where class occurred.
-        for (const studentId of markedIds) expectedIds.add(studentId)
-        const missing = Math.max(expectedIds.size - markedIds.size, 0)
+      const marksByStudent = markedByClass.get(scheduleId) ?? new Map()
+      const markedIds = new Set(marksByStudent.keys())
+      const session = sessionById.get(scheduleId)
+
+      const expectedStudents = (activeRosterByBranch.get(schedule.branchId) ?? [])
+        .filter((student) => student.enrollmentDate <= schedule.date)
+      const expectedById = new Map(expectedStudents.map((student) => [student.id, student.name]))
+      // A per-session student is expected only when a check-in exists; a missing check-in is not an absence.
+      for (const studentId of markedIds) {
+        if (!expectedById.has(studentId)) expectedById.set(studentId, '')
+      }
+
+      if (schedule.ended) {
+        const expectedCount = expectedById.size
+        const recordedCount = [...expectedById.keys()].filter((studentId) => marksByStudent.has(studentId)).length
+        const missing = Math.max(expectedCount - recordedCount, 0)
+        counts.expectedMarks += expectedCount
+        counts.recordedDueMarks += recordedCount
         if (missing) {
-          counts.incompletePastClasses += 1
           counts.unmarkedStudentMarks += missing
         }
+        if (session) {
+          session.expectedMarks = expectedCount
+          session.unrecordedMarks = missing
+        }
+      }
+
+      if (includeSessions && session) {
+        const studentsToDisplay = new Set(expectedById.keys())
+        for (const studentId of markedIds) studentsToDisplay.add(studentId)
+        session.students = [...studentsToDisplay]
+          .map((studentId) => ({
+            studentId,
+            studentName: expectedById.get(studentId) || studentNamesById.get(studentId) || 'Student',
+            status: marksByStudent.get(studentId) ?? null,
+          }))
+          .sort((a, b) => a.studentName.localeCompare(b.studentName))
       }
     }
 
-    // Use the latest assessment per student in this range for readiness totals;
-    // repeated checks do not inflate the number of students.
-    const latestProgress = new Map<string, { branchId: number; studentId: number; assessedOn: string; id: number; readiness: string }>()
-    for (const row of progressRows) {
-      const branchId = Number(row.branch_id)
-      const studentId = Number(row.student_id)
-      const counts = countsByBranch.get(branchId)
-      if (!counts) continue
-      counts.progressEntries += 1
-      const key = `${branchId}:${studentId}`
-      const prior = latestProgress.get(key)
-      if (!prior || row.assessed_on > prior.assessedOn || (row.assessed_on === prior.assessedOn && Number(row.id) > prior.id)) {
-        latestProgress.set(key, { branchId, studentId, assessedOn: row.assessed_on, id: Number(row.id), readiness: row.assessment_readiness })
-      }
-    }
-    for (const assessment of latestProgress.values()) {
-      const counts = countsByBranch.get(assessment.branchId)!
-      counts.assessedStudents += 1
-      if (assessment.readiness === 'ready_for_assessment') counts.readyForAssessment += 1
-    }
-    const latestByStudent = new Map<number, { assessedOn: string; id: number; readiness: string }>()
-    for (const assessment of latestProgress.values()) {
-      const prior = latestByStudent.get(assessment.studentId)
-      if (!prior || assessment.assessedOn > prior.assessedOn || (assessment.assessedOn === prior.assessedOn && assessment.id > prior.id)) {
-        latestByStudent.set(assessment.studentId, assessment)
-      }
-    }
-
-    const branchNameById = new Map(branchRows.map((branch) => [Number(branch.id), branch.name]))
-    const recentProgressChecks = [...progressRows]
-      .sort((a, b) => b.assessed_on.localeCompare(a.assessed_on) || Number(b.id) - Number(a.id))
-      .reduce<ProgressReportCheck[]>((checks, row) => {
-        const branchId = Number(row.branch_id)
-        if (checks.filter((check) => check.branchId === branchId).length >= 5) return checks
-        checks.push({
-          id: Number(row.id), branchId, branchName: branchNameById.get(branchId) ?? 'Branch',
-          studentId: Number(row.student_id), studentName: studentNameById.get(Number(row.student_id)) ?? 'Student',
-          coachName: coachNameById.get(Number(row.coach_id)) ?? 'Coach', assessedOn: row.assessed_on,
-          focusArea: row.focus_area, progressLevel: row.progress_level,
-          assessmentReadiness: row.assessment_readiness, observation: row.observation, nextSteps: row.next_steps,
-        })
-        return checks
-      }, [])
-
-    // "All branches": add up the raw counts, then work out rate / average from the sums
+    // "All branches": add up raw counts, then derive rates from those combined totals
     const totals = emptyCounts()
     for (const counts of countsByBranch.values()) {
       for (const key of Object.keys(totals) as (keyof RawCounts)[]) totals[key] += counts[key]
     }
-    totals.assessedStudents = latestByStudent.size
-    totals.readyForAssessment = [...latestByStudent.values()].filter((assessment) => assessment.readiness === 'ready_for_assessment').length
-
     return {
       data: {
         range: { start, end: effectiveEnd, requestedEnd: end, endClampedToToday: effectiveEnd !== end },
@@ -329,7 +357,7 @@ export async function getBranchReport({ start, end, branchIds }: {
           ...finishCounts(countsByBranch.get(Number(branch.id))!),
         })),
         totals: finishCounts(totals),
-        progressChecks: recentProgressChecks,
+        sessions: includeSessions ? sessions.sort((a, b) => b.date.localeCompare(a.date) || b.timeStart.localeCompare(a.timeStart)) : [],
       },
       error: null,
     }
@@ -348,7 +376,7 @@ export async function getBranchReportWithComparison({ start, end, branchIds }: {
 }): Promise<{ current: BranchReportResult; comparison: ReportComparison | null }> {
   const range = previousRange(start, end)
   const [current, previous] = await Promise.all([
-    getBranchReport({ start, end, branchIds }),
+    getBranchReport({ start, end, branchIds, includeSessions: true }),
     range ? getBranchReport({ ...range, branchIds }) : null,
   ])
   return {

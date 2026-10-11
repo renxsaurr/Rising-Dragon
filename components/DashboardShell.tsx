@@ -1,11 +1,12 @@
 "use client";
 
-import { MouseEvent, ReactNode, useEffect, useState } from "react";
+import { MouseEvent, ReactNode, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import GlobalSearch from "@/components/GlobalSearch";
+import NotificationsMenu from "@/components/NotificationsMenu";
 
 const GridIcon = () => (
   <svg
@@ -105,21 +106,6 @@ const AwardIcon = () => (
     />
   </svg>
 );
-const BellIcon = () => (
-  <svg
-    className="w-5 h-5"
-    fill="none"
-    viewBox="0 0 24 24"
-    stroke="currentColor"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={1.75}
-      d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-    />
-  </svg>
-);
 const SettingsIcon = () => (
   <svg
     className="w-5 h-5"
@@ -175,13 +161,7 @@ type CurrentUser = {
   primary_branch_id: number | null;
 } | null;
 
-// Last known user, so loading screens can render the same sidebar while the next page is fetched.
-let lastKnownUser: CurrentUser = null;
 let sidebarOpenMemory = true;
-
-export function getLastKnownUser() {
-  return lastKnownUser;
-}
 
 export default function DashboardShell({
   title,
@@ -192,10 +172,6 @@ export default function DashboardShell({
   currentUser: CurrentUser;
   children: ReactNode;
 }) {
-  useEffect(() => {
-    if (currentUser) lastKnownUser = currentUser;
-  }, [currentUser]);
-
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
@@ -252,13 +228,6 @@ export default function DashboardShell({
 
   const systemItems = [
     {
-      label: "Notifications",
-      href: "/notifications",
-      icon: BellIcon,
-      show: true,
-      soon: false,
-    },
-    {
       label: "Settings",
       href: "/settings",
       icon: SettingsIcon,
@@ -275,7 +244,6 @@ export default function DashboardShell({
   ];
 
   const handleLogout = async () => {
-    lastKnownUser = null;
     await supabase.auth.signOut();
     router.push("/login");
   };
@@ -426,10 +394,10 @@ export default function DashboardShell({
             <>
               {sectionLabel("Report")}
               {reportItems.filter((item) => item.show).map(renderItem)}
-              {sectionLabel("System")}
-              {systemItems.filter((item) => item.show).map(renderItem)}
             </>
           )}
+          {sectionLabel("System")}
+          {systemItems.filter((item) => item.show).map(renderItem)}
         </nav>
 
         <div className="p-4">
@@ -455,6 +423,7 @@ export default function DashboardShell({
           {currentUser && (
             <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
               <GlobalSearch canSearchStaff={isHeadCoach} />
+              <NotificationsMenu userId={currentUser.id} />
               <div className="hidden min-w-0 max-w-56 flex-col border-l border-gray-200 pl-3 leading-tight md:flex">
                 <span className="block whitespace-normal break-words text-[13px] font-semibold capitalize text-gray-900">
                   {currentUser.name}

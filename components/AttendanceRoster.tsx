@@ -5,11 +5,17 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { addPerSessionWalkIn, saveAttendance } from '@/app/attendance/actions'
 import { Toast } from '@/components/Toast'
-import { formatBeltLabel } from '@/utils/belts'
+import { beltTextColorClass, formatBeltLabel } from '@/utils/belts'
 
 type Student = { id: number; first_name: string; middle_name: string | null; last_name: string; belt_level: string; billing_plan: 'Monthly' | 'Per session' }
-type Status = 'Present' | 'Absent'
-type Filter = 'all' | 'unmarked' | 'Present' | 'Absent'
+type Status = 'Present' | 'Late' | 'Absent' | 'Excused'
+type Filter = 'all' | 'unmarked' | Status
+const STATUSES: { value: Status; icon: string; selected: string }[] = [
+  { value: 'Present', icon: '✓', selected: 'bg-emerald-200 text-emerald-950' },
+  { value: 'Late', icon: '◷', selected: 'bg-amber-200 text-amber-950' },
+  { value: 'Absent', icon: '×', selected: 'bg-red-200 text-red-950' },
+  { value: 'Excused', icon: '—', selected: 'bg-slate-200 text-slate-950' },
+]
 
 function toStatusMap(rows: { student_id: number; status: Status }[]) {
   const map: Record<number, Status> = {}
@@ -44,13 +50,12 @@ export default function AttendanceRoster({
   const dismissToast = useCallback(() => setToast(''), [])
 
   const totals = useMemo(() => {
-    let present = 0
-    let absent = 0
+    const counts: Record<Status, number> = { Present: 0, Late: 0, Absent: 0, Excused: 0 }
     for (const student of students) {
-      if (statuses[student.id] === 'Present') present += 1
-      if (statuses[student.id] === 'Absent') absent += 1
+      const status = statuses[student.id]
+      if (status) counts[status] += 1
     }
-    return { present, absent, unmarked: students.length - present - absent }
+    return { ...counts, unmarked: students.length - Object.values(counts).reduce((sum, count) => sum + count, 0) }
   }, [statuses, students])
 
   const changedIds = students.filter((student) => statuses[student.id] && statuses[student.id] !== saved[student.id]).map((student) => student.id)
@@ -66,21 +71,12 @@ export default function AttendanceRoster({
 
   const visibleStudents = students.filter((student) => {
     if (filter === 'unmarked') return !statuses[student.id]
-    if (filter === 'Present' || filter === 'Absent') return statuses[student.id] === filter
+    if (filter !== 'all') return statuses[student.id] === filter
     return true
   })
 
   const mark = (studentId: number, status: Status) => {
     setStatuses((current) => ({ ...current, [studentId]: status }))
-    setError('')
-  }
-
-  const markRemainingPresent = () => {
-    setStatuses((current) => {
-      const next = { ...current }
-      for (const student of students) if (student.billing_plan !== 'Per session' && !next[student.id]) next[student.id] = 'Present'
-      return next
-    })
     setError('')
   }
 
@@ -125,42 +121,53 @@ export default function AttendanceRoster({
           <div>
             <h2 className="text-base font-semibold text-gray-950">{classLabel}</h2>
           </div>
-          {canMarkAttendance && students.some((student) => student.billing_plan !== 'Per session') && totals.unmarked > 0 && (
-            <button onClick={markRemainingPresent} className="text-xs font-semibold text-gray-700 underline decoration-gray-300 underline-offset-4 hover:text-black">
-              Mark remaining present
-            </button>
-          )}
         </div>
 
-        {canMarkAttendance && availableWalkIns.length > 0 && (
-          <div className="mt-3 flex flex-wrap items-end gap-2 rounded-lg border border-gray-200 bg-white p-3">
-            <div className="min-w-[220px] flex-1">
-              <label htmlFor="attendance-walk-in" className="mb-1 block text-xs font-medium text-gray-700">Check in a pay-per-session student</label>
-              <select id="attendance-walk-in" value={walkInId} onChange={(event) => setWalkInId(event.target.value)} disabled={addingWalkIn || saving} className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-950 outline-none focus:border-gray-500">
-                <option value="">Choose student</option>
-                {availableWalkIns.map((student) => <option key={student.id} value={student.id}>{student.name} · {formatBeltLabel(student.belt)}</option>)}
-              </select>
+        {availableWalkIns.length > 0 && (
+          <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50/60 p-4 sm:p-5">
+            <div className="mb-3">
+              <h3 className="text-sm font-semibold text-gray-950">Walk-in check-in</h3>
+              <p className="mt-1 text-xs text-gray-600">Add a per-session student to this class.</p>
             </div>
-            <button type="button" onClick={addWalkIn} disabled={!walkInId || addingWalkIn || saving} className="h-10 rounded-lg bg-black px-4 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50">
-              {addingWalkIn ? 'Checking in…' : 'Check in walk-in'}
-            </button>
+            <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+              <div className="min-w-0">
+                <label htmlFor="attendance-walk-in" className="mb-1 block text-xs font-medium text-gray-700">Student</label>
+                <div className="relative">
+                  <select id="attendance-walk-in" value={walkInId} onChange={(event) => setWalkInId(event.target.value)} disabled={!canMarkAttendance || addingWalkIn || saving} className="h-10 w-full appearance-none rounded-lg border border-gray-200 bg-white pl-3 pr-10 text-sm text-gray-950 outline-none focus:border-gray-500 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500">
+                    <option value="">Choose student</option>
+                    {availableWalkIns.map((student) => <option key={student.id} value={student.id}>{student.name} · {formatBeltLabel(student.belt)}</option>)}
+                  </select>
+                  <svg className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-600" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                </div>
+              </div>
+              <button type="button" onClick={addWalkIn} disabled={!canMarkAttendance || !walkInId || addingWalkIn || saving} className="h-10 w-full rounded-lg bg-black px-4 text-sm font-semibold text-white transition-colors hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-600 sm:w-auto">
+                {addingWalkIn ? 'Checking in…' : 'Check in walk-in'}
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-gray-600" role="status">
+              {!canMarkAttendance ? 'Check-in opens when the scheduled class starts.' : 'The student’s per-session charge will be added to Payments.'}
+            </p>
           </div>
         )}
 
         {students.length > 0 && (
           <div className="mt-4 flex justify-end">
             <label className="sr-only" htmlFor="attendance-filter">Filter students</label>
-            <select
-              id="attendance-filter"
-              value={filter}
-              onChange={(event) => setFilter(event.target.value as Filter)}
-              className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-gray-400"
-            >
-              <option value="all">All students ({students.length})</option>
-              <option value="unmarked">Not marked ({totals.unmarked})</option>
-              <option value="Present">Present ({totals.present})</option>
-              <option value="Absent">Absent ({totals.absent})</option>
-            </select>
+            <div className="relative">
+              <select
+                id="attendance-filter"
+                value={filter}
+                onChange={(event) => setFilter(event.target.value as Filter)}
+                className="h-9 appearance-none rounded-lg border border-gray-200 bg-white py-0 pl-3 pr-10 text-sm text-gray-950 outline-none focus:border-gray-400"
+              >
+                <option value="all">All students ({students.length})</option>
+                <option value="unmarked">Not marked ({totals.unmarked})</option>
+                {STATUSES.map(({ value }) => <option key={value} value={value}>{value} ({totals[value]})</option>)}
+              </select>
+              <svg className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-900" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
           </div>
         )}
       </div>
@@ -174,52 +181,57 @@ export default function AttendanceRoster({
       ) : visibleStudents.length === 0 ? (
         <p className="px-5 py-12 text-center text-sm text-gray-500">No students match this filter.</p>
       ) : (
-        <ul className="max-h-[448px] min-w-0 divide-y divide-gray-100 overflow-x-hidden overflow-y-auto overscroll-contain bg-white">
-          {visibleStudents.map((student) => {
-            const fullName = [student.first_name, student.middle_name, student.last_name].filter(Boolean).join(' ')
-            const status = statuses[student.id]
-            const changed = status && status !== saved[student.id]
-            return (
-              <li key={student.id} className="flex min-h-16 min-w-0 items-center justify-between gap-3 bg-white px-5 py-3 transition-colors">
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="min-w-0">
-                    <Link
-                      href={`/attendance/history?studentId=${student.id}`}
-                      onClick={(event) => {
-                        if (dirty && !window.confirm('Attendance changes are unsaved. Leave this class without saving?')) {
-                          event.preventDefault()
-                        }
-                      }}
-                      className="block break-words text-sm font-medium text-gray-900 hover:underline"
-                    >
-                      {fullName}
-                      {changed && <span className="ml-2 align-middle text-[10px] font-semibold uppercase tracking-wide text-red-600">Unsaved</span>}
-                    </Link>
-                    <p className="mt-0.5 text-xs text-gray-500">{formatBeltLabel(student.belt_level)}{student.billing_plan === 'Per session' ? ' · Pay per session' : ''}</p>
-                  </div>
-                </div>
-                <div className="flex shrink-0 gap-1.5" role="group" aria-label={`Attendance for ${fullName}`}>
-                  <button
-                    onClick={() => mark(student.id, 'Present')}
-                    disabled={!canMarkAttendance || student.billing_plan === 'Per session'}
-                    aria-pressed={status === 'Present'}
-                    className={`h-9 rounded-lg px-3.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${status === 'Present' ? 'bg-black text-white' : 'border border-gray-200 text-black hover:border-gray-400 hover:bg-gray-50'}`}
-                  >
-                    ✓ Present
-                  </button>
-                  <button
-                    onClick={() => mark(student.id, 'Absent')}
-                    disabled={!canMarkAttendance || student.billing_plan === 'Per session'}
-                    aria-pressed={status === 'Absent'}
-                    className={`h-9 rounded-lg px-3.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${status === 'Absent' ? 'bg-red-600 text-white' : 'border border-gray-200 text-gray-600 hover:border-red-300 hover:bg-red-50 hover:text-red-700'}`}
-                  >
-                    ✕ Absent
-                  </button>
-                </div>
-              </li>
-            )
-          })}
-        </ul>
+        <div className="max-h-[448px] overflow-auto overscroll-contain">
+          <div className="min-w-[720px]">
+            <div className="grid grid-cols-[minmax(240px,1fr)_repeat(4,minmax(112px,128px))] border-b border-gray-200 bg-white text-center">
+              <div className="px-5 py-3 text-left text-xs font-semibold text-gray-700">Student</div>
+              {STATUSES.map(({ value }) => <div key={value} className="border-l border-gray-200 px-2 py-3 text-xs font-semibold text-gray-700">{value}</div>)}
+            </div>
+            <ul className="divide-y divide-gray-200 bg-white">
+              {visibleStudents.map((student) => {
+                const fullName = [student.first_name, student.middle_name, student.last_name].filter(Boolean).join(' ')
+                const status = statuses[student.id]
+                const changed = status && status !== saved[student.id]
+                return (
+                  <li key={student.id} className="grid min-h-[68px] grid-cols-[minmax(240px,1fr)_repeat(4,minmax(112px,128px))]">
+                    <div className="flex min-w-0 flex-col justify-center px-5 py-3">
+                      <Link
+                        href={`/attendance/history?studentId=${student.id}`}
+                        onClick={(event) => {
+                          if (dirty && !window.confirm('Attendance changes are unsaved. Leave this class without saving?')) {
+                            event.preventDefault()
+                          }
+                        }}
+                        className="break-words text-sm font-medium text-gray-900 hover:underline"
+                      >
+                        {fullName}
+                        {changed && <span className="ml-2 align-middle text-[10px] font-semibold uppercase tracking-wide text-red-600">Unsaved</span>}
+                      </Link>
+                      <p className="mt-0.5 text-xs text-gray-600"><span className={`font-medium ${beltTextColorClass(student.belt_level)}`}>{formatBeltLabel(student.belt_level)}</span> · {student.billing_plan === 'Per session' ? 'Per session' : 'Monthly'}</p>
+                    </div>
+                    {STATUSES.map(({ value, icon, selected }) => {
+                      const active = status === value
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => mark(student.id, value)}
+                          disabled={!canMarkAttendance || student.billing_plan === 'Per session'}
+                          aria-label={`${active ? 'Selected: ' : 'Mark as '}${value} for ${fullName}`}
+                          aria-pressed={active}
+                          className={`group flex min-h-[68px] flex-col items-center justify-center gap-1 border-l border-gray-200 text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${active ? selected : 'text-gray-400 hover:bg-gray-50 hover:text-gray-700'}`}
+                        >
+                          <span className={`text-base leading-none ${active ? '' : 'opacity-0 group-hover:opacity-60'}`} aria-hidden="true">{icon}</span>
+                          <span className={active ? 'font-medium' : 'sr-only'}>{value}</span>
+                        </button>
+                      )
+                    })}
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        </div>
       )}
 
       {canMarkAttendance && students.length > 0 && (

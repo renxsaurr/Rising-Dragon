@@ -14,6 +14,54 @@
   }
 }
 
+@layer base {
+  :where(
+    button:not(:disabled),
+    a[href]:not([aria-disabled="true"]),
+    select:not(:disabled),
+    input[type="checkbox"]:not(:disabled),
+    input[type="radio"]:not(:disabled),
+    input[type="date"]:not(:disabled),
+    input[type="time"]:not(:disabled),
+    input[type="datetime-local"]:not(:disabled),
+    input[type="month"]:not(:disabled),
+    input[type="week"]:not(:disabled),
+    input[type="color"]:not(:disabled),
+    summary,
+    [role="button"]:not([aria-disabled="true"]),
+    [role="option"]:not([aria-disabled="true"]),
+    [role="menuitem"]:not([aria-disabled="true"]),
+    [role="tab"]:not([aria-disabled="true"]),
+    [role="combobox"]:not([aria-disabled="true"]),
+    label:has(select:not(:disabled)),
+    label:has(input[type="checkbox"]:not(:disabled)),
+    label:has(input[type="radio"]:not(:disabled))
+  ) {
+    cursor: pointer;
+  }
+
+  :where(
+    button:disabled,
+    select:disabled,
+    input[type="checkbox"]:disabled,
+    input[type="radio"]:disabled,
+    input[type="date"]:disabled,
+    input[type="time"]:disabled,
+    input[type="datetime-local"]:disabled,
+    input[type="month"]:disabled,
+    input[type="week"]:disabled,
+    input[type="color"]:disabled,
+    a[href][aria-disabled="true"],
+    [role="button"][aria-disabled="true"],
+    [role="option"][aria-disabled="true"],
+    [role="menuitem"][aria-disabled="true"],
+    [role="tab"][aria-disabled="true"],
+    [role="combobox"][aria-disabled="true"]
+  ) {
+    cursor: not-allowed;
+  }
+}
+
 /* shared surfaces for the dashboard modules */
 @layer components {
   .card {

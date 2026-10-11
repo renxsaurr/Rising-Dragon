@@ -571,7 +571,31 @@ export type AdvanceBillOption = {
   coverage: string;
   amount: number | null;
   status: "Paid" | "Unpaid" | "Upcoming";
+  blockedByDueDate: string | null;
 };
+
+type MonthlyAdvancePaymentRow = {
+  id: number;
+  amount: number | string;
+  due_date: string;
+  status: "Paid" | "Unpaid";
+  quantity: number | null;
+  coverage_start: string | null;
+};
+
+function earlierUnpaidMonthlyDueDate(
+  payments: MonthlyAdvancePaymentRow[],
+  enrollmentDate: string,
+  selectedDueDate: string,
+) {
+  return payments
+    .filter((payment) => payment.status === "Unpaid")
+    .flatMap((payment) => payment.coverage_start && payment.quantity
+      ? coveredBillingDates(payment.coverage_start, Number(payment.quantity), enrollmentDate)
+      : [payment.due_date])
+    .filter((dueDate) => dueDate < selectedDueDate)
+    .sort()[0] ?? null;
+}
 
 /** Upcoming billing cycles for the Head Coach's advance-payment picker. */
 export async function getAdvanceBillOptions(studentId: number): Promise<{ options: AdvanceBillOption[] } | { error: string }> {
@@ -586,7 +610,6 @@ export async function getAdvanceBillOptions(studentId: number): Promise<{ option
       .select("id, amount, due_date, status, quantity, coverage_start")
       .eq("student_id", studentId)
       .eq("payment_type", "Monthly")
-      .not("coverage_start", "is", null)
       .order("due_date", { ascending: false })
       .order("id", { ascending: false }),
   ]);
@@ -597,9 +620,7 @@ export async function getAdvanceBillOptions(studentId: number): Promise<{ option
   if (student.billing_plan !== "Monthly") return { error: "Advance payment is available only for monthly students." };
   if (!student.enrollment_date) return { error: "This student has no enrollment date for monthly billing." };
 
-  const payments = (paymentsResult.data ?? []) as {
-    id: number; amount: number | string; due_date: string; status: "Paid" | "Unpaid"; quantity: number | null; coverage_start: string | null;
-  }[];
+  const payments = (paymentsResult.data ?? []) as MonthlyAdvancePaymentRow[];
   const { data: setting, error: settingError } = await admin
     .from("payment_settings")
     .select("monthly_fee")
@@ -623,6 +644,7 @@ export async function getAdvanceBillOptions(studentId: number): Promise<{ option
       coverage: formatCoverage(dueDate, 1, student.enrollment_date),
       amount: covering ? Number(covering.amount) / Number(covering.quantity ?? 1) : monthlyFee,
       status: covering?.status ?? "Upcoming",
+      blockedByDueDate: earlierUnpaidMonthlyDueDate(payments, student.enrollment_date, dueDate),
     });
   }
   return { options };
@@ -649,7 +671,6 @@ export async function recordAdvancePayment(input: {
       .select("id, amount, due_date, status, quantity, coverage_start")
       .eq("student_id", input.studentId)
       .eq("payment_type", "Monthly")
-      .not("coverage_start", "is", null)
       .order("due_date", { ascending: false })
       .order("id", { ascending: false }),
   ]);
@@ -661,9 +682,11 @@ export async function recordAdvancePayment(input: {
   const dueOffset = monthlyDueOffset(student.enrollment_date, input.dueDate);
   if (dueOffset === null || dueOffset < 0) return { error: "That date is not on this student's monthly billing schedule." };
 
-  const payments = (paymentsResult.data ?? []) as {
-    id: number; amount: number | string; due_date: string; status: "Paid" | "Unpaid"; quantity: number | null; coverage_start: string | null;
-  }[];
+  const payments = (paymentsResult.data ?? []) as MonthlyAdvancePaymentRow[];
+  const earlierUnpaidDueDate = earlierUnpaidMonthlyDueDate(payments, student.enrollment_date, input.dueDate);
+  if (earlierUnpaidDueDate) {
+    return { error: `There is an unpaid monthly bill due ${earlierUnpaidDueDate}. Mark that bill as paid before recording an advance payment.` };
+  }
   const { data: setting, error: settingError } = await admin
     .from("payment_settings")
     .select("monthly_fee")

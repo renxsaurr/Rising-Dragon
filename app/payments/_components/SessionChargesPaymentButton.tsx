@@ -67,7 +67,7 @@ export default function SessionChargesPaymentButton({
     <>
       <div onClick={() => { setSelected(charges.map((charge) => charge.id)); setOpen(true); setError('') }}>{trigger}</div>
       {open && (
-        <ModalShell title="Record session payment" description={`${studentName} · choose which unpaid sessions this payment covers.`} busy={saving} onClose={() => { if (!saving) setOpen(false) }} size="lg">
+        <ModalShell title="Mark sessions as paid" description={`${studentName} · choose which unpaid sessions this payment covers.`} busy={saving} onClose={() => { if (!saving) setOpen(false) }} size="lg">
           <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
               <div className="overflow-hidden rounded-xl border border-gray-200">
@@ -117,7 +117,7 @@ export default function SessionChargesPaymentButton({
             <div className="shrink-0 flex flex-wrap justify-end gap-2 border-t border-gray-200 px-4 py-3 sm:px-6 sm:py-4">
               <button type="button" onClick={() => setOpen(false)} disabled={saving} className={BUTTON_SECONDARY}>Cancel</button>
               <button type="submit" disabled={saving || selected.length === 0 || !method} className={BUTTON_PRIMARY}>
-                {saving ? 'Saving…' : `Record ${selected.length || ''} payment${selected.length === 1 ? '' : 's'}`}
+                {saving ? 'Saving…' : `Mark ${selected.length || ''} session${selected.length === 1 ? '' : 's'} as paid`}
               </button>
             </div>
           </form>

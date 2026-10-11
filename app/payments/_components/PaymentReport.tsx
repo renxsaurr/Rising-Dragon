@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { paymentDetail } from './payment-detail'
-import { formatBeltLabel } from '@/utils/belts'
+import { beltTextColorClass, formatBeltLabel } from '@/utils/belts'
 import { formatCoverage } from '@/utils/payment-fees'
 import { formatAmount } from '@/utils/payment-display'
 import type {
@@ -124,7 +124,7 @@ export default function PaymentReport({
                 {notPaid.students.map((student) => (
                   <tr key={student.id}>
                     <td className={TD}>{student.name}</td>
-                    <td className={TD}>{formatBeltLabel(student.beltLevel) || '—'}</td>
+                    <td className={`${TD} font-medium ${beltTextColorClass(student.beltLevel)}`}>{formatBeltLabel(student.beltLevel) || '—'}</td>
                     {showBranch && <td className={TD}>{student.branchName}</td>}
                     <td className={`${TD} whitespace-nowrap`}>
                       {student.enrollmentDate ? formatDate(student.enrollmentDate) : '—'}

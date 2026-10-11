@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   getReminderPreview,
   getRetryPreview,
@@ -111,7 +112,7 @@ export default function ReminderReviewModal({ target, onClose }: { target: Remin
     }
   }
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 overflow-y-auto bg-black/50 px-3 py-3 text-left sm:flex sm:items-center sm:justify-center sm:px-4 sm:py-4"
       onMouseDown={(event) => {
@@ -131,7 +132,7 @@ export default function ReminderReviewModal({ target, onClose }: { target: Remin
             {target.kind === 'payment' ? 'Review payment reminder' : 'Review reminder retry'}
           </h2>
           <p className="mt-0.5 text-[13px] text-gray-500">
-            Check the details below. Nothing is sent until you press Send email.
+            Check the details below.
           </p>
         </div>
 
@@ -169,22 +170,6 @@ export default function ReminderReviewModal({ target, onClose }: { target: Remin
                   srcDoc={preview.html}
                   className="h-[min(360px,42dvh)] w-full rounded-lg border border-gray-200 bg-white sm:h-[420px]"
                 />
-                {/* The same subject and text the guardian gets, from the same server function. */}
-                <details className="mt-4 rounded-lg border border-gray-200">
-                  <summary className={`cursor-pointer select-none rounded-lg px-4 py-2.5 text-sm font-medium text-gray-700 hover:text-black ${FOCUS_RING}`}>
-                    Preview email
-                  </summary>
-                  <div className="space-y-3 border-t border-gray-200 px-4 py-3">
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Subject</p>
-                      <p className="mt-0.5 break-words text-sm text-gray-950">{preview.subject}</p>
-                    </div>
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Message</p>
-                      <pre className="mt-0.5 whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-gray-800">{preview.text}</pre>
-                    </div>
-                  </div>
-                </details>
               </>
             )
           )}
@@ -212,6 +197,7 @@ export default function ReminderReviewModal({ target, onClose }: { target: Remin
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

@@ -8,11 +8,12 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { getCurrentUser } from "@/utils/getCurrentUser";
 import { formatTime, dateInTimeZone } from "@/utils/dates";
 import { getCoachBranchIdsForDate } from "@/utils/coach-access";
+import { beltTextColorClass, formatBeltLabel } from "@/utils/belts";
 
 type AttendanceRow = {
   schedule_id: number;
   date: string;
-  status: "Present" | "Absent";
+  status: "Present" | "Late" | "Absent" | "Excused";
 };
 
 type ScheduleRow = {
@@ -151,11 +152,23 @@ export default async function StudentAttendanceHistoryPage({
     .filter((entry): entry is { row: AttendanceRow; schedule: ScheduleRow } => Boolean(entry.schedule))
     .sort((a, b) => b.schedule.date.localeCompare(a.schedule.date) || b.schedule.time_start.localeCompare(a.schedule.time_start));
   const presentCount = history.filter(({ row }) => row.status === "Present").length;
+  const lateCount = history.filter(({ row }) => row.status === "Late").length;
   const absentCount = history.filter(({ row }) => row.status === "Absent").length;
+  const excusedCount = history.filter(({ row }) => row.status === "Excused").length;
   const studentName = fullName(student);
-  const branchName = Array.isArray(student.branch)
-    ? student.branch[0]?.name
-    : student.branch?.name;
+  const branchRelation = student.branch as unknown as
+    | { name: string }
+    | { name: string }[]
+    | null;
+  const branchName = Array.isArray(branchRelation)
+    ? branchRelation[0]?.name
+    : branchRelation?.name;
+  const attendanceStatusDot: Record<AttendanceRow["status"], string> = {
+    Present: "bg-emerald-500",
+    Late: "bg-amber-500",
+    Absent: "bg-red-600",
+    Excused: "bg-gray-400",
+  };
 
   return (
     <DashboardShell title="Attendance history" currentUser={currentUser}>
@@ -168,43 +181,55 @@ export default async function StudentAttendanceHistoryPage({
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Student attendance</p>
         <h2 className="mt-1 text-xl font-semibold text-gray-950">{studentName}</h2>
         <p className="mt-1 text-sm text-gray-600">
-          {student.belt_level.replaceAll("_", " ")}{branchName ? ` · ${branchName}` : ""}
+          <span className={`font-medium ${beltTextColorClass(student.belt_level)}`}>{formatBeltLabel(student.belt_level)}</span>{branchName ? ` · ${branchName}` : ""}
         </p>
         <div className="mt-4 flex flex-wrap gap-2 text-sm">
           <span className="rounded-lg border border-gray-200 px-3 py-2 font-medium text-gray-950">{history.length} recorded class{history.length === 1 ? "" : "es"}</span>
           <span className="rounded-lg border border-gray-200 px-3 py-2 font-medium text-gray-950">{presentCount} present</span>
+          <span className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 font-medium text-amber-900">{lateCount} late</span>
           <span className="rounded-lg border border-red-200 px-3 py-2 font-medium text-red-700">{absentCount} absent</span>
+          <span className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 font-medium text-gray-700">{excusedCount} excused</span>
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-        <div className="border-b border-gray-200 px-5 py-4">
-          <h3 className="font-semibold text-gray-950">Class history</h3>
-          <p className="mt-1 text-sm text-gray-600">Only saved Present and Absent records appear here. Unmarked classes are not counted as absent.</p>
+      <section className="mt-6">
+        <div className="border-b border-gray-200 pb-3">
+          <h3 className="text-lg font-semibold text-gray-950">Class history</h3>
         </div>
         {history.length === 0 ? (
-          <p className="px-5 py-12 text-center text-sm text-gray-600">No attendance has been recorded for this student yet.</p>
+          <p className="border-b border-gray-200 px-5 py-12 text-center text-sm text-gray-600">No attendance has been recorded for this student yet.</p>
         ) : (
-          <div className="max-h-[min(65vh,640px)] overflow-y-auto">
-            <table className="system-data-table w-full min-w-[620px] border-collapse text-left">
-              <thead className="sticky top-0 bg-gray-50">
+          <div className="overflow-x-auto border-b border-gray-200 bg-white">
+            <table aria-label="Student attendance history" className="w-full min-w-[900px] table-fixed border-collapse bg-white text-left text-sm text-gray-950">
+              <colgroup>
+                <col className="w-[5%]" />
+                <col className="w-[24%]" />
+                <col className="w-[19%]" />
+                <col className="w-[17%]" />
+                <col className="w-[23%]" />
+                <col className="w-[12%]" />
+              </colgroup>
+              <thead className="border-b border-gray-200 bg-white">
                 <tr>
-                  <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-gray-600">Date</th>
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-600">Branch</th>
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-600">Class time</th>
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-600">Coach</th>
-                  <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-600">Result</th>
+                  <th scope="col" className="px-4 py-4 text-xs font-medium text-gray-500">#</th>
+                  <th scope="col" className="px-4 py-4 text-xs font-medium text-gray-500">Date</th>
+                  <th scope="col" className="px-4 py-4 text-xs font-medium text-gray-500">Branch</th>
+                  <th scope="col" className="px-4 py-4 text-xs font-medium text-gray-500">Class time</th>
+                  <th scope="col" className="px-4 py-4 text-xs font-medium text-gray-500">Coach</th>
+                  <th scope="col" className="px-4 py-4 text-xs font-medium text-gray-500">Status</th>
                 </tr>
               </thead>
-              <PaginatedTableRows itemLabel="attendance records" colSpan={5}>
-                {history.map(({ row, schedule }) => (
-                  <tr key={row.schedule_id} className="hover:bg-gray-50">
-                    <td className="px-5 py-4 text-sm text-gray-900">{readableDate(schedule.date)}</td>
-                    <td className="px-4 py-4 text-sm font-medium text-gray-950">{schedule.branch?.name ?? "—"}</td>
-                    <td className="px-4 py-4 text-sm text-gray-900">{formatTime(schedule.time_start)}–{formatTime(schedule.time_end)}</td>
-                    <td className="px-4 py-4 text-sm text-gray-900">{schedule.coach ? fullName(schedule.coach) : "—"}</td>
-                    <td className="px-5 py-4 text-right">
-                      <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${row.status === "Present" ? "bg-gray-100 text-gray-950" : "bg-red-50 text-red-700"}`}>
+              <PaginatedTableRows itemLabel="attendance records" colSpan={6}>
+                {history.map(({ row, schedule }, index) => (
+                  <tr key={row.schedule_id} className="border-b border-gray-100 align-middle transition-colors last:border-b-0 hover:bg-gray-50/60">
+                    <td className="px-4 py-5 text-sm font-medium tabular-nums text-gray-700">{index + 1}</td>
+                    <td className="px-4 py-5 text-sm font-medium text-gray-950">{readableDate(schedule.date)}</td>
+                    <td className="break-words px-4 py-5 text-sm font-medium text-gray-950">{schedule.branch?.name ?? "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-5 text-sm font-medium text-gray-950">{formatTime(schedule.time_start)}–{formatTime(schedule.time_end)}</td>
+                    <td className="break-words px-4 py-5 text-sm font-medium text-gray-950">{schedule.coach ? fullName(schedule.coach) : "—"}</td>
+                    <td className="px-4 py-5 text-sm font-medium text-gray-950">
+                      <span className="inline-flex items-center gap-2 whitespace-nowrap">
+                        <span aria-hidden="true" className={`h-2 w-2 rounded-full ${attendanceStatusDot[row.status]}`} />
                         {row.status}
                       </span>
                     </td>

@@ -8,7 +8,7 @@ export const DROP_ALERT_POINTS = 10
 
 export const cardClass = 'rounded-2xl border-gray-200 bg-white shadow-sm shadow-gray-900/[0.03]'
 
-export const marksOf = (counts: BranchCounts) => counts.present + counts.absent
+export const marksOf = (counts: BranchCounts) => counts.present + counts.late + counts.absent
 export const isLowData = (counts: BranchCounts) => marksOf(counts) < LOW_DATA_MARKS
 // 0 = reliable, 1 = Low data, 2 = no marks — so Low data never ranks as best
 export const dataTier = (counts: BranchCounts) => (marksOf(counts) === 0 ? 2 : isLowData(counts) ? 1 : 0)

@@ -103,7 +103,10 @@ export default function ScheduleAbsencePanel({
     setNotice('')
     const result = await reportScheduleAbsence({ starts_on: startsOn, ends_on: endsOn, reason })
     setBusyReportId(null)
-    if ('error' in result) { setError(result.error); return }
+    if (!('message' in result) || !result.message) {
+      setError(('error' in result && result.error) || 'Could not submit the time-away report.')
+      return
+    }
     setNotice(result.message)
     setReason('')
     router.refresh()
@@ -114,10 +117,16 @@ export default function ScheduleAbsencePanel({
     setReviewErrors((current) => ({ ...current, [reportId]: '' }))
     const result = await getAbsenceCoverageOptions(reportId)
     setReviewingReportId(null)
-    if ('error' in result) { setReviewErrors((current) => ({ ...current, [reportId]: result.error })); return }
-    setCoverageOptions((current) => ({ ...current, [reportId]: result.sessions }))
-    setAlreadyCancelled((current) => ({ ...current, [reportId]: result.alreadyCancelled }))
-    setCoverageChoices((current) => ({ ...current, [reportId]: normalizeCoverageChoices(result.sessions, {}) }))
+    const sessions = 'sessions' in result ? result.sessions : undefined
+    if (!sessions) {
+      const message = ('error' in result && result.error) || 'Could not load coverage options.'
+      setReviewErrors((current) => ({ ...current, [reportId]: message }))
+      return
+    }
+    const alreadyCancelled = 'alreadyCancelled' in result ? result.alreadyCancelled : undefined
+    setCoverageOptions((current) => ({ ...current, [reportId]: sessions }))
+    setAlreadyCancelled((current) => ({ ...current, [reportId]: alreadyCancelled ?? 0 }))
+    setCoverageChoices((current) => ({ ...current, [reportId]: normalizeCoverageChoices(sessions, {}) }))
   }
 
   const handleResolveReport = async (reportId: number) => {
@@ -136,12 +145,16 @@ export default function ScheduleAbsencePanel({
     }))
     const result = await resolveAbsenceReport(reportId, decisions)
     setBusyReportId(null)
-    if ('error' in result) { setReviewErrors((current) => ({ ...current, [reportId]: result.error })); return }
+    if (!('message' in result) || !result.message) {
+      const message = ('error' in result && result.error) || 'Could not resolve the coverage request.'
+      setReviewErrors((current) => ({ ...current, [reportId]: message }))
+      return
+    }
     setNotice(result.message)
     router.refresh()
   }
 
-  const inputClass = 'mt-1 h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-black focus:outline-none focus:ring-2 focus:ring-black/10'
+  const inputClass = 'mt-1 h-10 w-full min-w-0 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-black focus:outline-none focus:ring-2 focus:ring-black/10'
   const pendingReports = reports.filter((report) => report.status === 'pending')
   const resolvedReports = reports.filter((report) => report.status !== 'pending')
   const getFreeOptions = (reportId: number, session: AbsenceCoverageSession) => {
@@ -156,27 +169,27 @@ export default function ScheduleAbsencePanel({
   }
 
   return (
-    <section className={`${isAssistantCoach ? 'mt-6' : ''} overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm`}>
-      <div className="border-b border-gray-100 px-5 py-4 sm:px-6">
+    <section className={`${isAssistantCoach ? 'flex h-[420px] min-h-0 flex-col' : ''} overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm`}>
+      <div className="shrink-0 border-b border-gray-100 px-5 py-4 sm:px-6">
         <h2 className="text-base font-semibold text-gray-950">{isAssistantCoach ? 'Report time away' : 'Coverage requests'}</h2>
       </div>
 
       {isAssistantCoach && (
-        <form onSubmit={submitReport} className="grid gap-4 border-b border-gray-100 bg-gray-50/60 p-4 sm:grid-cols-[1fr_1fr_minmax(160px,1.4fr)_auto] sm:items-end sm:p-5">
-          <label className="text-xs font-medium text-gray-600">From<input type="date" required min={today} value={startsOn} onChange={(event) => {
+        <form onSubmit={submitReport} className="grid min-w-0 shrink-0 grid-cols-1 gap-4 border-b border-gray-100 bg-gray-50/60 p-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:items-end sm:p-5">
+          <label className="min-w-0 text-xs font-medium text-gray-600">From<input type="date" required min={today} value={startsOn} onChange={(event) => {
             setStartsOn(event.target.value)
             if (event.target.value > endsOn) setEndsOn(event.target.value)
           }} className={inputClass} /></label>
-          <label className="text-xs font-medium text-gray-600">Through<input type="date" required min={startsOn || today} value={endsOn} onChange={(event) => setEndsOn(event.target.value)} className={inputClass} /></label>
-          <label className="text-xs font-medium text-gray-600">Note <span className="font-normal text-gray-400">(optional)</span><input type="text" maxLength={200} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Add a short note" className={inputClass} /></label>
-          <button disabled={busyReportId === 0 || !startsOn || !endsOn || startsOn > endsOn} className="h-10 rounded-lg bg-black px-4 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50">{busyReportId === 0 ? 'Submitting…' : 'Report dates'}</button>
+          <label className="min-w-0 text-xs font-medium text-gray-600">Through<input type="date" required min={startsOn || today} value={endsOn} onChange={(event) => setEndsOn(event.target.value)} className={inputClass} /></label>
+          <label className="min-w-0 text-xs font-medium text-gray-600">Note <span className="font-normal text-gray-400">(optional)</span><input type="text" maxLength={200} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Add a short note" className={inputClass} /></label>
+          <button disabled={busyReportId === 0 || !startsOn || !endsOn || startsOn > endsOn} className="h-10 min-w-0 w-full rounded-lg bg-black px-4 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50">{busyReportId === 0 ? 'Submitting…' : 'Report dates'}</button>
         </form>
       )}
 
-      {error && <p role="alert" className="mx-4 mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 sm:mx-5">{error}</p>}
-      {notice && <p role="status" className="mx-4 mt-4 rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-800 sm:mx-5">{notice}</p>}
+      {error && <p role="alert" className="mx-4 mt-4 shrink-0 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 sm:mx-5">{error}</p>}
+      {notice && <p role="status" className="mx-4 mt-4 shrink-0 rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-800 sm:mx-5">{notice}</p>}
 
-      <div className="space-y-3 p-4 sm:p-5">
+      <div className={`${isAssistantCoach ? 'min-h-0 flex-1 overflow-y-auto' : ''} space-y-3 p-4 sm:p-5`}>
         {pendingReports.length === 0 ? (
           <p className="rounded-xl border border-dashed border-gray-300 px-4 py-6 text-center text-sm font-medium text-gray-900">
             {isAssistantCoach ? 'No pending time-away reports.' : 'No coverage requests need review.'}
@@ -185,7 +198,7 @@ export default function ScheduleAbsencePanel({
           const sessions = coverageOptions[report.id]
           const choices = coverageChoices[report.id] ?? {}
           return (
-            <article key={report.id} className="rounded-xl border border-amber-200 bg-amber-50/40 p-4">
+            <article id={`absence-report-${report.id}`} key={report.id} className="scroll-mt-4 rounded-xl border border-amber-200 bg-amber-50/40 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-gray-950">{dateRange(report)}</p>

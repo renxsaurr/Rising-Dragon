@@ -3,7 +3,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import DashboardShell from '@/components/DashboardShell'
 import ScheduleBoard from '@/components/ScheduleBoard'
-import AvailabilityPanel from '@/components/AvailabilityPanel'
+import AvailabilityPanel, { AddAvailabilityButton } from '@/components/AvailabilityPanel'
 import SchedulePlanningPanel, { type WeeklyClassTemplate } from '@/components/SchedulePlanningPanel'
 import ScheduleClosuresPanel, { type ScheduleClosureView } from '@/components/ScheduleClosuresPanel'
 import ScheduleAbsencePanel, { type ScheduleAbsenceReportView } from '@/components/ScheduleAbsencePanel'
@@ -214,6 +214,9 @@ export default async function SchedulingPage({
               <AvailabilityPanel
                 weeklyEntries={weeklyAvailabilityEntries}
                 isAssistantCoach={false}
+                assistantCoaches={coaches
+                  .filter((coach) => coach.role === 'assistant_coach')
+                  .map(({ id, name }) => ({ id, name }))}
               />
             )}
             absencePanel={<ScheduleAbsencePanel reports={absenceReports} isAssistantCoach={false} today={dateInTimeZone()} />}
@@ -227,6 +230,10 @@ export default async function SchedulingPage({
           />
       ) : (
         <>
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <h2 className="text-lg font-semibold text-gray-950">Set your availability</h2>
+            <AddAvailabilityButton />
+          </div>
           <ScheduleBoard
             dateISO={selectedDate}
             initialSchedules={initialSchedules}
@@ -234,15 +241,17 @@ export default async function SchedulingPage({
             coaches={coaches ?? []}
             isHeadCoach={false}
           />
-          <AvailabilityPanel
-            weeklyEntries={weeklyAvailabilityEntries}
-            isAssistantCoach
-          />
-          <ScheduleAbsencePanel
-            reports={absenceReports}
-            isAssistantCoach
-            today={dateInTimeZone()}
-          />
+          <div className="mt-6 grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+            <AvailabilityPanel
+              weeklyEntries={weeklyAvailabilityEntries}
+              isAssistantCoach
+            />
+            <ScheduleAbsencePanel
+              reports={absenceReports}
+              isAssistantCoach
+              today={dateInTimeZone()}
+            />
+          </div>
         </>
       )}
     </DashboardShell>

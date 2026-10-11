@@ -1,5 +1,5 @@
 import DashboardLoading from '@/components/DashboardLoading'
 
 export default function Loading() {
-  return <DashboardLoading title="Students" />
+  return <DashboardLoading title="Students" variant="students" />
 }

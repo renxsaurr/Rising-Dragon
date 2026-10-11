@@ -209,6 +209,40 @@ function paymentKind(status: PaymentStatus, daysUntilDue: number): PaymentKind {
   return 'unpaid'
 }
 
+function toPaymentRecord(
+  payment: RawPayment,
+  branchNames: Map<number, string>,
+  today: string,
+  reminders: ReminderSummary[] = [],
+): PaymentRecord {
+  const student = one(payment.student)
+  const branchId = student?.branch_id == null ? null : Number(student.branch_id)
+  const daysUntilDue = daysBetween(today, payment.due_date)
+  return {
+    id: Number(payment.id),
+    studentId: student ? Number(student.id) : null,
+    studentName: fullName(student),
+    beltLevel: student?.belt_level ?? '',
+    branchId,
+    branchName: (branchId !== null && branchNames.get(branchId)) || 'No branch',
+    guardianEmail: normalizeEmail(student?.guardian_email),
+    isActive: student?.is_active ?? false,
+    amount: Number(payment.amount),
+    dueDate: payment.due_date,
+    daysUntilDue,
+    paidDate: payment.paid_date,
+    method: payment.method?.trim() || null,
+    status: payment.status,
+    kind: paymentKind(payment.status, daysUntilDue),
+    paymentType: payment.payment_type,
+    quantity: payment.quantity == null ? null : Number(payment.quantity),
+    coverageStart: payment.coverage_start,
+    enrollmentDate: student?.enrollment_date ?? null,
+    notes: payment.notes?.trim() || null,
+    reminders,
+  }
+}
+
 // numeric amounts can add up to 0.30000000000000004, so round the totals to centavos
 const roundMoney = (value: number) => Math.round(value * 100) / 100
 
@@ -373,37 +407,8 @@ export async function loadPaymentMonth(admin: Admin, month: string, today: strin
     const branchList = (branchResult.data ?? []) as { id: number; name: string }[]
     const branchNames = new Map(branchList.map((branch) => [Number(branch.id), branch.name]))
     const reminders = await loadReminders(admin, payments.map((payment) => Number(payment.id)))
-
-    const toPaymentRecord = (payment: RawPayment, paymentReminders: ReminderSummary[] = []): PaymentRecord => {
-      const student = one(payment.student)
-      const branchId = student?.branch_id == null ? null : Number(student.branch_id)
-      const daysUntilDue = daysBetween(today, payment.due_date)
-      return {
-        id: Number(payment.id),
-        studentId: student ? Number(student.id) : null,
-        studentName: fullName(student),
-        beltLevel: student?.belt_level ?? '',
-        branchId,
-        branchName: (branchId !== null && branchNames.get(branchId)) || 'No branch',
-        guardianEmail: normalizeEmail(student?.guardian_email),
-        isActive: student?.is_active ?? false,
-        amount: Number(payment.amount),
-        dueDate: payment.due_date,
-        daysUntilDue,
-        paidDate: payment.paid_date,
-        method: payment.method?.trim() || null,
-        status: payment.status,
-        kind: paymentKind(payment.status, daysUntilDue),
-        paymentType: payment.payment_type,
-        quantity: payment.quantity == null ? null : Number(payment.quantity),
-        coverageStart: payment.coverage_start,
-        enrollmentDate: student?.enrollment_date ?? null,
-        notes: payment.notes?.trim() || null,
-        reminders: paymentReminders,
-      }
-    }
-    const rows = payments.map((payment) => toPaymentRecord(payment, reminders.get(Number(payment.id)) ?? []))
-    const unpaidPerSession = unpaidPerSessionPayments.map((payment) => toPaymentRecord(payment))
+    const rows = payments.map((payment) => toPaymentRecord(payment, branchNames, today, reminders.get(Number(payment.id)) ?? []))
+    const unpaidPerSession = unpaidPerSessionPayments.map((payment) => toPaymentRecord(payment, branchNames, today))
 
     const all = emptyStats('all', 'All branches')
     const byBranch = new Map(branchList.map((branch) => [Number(branch.id), emptyStats(String(branch.id), branch.name)]))
@@ -563,6 +568,53 @@ export async function loadPaymentMonth(admin: Admin, month: string, today: strin
     }
   } catch (error) {
     return { data: null, error: error instanceof Error ? error.message : 'Could not load payments.' }
+  }
+}
+
+/** Successful payments received during the selected month, ordered by the paid date. */
+export async function loadPaidPaymentHistory(
+  admin: Admin,
+  month: string,
+  today: string,
+): Promise<{ data: PaymentRecord[]; error: null } | { data: null; error: string }> {
+  if (!isMonthKey(month)) return { data: null, error: 'The month is invalid.' }
+  const start = `${month}-01`
+  const end = addDays(`${shiftMonth(month, 1)}-01`, -1)
+
+  try {
+    const [branchResult, paidRows, legacyRows] = await Promise.all([
+      admin.from('branch').select('id, name').order('name'),
+      fetchAllRows<RawPayment>((from, to) => admin.from('payment')
+        .select(PAYMENT_SELECT)
+        .eq('status', 'Paid')
+        .gte('paid_date', start)
+        .lte('paid_date', end)
+        .order('paid_date', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, to)),
+      // Keep older successful records visible when no paid date was saved.
+      fetchAllRows<RawPayment>((from, to) => admin.from('payment')
+        .select(PAYMENT_SELECT)
+        .eq('status', 'Paid')
+        .is('paid_date', null)
+        .gte('due_date', start)
+        .lte('due_date', end)
+        .order('due_date', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, to)),
+    ])
+    if (branchResult.error) throw new Error(branchResult.error.message)
+
+    const branchNames = new Map(((branchResult.data ?? []) as { id: number; name: string }[])
+      .map((branch) => [Number(branch.id), branch.name]))
+    const allRows = [...paidRows, ...legacyRows]
+    const reminders = await loadReminders(admin, allRows.map((payment) => Number(payment.id)))
+    const data = allRows
+      .map((payment) => toPaymentRecord(payment, branchNames, today, reminders.get(Number(payment.id)) ?? []))
+      .sort((a, b) => (b.paidDate ?? b.dueDate).localeCompare(a.paidDate ?? a.dueDate) || b.id - a.id)
+    return { data, error: null }
+  } catch (error) {
+    return { data: null, error: error instanceof Error ? error.message : 'Could not load payment history.' }
   }
 }
 

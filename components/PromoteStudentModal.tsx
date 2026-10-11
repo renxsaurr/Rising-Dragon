@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { BELT_COLORS, BELT_LABELS, formatBeltLabel } from "@/utils/belts";
+import { BELT_LABELS, beltTextColorClass, formatBeltLabel } from "@/utils/belts";
 import { useRouter } from "next/navigation";
 import { promoteStudent } from "@/app/promotions/actions";
 
@@ -44,9 +44,6 @@ export default function PromoteStudentModal({
   const currentIndex = beltOrder.indexOf(currentBelt);
   const nextBelt =
     currentIndex >= 0 ? (beltOrder[currentIndex + 1] ?? null) : null;
-  const pill =
-    "inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset";
-
   const openModal = () => {
     setPromotionDate(todayISO());
     setError("");
@@ -150,11 +147,9 @@ export default function PromoteStudentModal({
                     <p className="text-xs font-medium text-gray-700">
                       Current belt
                     </p>
-                    <span
-                      className={`${pill} mt-1.5 ${BELT_COLORS[currentBelt] ?? "bg-gray-100 text-gray-700"}`}
-                    >
+                    <p className={`mt-1.5 text-sm font-semibold ${beltTextColorClass(currentBelt)}`}>
                       {formatBeltLabel(currentBelt)}
-                    </span>
+                    </p>
                   </div>
 
                   <div>
@@ -162,11 +157,9 @@ export default function PromoteStudentModal({
                       Next belt
                     </p>
                     {nextBelt ? (
-                      <span
-                        className={`${pill} mt-1.5 ${BELT_COLORS[nextBelt] ?? "bg-gray-100 text-gray-700"}`}
-                      >
+                      <p className={`mt-1.5 text-sm font-semibold ${beltTextColorClass(nextBelt)}`}>
                         {formatBeltLabel(nextBelt)}
-                      </span>
+                      </p>
                     ) : (
                       <p className="mt-1.5 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-sm text-gray-600">
                         This student is already at the highest belt.
@@ -245,24 +238,16 @@ export default function PromoteStudentModal({
                     <dt className="text-xs font-medium text-gray-500">
                       Old belt
                     </dt>
-                    <dd>
-                      <span
-                        className={`${pill} ${BELT_COLORS[currentBelt] ?? "bg-gray-100 text-gray-700"}`}
-                      >
-                        {formatBeltLabel(currentBelt)}
-                      </span>
+                    <dd className={`text-sm font-semibold ${beltTextColorClass(currentBelt)}`}>
+                      {formatBeltLabel(currentBelt)}
                     </dd>
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <dt className="text-xs font-medium text-gray-500">
                       New belt
                     </dt>
-                    <dd>
-                      <span
-                        className={`${pill} ${BELT_COLORS[nextBelt ?? ""] ?? "bg-gray-100 text-gray-700"}`}
-                      >
-                        {formatBeltLabel(nextBelt ?? "")}
-                      </span>
+                    <dd className={`text-sm font-semibold ${beltTextColorClass(nextBelt ?? "")}`}>
+                      {formatBeltLabel(nextBelt ?? "")}
                     </dd>
                   </div>
                   <div className="flex items-center justify-between gap-3">

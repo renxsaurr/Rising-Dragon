@@ -415,7 +415,6 @@ async function reclaim(admin: Admin, reminder: ExistingReminder, recipient: stri
       completed_at: null,
       sent_at: null,
       error_message: null,
-      provider_message_id: null,
       recipient_email: recipient,
       sent_by: userId,
       attempt_count: reminder.attempt_count + 1,
@@ -441,7 +440,7 @@ async function deliver(
   const result = await sendGmail({ to: recipient, ...buildEmail(payment, dateInTimeZone(), senderName) })
 
   // completed_at is always set when an attempt finishes; sent_at only when it was Sent.
-  const finish = async (values: { status: 'Sent' | 'Failed'; sent_at: string | null; error_message: string | null; provider_message_id: string | null }) => {
+  const finish = async (values: { status: 'Sent' | 'Failed'; sent_at: string | null; error_message: string | null }) => {
     const { error } = await admin.from('payment_reminder')
       .update({ ...values, completed_at: nowIso() })
       .eq('id', reminderId)
@@ -450,11 +449,11 @@ async function deliver(
   }
 
   if ('error' in result) {
-    const saveError = await finish({ status: 'Failed', sent_at: null, error_message: result.error.slice(0, 500), provider_message_id: null })
+    const saveError = await finish({ status: 'Failed', sent_at: null, error_message: result.error.slice(0, 500) })
     return { error: `Gmail could not send the email: ${result.error}${saveError ? ` (The result could not be saved: ${saveError})` : ''}` }
   }
 
-  const saveError = await finish({ status: 'Sent', sent_at: nowIso(), error_message: null, provider_message_id: result.messageId })
+  const saveError = await finish({ status: 'Sent', sent_at: nowIso(), error_message: null })
   if (saveError) {
     return { error: `The email was sent, but the result could not be saved (${saveError}). Do not send it again. Check the Gmail Sent folder.` }
   }

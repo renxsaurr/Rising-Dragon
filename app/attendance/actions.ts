@@ -5,19 +5,19 @@ import { createAdminClient } from '@/utils/supabase/admin'
 import { getCurrentUser } from '@/utils/getCurrentUser'
 import { dateInTimeZone, timeInTimeZone } from '@/utils/dates'
 
-export async function saveAttendance(scheduleId: number, records: { student_id: number; status: 'Present' | 'Absent' }[]) {
+export async function saveAttendance(scheduleId: number, records: { student_id: number; status: 'Present' | 'Late' | 'Absent' | 'Excused' }[]) {
   const currentUser = await getCurrentUser()
   if (!currentUser) return { error: 'Please sign in to record attendance.' }
   if (!['head_coach', 'assistant_coach'].includes(currentUser.role)) return { error: 'You do not have permission to record attendance.' }
   if (!Number.isInteger(scheduleId) || !Array.isArray(records) || records.length === 0) return { error: 'Select a class and at least one student.' }
   if (records.length > 200) return { error: 'Save attendance in groups of 200 students or fewer.' }
-  if (records.some((record) => !record || !Number.isInteger(record.student_id) || !['Present', 'Absent'].includes(record.status))) {
+  if (records.some((record) => !record || !Number.isInteger(record.student_id) || !['Present', 'Late', 'Absent', 'Excused'].includes(record.status))) {
     return { error: 'Attendance values are invalid.' }
   }
 
   const admin = createAdminClient()
   const { data: schedule, error: scheduleError } = await admin.from('class_schedule')
-    .select('id, date, branch_id, coach_id, status')
+    .select('id, date, time_start, branch_id, coach_id, status')
     .eq('id', scheduleId)
     .maybeSingle()
   if (scheduleError || !schedule) return { error: 'Class session not found.' }
@@ -71,7 +71,17 @@ export async function saveAttendance(scheduleId: number, records: { student_id: 
     status: record.status,
   }))
   const { error } = await admin.from('attendance').upsert(payload, { onConflict: 'student_id,schedule_id' })
-  if (error) return { error: 'Attendance could not be saved. Please try again.' }
+  if (error) {
+    console.error('[attendance] save upsert failed', {
+      scheduleId,
+      recordCount: payload.length,
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+    })
+    return { error: 'Attendance could not be saved. Please try again.' }
+  }
 
   revalidatePath('/attendance')
   revalidatePath('/attendance/history')

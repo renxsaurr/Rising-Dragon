@@ -88,7 +88,8 @@ export async function searchDirectory(value: string) {
       id: student.id,
       type: 'student' as const,
       name: fullName(student) || 'Unnamed student',
-      detail: `${firstRelation(student.branch)?.name ?? 'No branch'} · ${String(student.belt_level).replace(/_/g, ' ')}`,
+      detail: firstRelation(student.branch)?.name ?? 'No branch',
+      belt: student.belt_level,
       href: '/students',
     }))
   const staff = [...new Map(staffResults.flatMap((result) => result.data ?? []).map((member) => [member.id, member])).values()]

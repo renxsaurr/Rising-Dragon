@@ -1,62 +1,70 @@
 import Link from 'next/link'
-import { Card, EmptyNote } from '@/components/DashboardWidgets'
 import type { BranchCounts, BranchReportRow } from '@/utils/branch-reports'
-import { FAIR_RATE, GOOD_RATE, LOW_DATA_MARKS, cardClass, dataTier, isLowData, ratePercent, rateStatus } from '@/utils/branch-report-format'
+import { ratePercent } from '@/utils/branch-report-format'
 import PaginatedTableRows from '@/components/PaginatedTableRows'
 
-const cell = 'px-3 py-3 text-left align-top text-sm tabular-nums text-gray-900 last:pr-5 print:px-1.5 print:py-2 print:text-xs'
+const cell = 'px-5 py-7 text-left align-middle text-base font-medium tabular-nums text-gray-950 print:px-1.5 print:py-2 print:text-xs'
 
-// byReliability: reliable branches first, then Low data, then no marks — in both directions
-const COLUMNS: { key: string; label: string; tip: string; value: (counts: BranchCounts) => number | null; byReliability?: boolean }[] = [
-  { key: 'active', label: 'Students', tip: 'Active students today. The sub-label shows new enrollments in the selected period.', value: (counts) => counts.activeStudents },
-  { key: 'classes', label: 'Classes', tip: 'Scheduled or completed classes in the selected period. Cancelled classes and incomplete attendance are shown underneath.', value: (counts) => counts.classes },
-  { key: 'rate', label: 'Attendance', tip: `Present divided by all marked records. Good is ${GOOD_RATE}%+, Fair ${FAIR_RATE}–${GOOD_RATE - 1}%, Low below ${FAIR_RATE}%. Students without an attendance record are not counted.`, value: (counts) => counts.attendanceRate, byReliability: true },
-  { key: 'assessed', label: 'Student progress', tip: 'Coach progress checks recorded in this period. Ready for assessment is only a coach recommendation.', value: (counts) => counts.assessedStudents },
+const COLUMNS: { key: string; label: string; tip: string; value: (counts: BranchCounts) => number | null }[] = [
+  { key: 'active', label: 'Students', tip: 'Active students today, with new enrollments during the selected period.', value: (counts) => counts.activeStudents },
+  { key: 'classes', label: 'Class sessions', tip: 'Non-cancelled class sessions in the selected period. Cancelled sessions are listed separately.', value: (counts) => counts.classes },
+  { key: 'records', label: 'Attendance records', tip: 'Saved present, late, absent, and excused statuses.', value: (counts) => counts.recordedMarks },
+  { key: 'coverage', label: 'Recording coverage', tip: 'Saved attendance statuses divided by expected statuses for sessions that have ended. Expected roster is based on the current active monthly roster plus per-session check-ins.', value: (counts) => counts.recordingCoverage },
+  { key: 'rate', label: 'Recorded attendance rate', tip: 'Present and late divided by present, late, and absent records. Excused records are shown separately.', value: (counts) => counts.attendanceRate },
 ]
 
 const byName = (a: BranchReportRow, b: BranchReportRow) => a.branchName.localeCompare(b.branchName)
 
-function RateCell({ counts }: { counts: BranchCounts }) {
-  if (counts.attendanceRate === null) return <span className="text-xs font-medium text-gray-700">No attendance marked</span>
-  const value = ratePercent(counts.attendanceRate)
-  const lowData = isLowData(counts)
-  const status = rateStatus(counts.attendanceRate)
+function AttendanceCell({ counts }: { counts: BranchCounts }) {
   return (
-    <span className="block">
-      <span className={`block font-semibold ${lowData ? 'text-gray-500' : 'text-gray-900'}`}>{value}%</span>
-      <span className={`mt-0.5 block text-xs font-medium ${lowData ? 'text-gray-700' : status.text}`}>{lowData ? 'Low data' : status.label}</span>
-      <span className="mt-0.5 block text-xs font-medium text-gray-700">{counts.present} present · {counts.absent} absent</span>
+    <span className="block whitespace-nowrap text-sm font-medium leading-6 text-gray-700">
+      {counts.present} present · {counts.late} late<br />
+      {counts.absent} absent · {counts.excused} excused
     </span>
   )
 }
 
-function ReportRow({ name, counts, branchId, detailQuery = '' }: { name: string; counts: BranchCounts; branchId?: number; detailQuery?: string }) {
+function CoverageCell({ counts }: { counts: BranchCounts }) {
+  if (counts.recordingCoverage === null) return <span className="text-sm font-medium text-gray-600">No ended sessions</span>
+  return (
+    <span className="block">
+      <span className="block text-base font-medium text-gray-950">{ratePercent(counts.recordingCoverage)}%</span>
+      <span className="mt-1 block text-sm font-normal text-gray-700">{counts.recordedDueMarks} of {counts.expectedMarks} recorded</span>
+      {counts.unmarkedStudentMarks > 0 && <span className="mt-1 block text-sm font-normal text-gray-600">{counts.unmarkedStudentMarks} not recorded</span>}
+    </span>
+  )
+}
+
+function RateCell({ counts }: { counts: BranchCounts }) {
+  if (counts.attendanceRate === null) return <span className="text-sm font-medium text-gray-600">No statuses recorded</span>
+  return (
+    <span className="block">
+      <span className="block text-base font-medium text-gray-950">{ratePercent(counts.attendanceRate)}%</span>
+      <span className="mt-1 block text-sm font-normal text-gray-700">of non-excused records</span>
+    </span>
+  )
+}
+
+function ReportRow({ name, counts, branchId, rowNumber, detailQuery = '' }: { name: string; counts: BranchCounts; branchId?: number; rowNumber: number | null; detailQuery?: string }) {
   const total = branchId === undefined
   return (
-    <tr className={`print:break-inside-avoid ${total ? 'branch-report-total-row border-t-2 border-gray-200 font-semibold' : ''}`}>
-      <th scope="row" className={`whitespace-nowrap py-3 pl-5 pr-3 text-left align-top text-sm text-gray-900 print:whitespace-normal print:py-2 print:pl-2 print:pr-1.5 print:text-xs ${total ? 'font-semibold' : 'font-medium'}`}>
-        {total ? name : <Link href={`/branches/${branchId}?${detailQuery}`} className="font-semibold text-gray-950 underline-offset-2 focus-visible:underline">{name}</Link>}
+    <tr className={`border-b border-gray-100 print:break-inside-avoid ${total ? 'branch-report-total-row border-t-2 border-gray-200' : ''}`}>
+      <td className="w-16 px-5 py-7 text-left align-middle text-base font-medium tabular-nums text-gray-700 print:px-1.5 print:py-2 print:text-xs">{rowNumber ?? '—'}</td>
+      <th scope="row" className={`whitespace-nowrap px-5 py-7 text-left align-middle text-base text-gray-950 print:whitespace-normal print:px-1.5 print:py-2 print:text-xs ${total ? 'font-semibold' : 'font-medium'}`}>
+        {total ? name : <Link href={`/branches/${branchId}?${detailQuery}`} className="font-semibold text-gray-950 underline-offset-2 hover:underline focus-visible:underline">{name}</Link>}
       </th>
       <td className={cell}>
-        <span className="block font-semibold text-gray-900">{counts.activeStudents} active</span>
-        <span className="mt-0.5 block text-xs font-medium text-gray-700">{counts.newStudents} new in period</span>
+        <span className="block">{counts.activeStudents} active</span>
+        <span className="mt-1 block text-sm font-normal text-gray-700">{counts.newStudents} new in period</span>
       </td>
       <td className={cell}>
-        <span className="block font-semibold text-gray-900">{counts.classes}</span>
-        <span className="mt-0.5 block text-xs font-medium text-gray-700">classes</span>
-        {counts.cancelledClasses > 0 && (
-          <span className="block text-[11px] font-medium text-gray-700">{counts.cancelledClasses} cancelled</span>
-        )}
-        {counts.incompletePastClasses > 0 && (
-          <span className="block text-[11px] font-normal text-amber-700">{counts.incompletePastClasses} not fully marked · {counts.unmarkedStudentMarks} attendance marks missing</span>
-        )}
+        <span className="block">{counts.classes}</span>
+        <span className="mt-1 block text-sm font-normal text-gray-700">sessions</span>
+        {counts.cancelledClasses > 0 && <span className="mt-1 block text-sm font-normal text-gray-600">{counts.cancelledClasses} cancelled</span>}
       </td>
+      <td className={cell}><AttendanceCell counts={counts} /></td>
+      <td className={cell}><CoverageCell counts={counts} /></td>
       <td className={cell}><RateCell counts={counts} /></td>
-      <td className={cell}>
-        <span className="block font-semibold text-gray-900">{counts.assessedStudents} assessed</span>
-        <span className="mt-0.5 block text-xs font-medium text-gray-700">{counts.progressEntries} checks</span>
-        <span className="mt-0.5 block text-xs font-medium text-gray-700">{counts.readyForAssessment} recommended for assessment</span>
-      </td>
     </tr>
   )
 }
@@ -75,14 +83,9 @@ export default function BranchReportTable({ branches, totals, sort, dir, baseQue
 
   const rows = [...branches].sort((a, b) => {
     if (!column) return direction === 'asc' ? byName(a, b) : byName(b, a)
-    if (column.byReliability) {
-      const tier = dataTier(a) - dataTier(b)
-      if (tier) return tier
-    }
     const first = column.value(a)
     const second = column.value(b)
     if (first === second) return byName(a, b)
-    // branches with nothing to compare always go last
     if (first === null) return 1
     if (second === null) return -1
     return direction === 'asc' ? first - second : second - first
@@ -92,7 +95,7 @@ export default function BranchReportTable({ branches, totals, sort, dir, baseQue
     const active = key === sortKey
     const nextDir = active ? (direction === 'asc' ? 'desc' : 'asc') : key === 'name' ? 'asc' : 'desc'
     return (
-      <Link href={`/branches?${baseQuery}&sort=${key}&dir=${nextDir}`} scroll={false} className="inline-flex items-center gap-1 text-gray-950 focus-visible:underline">
+      <Link href={`/branches?${baseQuery}&sort=${key}&dir=${nextDir}`} scroll={false} className="inline-flex items-center gap-1 text-inherit focus-visible:underline">
         {label}
         {active && <span aria-hidden className="text-[9px]">{direction === 'asc' ? '▲' : '▼'}</span>}
       </Link>
@@ -101,31 +104,32 @@ export default function BranchReportTable({ branches, totals, sort, dir, baseQue
   const ariaSort = (key: string) => key === sortKey ? (direction === 'asc' ? 'ascending' : 'descending') : undefined
 
   return (
-    <Card title="Branch comparison" titleClassName="text-base font-semibold tracking-tight text-gray-950" chip={`${branches.length} branch${branches.length === 1 ? '' : 'es'}`} flush className={cardClass}>
-      {totals.classes === 0 && (
-        <div className="px-5 pb-4"><EmptyNote>No classes in this date range. Try a wider range.</EmptyNote></div>
-      )}
-      <div className="overflow-x-auto print:overflow-visible">
-        <table className="system-data-table branch-report-table w-full min-w-[720px] print:min-w-0">
+    <section aria-labelledby="branch-comparison-title" className="min-w-0 bg-white">
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <h3 id="branch-comparison-title" className="text-lg font-semibold tracking-tight text-gray-950">Branch comparison</h3>
+        <span className="rounded-md bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700">{branches.length} branch{branches.length === 1 ? '' : 'es'}</span>
+      </div>
+      <div className="overflow-x-auto border-y border-gray-200 print:overflow-visible">
+        <table className="system-data-table branch-report-table w-full min-w-[1120px] border-collapse print:min-w-0">
           <thead>
-            <tr className="border-b border-gray-100">
-              <th scope="col" aria-sort={ariaSort('name')} className="th pl-5 pr-3 text-[13px] font-semibold text-gray-950 print:pl-2 print:pr-1.5">{sortLink('name', 'Branch')}</th>
+            <tr className="border-b border-gray-200">
+              <th scope="col" className="w-16 px-5 py-5 text-left text-[15px] font-medium text-gray-600 print:px-1.5 print:py-2 print:text-xs">#</th>
+              <th scope="col" aria-sort={ariaSort('name')} className="px-5 py-5 text-left text-[15px] font-medium text-gray-600 print:px-1.5 print:py-2 print:text-xs">{sortLink('name', 'Branch')}</th>
               {COLUMNS.map((item) => (
-                <th key={item.key} scope="col" aria-sort={ariaSort(item.key)} title={item.tip} className="th px-3 text-left text-[13px] font-semibold text-gray-950 last:pr-5 print:px-1.5">
+                <th key={item.key} scope="col" aria-sort={ariaSort(item.key)} title={item.tip} className="px-5 py-5 text-left text-[15px] font-medium text-gray-600 print:px-1.5 print:py-2 print:text-xs">
                   {sortLink(item.key, item.label)}
                   <span className="sr-only">: {item.tip}</span>
                 </th>
               ))}
             </tr>
           </thead>
-          <PaginatedTableRows itemLabel="branch report rows" colSpan={5} pinnedRows={1}>
-            {rows.map((branch) => <ReportRow key={branch.branchId} branchId={branch.branchId} name={branch.branchName} counts={branch} detailQuery={detailQuery} />)}
-            {/* totals always stay at the bottom, whatever the sort */}
-            <ReportRow name="All branches" counts={totals} />
+          {totals.classes === 0 && totals.cancelledClasses === 0 && <tbody className="print:hidden"><tr><td colSpan={7} className="border-b border-gray-100 px-5 py-6 text-center text-sm text-gray-600">No class sessions in this period. Try a wider date range.</td></tr></tbody>}
+          <PaginatedTableRows itemLabel="branch report rows" colSpan={7} pinnedRows={1}>
+            {rows.map((branch, index) => <ReportRow key={branch.branchId} branchId={branch.branchId} rowNumber={index + 1} name={branch.branchName} counts={branch} detailQuery={detailQuery} />)}
+            <ReportRow name="All branches" rowNumber={null} counts={totals} />
           </PaginatedTableRows>
         </table>
       </div>
-      <p className="px-5 py-3 text-xs font-medium text-gray-700">Rates with fewer than {LOW_DATA_MARKS} attendance marks are labeled “Low data.”</p>
-    </Card>
+    </section>
   )
 }

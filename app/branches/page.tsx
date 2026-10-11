@@ -11,7 +11,6 @@ import PrintReportButton from '@/app/branches/_components/PrintReportButton'
 import { getCurrentUser } from '@/utils/getCurrentUser'
 import { dateInTimeZone } from '@/utils/dates'
 import { getBranchReportWithComparison, resolveReportRange } from '@/utils/branch-reports'
-import { parseBranchOperatingHours } from '@/utils/branch-operating-hours'
 
 export default async function BranchesPage({
   searchParams,
@@ -32,16 +31,14 @@ export default async function BranchesPage({
 
   const { data: branches, error } = await supabase
     .from('branch')
-    .select('id, name, address, description, photo_url, is_active, operating_hours')
+    .select('id, name, address, description, photo_url, is_active')
     .order('name')
 
   if (error) {
     return (
       <DashboardShell title="Branches" currentUser={currentUser}>
         <p role="alert" className="text-red-600 text-sm">
-          {error.message.includes('operating_hours')
-            ? 'Branch operating hours need a database update. Apply supabase/migrations/20261010100000_branch_operating_hours.sql in Supabase, then reload this page.'
-            : `Something went wrong: ${error.message}`}
+          {`Something went wrong: ${error.message}`}
         </p>
       </DashboardShell>
     )
@@ -49,9 +46,9 @@ export default async function BranchesPage({
 
   const branchRows = branches ?? []
 
-  // report filters come from the URL; unknown branch ids are dropped, empty = all branches
   const knownBranchIds = new Set(branchRows.map((branch) => Number(branch.id)))
-  const selectedBranchIds = [...new Set((params.branches ?? '').split(',').map(Number))].filter((id) => knownBranchIds.has(id))
+  const requestedBranchIds = [...new Set((params.branches ?? '').split(',').map(Number))].filter((id) => knownBranchIds.has(id))
+  const selectedBranchIds = requestedBranchIds.length === 1 ? requestedBranchIds : []
   const reportRange = resolveReportRange(params.range, params.from, params.to)
   const reportResult = view === 'reports' && branchRows.length
     ? await getBranchReportWithComparison({ start: reportRange.start, end: reportRange.end, branchIds: selectedBranchIds })
@@ -102,7 +99,6 @@ export default async function BranchesPage({
   const branchesWithStats = branchRows.map((branch) => ({
     ...branch,
     address: branch.address ?? '',
-    operating_hours: parseBranchOperatingHours(branch.operating_hours),
     studentCount: studentsByBranch.get(Number(branch.id)) ?? 0,
     todayClasses: classesByBranch.get(Number(branch.id)) ?? 0,
   })).sort((a, b) => Number(b.is_active) - Number(a.is_active) || a.name.localeCompare(b.name))
@@ -145,10 +141,6 @@ export default async function BranchesPage({
               />}
           </div>
         : <>
-          <div className="mb-5 mt-5">
-            <h2 className="text-xl font-semibold text-black">Branches</h2>
-            <p className="mt-1 text-sm text-gray-500">{branchRows.filter((branch) => branch.is_active).length} active · {branchRows.filter((branch) => !branch.is_active).length} archived. Closed branches stay available for historical reports.</p>
-          </div>
           <BranchesView branches={branchesWithStats} />
         </>}
     </DashboardShell>

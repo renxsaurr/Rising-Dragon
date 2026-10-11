@@ -6,7 +6,7 @@ import { REMINDER_TYPES, type ReminderStatus, type ReminderType } from '@/utils/
 type Admin = ReturnType<typeof createAdminClient>
 
 const HISTORY_FETCH_BATCH_SIZE = 1000
-export const HISTORY_STATUSES: ReminderStatus[] = ['Sent', 'Failed', 'Skipped', 'Scheduled']
+export const HISTORY_STATUSES: ReminderStatus[] = ['Sent', 'Failed']
 const MAX_SEARCH_LENGTH = 60
 const MAX_SEARCH_WORDS = 3
 
@@ -24,6 +24,7 @@ export type RawHistoryParams = {
   htype?: string
   hbranch?: string
   hpage?: string
+  hid?: string
 }
 
 export type HistoryRow = {
@@ -51,7 +52,7 @@ export type ReminderHistory = {
   rows: HistoryRow[]
   total: number
   /** Respects the branch filter only. */
-  summary: { sent: number; failed: number; skipped: number }
+  summary: { sent: number; failed: number }
   branches: { id: number; name: string }[]
 }
 
@@ -124,6 +125,7 @@ function historyQuery(admin: Admin, filters: HistoryFilters, head = false) {
     .from('payment_reminder')
     .select(`${HISTORY_COLUMNS}, ${paymentEmbed(inner)}`, { count: 'exact', head })
   if (filters.status !== 'all') query = query.eq('status', filters.status)
+  else query = query.in('status', HISTORY_STATUSES)
   if (filters.type !== 'all') query = query.eq('reminder_type', filters.type)
   if (filters.branch !== 'all') query = query.eq('payment.student.branch_id', Number(filters.branch))
   // One condition per word, all required: "juan cruz" finds "Juan Dela Cruz".
@@ -166,23 +168,26 @@ export async function loadReminderHistory(
       name: branch.name,
     }))
     const filters = parseFilters(raw, new Set(branches.map((branch) => String(branch.id))))
+    const requestedId = raw.hid && /^\d+$/.test(raw.hid) ? Number(raw.hid) : null
     // Search is applied to the loaded rows so it can match both student and branch names.
     const queryFilters = { ...filters, q: '' }
 
-    const fetchBatch = (start: number) =>
-      historyQuery(admin, queryFilters)
+    const fetchBatch = (start: number) => {
+      let query = historyQuery(admin, queryFilters)
+      if (requestedId !== null && Number.isSafeInteger(requestedId) && requestedId > 0) query = query.eq('id', requestedId)
+      return query
         .order('created_at', { ascending: false })
         .order('id', { ascending: false })
         .range(start, start + HISTORY_FETCH_BATCH_SIZE - 1)
+    }
 
-    const [firstBatch, sent, failed, skipped] = await Promise.all([
+    const [firstBatch, sent, failed] = await Promise.all([
       fetchBatch(0),
       statusCount(admin, 'Sent', filters.branch),
       statusCount(admin, 'Failed', filters.branch),
-      statusCount(admin, 'Skipped', filters.branch),
     ])
     if (firstBatch.error) throw new Error(firstBatch.error.message)
-    for (const result of [sent, failed, skipped]) {
+    for (const result of [sent, failed]) {
       if (result.error) throw new Error(result.error.message)
     }
 
@@ -242,7 +247,7 @@ export async function loadReminderHistory(
         filters,
         rows,
         total,
-        summary: { sent: sent.count ?? 0, failed: failed.count ?? 0, skipped: skipped.count ?? 0 },
+        summary: { sent: sent.count ?? 0, failed: failed.count ?? 0 },
         branches,
       },
       error: null,

@@ -1,10 +1,9 @@
 'use client'
 
 import { useCallback, useMemo, useState } from 'react'
-import { Search, X } from 'lucide-react'
+import { ChevronDown, Search, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import AddPaymentButton from './AddPaymentButton'
-import AdvancePaymentButton from './AdvancePaymentButton'
 import CreateBillModal from './CreateBillModal'
 import MarkPaidButton from './MarkPaidButton'
 import ReminderReviewModal from './ReminderReviewModal'
@@ -107,7 +106,7 @@ function RowActions({ row, studentChoices, month, today, monthlyFee, perSessionF
                   dueDate: formatDate(row.monthlyStudent.existingUnpaid.dueDate),
                 }}
                 today={today}
-                trigger={<RowActionItem>Record payment</RowActionItem>}
+                trigger={<RowActionItem>Mark as paid</RowActionItem>}
               />
             ) : (
               <AddPaymentButton
@@ -120,14 +119,6 @@ function RowActions({ row, studentChoices, month, today, monthlyFee, perSessionF
                 initialStudent={choice}
                 label="Add payment or bill"
                 trigger={<RowActionItem>Add payment</RowActionItem>}
-              />
-            )}
-            {row.monthlyStudent?.existingUnpaid && (
-              <AdvancePaymentButton
-                students={[choice]}
-                today={today}
-                initialStudent={choice}
-                trigger={<RowActionItem>Record advance payment</RowActionItem>}
               />
             )}
             {row.monthlyStudent?.existingUnpaid && reminderState && (
@@ -148,7 +139,7 @@ function RowActions({ row, studentChoices, month, today, monthlyFee, perSessionF
             studentName={row.studentName}
             charges={row.sessionCharges}
             today={today}
-            trigger={<RowActionItem>Record selected session payments</RowActionItem>}
+            trigger={<RowActionItem>Mark selected sessions as paid</RowActionItem>}
           />
         )}
       </RowActionsMenu>
@@ -180,6 +171,9 @@ export default function UnpaidStudentsTable({
   monthlyFee,
   perSessionFee,
   reminderSchedule,
+  initialSearch = '',
+  initialStudentId = null,
+  initialStatusFilter = 'all',
 }: {
   monthlyStudents: NotPaidStudent[]
   sessionPayments: PaymentRecord[]
@@ -191,11 +185,15 @@ export default function UnpaidStudentsTable({
   monthlyFee: number | null
   perSessionFee: number
   reminderSchedule: ReminderSchedule
+  initialSearch?: string
+  initialStudentId?: number | null
+  initialStatusFilter?: 'all' | 'overdue' | 'due-soon' | 'unpaid' | 'bill-needed'
 }) {
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(initialSearch)
+  const [studentIdFilter, setStudentIdFilter] = useState<number | null>(initialStudentId)
   const [planFilter, setPlanFilter] = useState<'all' | 'Monthly' | 'Per session'>('all')
   const [branchFilter, setBranchFilter] = useState(selectedBranch)
-  const [statusFilter, setStatusFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState(initialStatusFilter)
 
   const rows = useMemo<UnpaidRow[]>(() => {
     const monthly: UnpaidRow[] = monthlyStudents.map((student) => ({
@@ -245,6 +243,7 @@ export default function UnpaidStudentsTable({
 
   const searchTerms = search.trim().toLowerCase().split(/\s+/).filter(Boolean)
   const visibleRows = rows.filter((row) => {
+    if (studentIdFilter !== null && row.studentId !== studentIdFilter) return false
     if (planFilter !== 'all' && row.billingPlan !== planFilter) return false
     if (branchFilter !== 'all' && row.branchName !== branches.find((branch) => branch.key === branchFilter)?.name) return false
     const days = row.dueDate ? daysUntil(today, row.dueDate) : null
@@ -261,7 +260,7 @@ export default function UnpaidStudentsTable({
     return searchTerms.every((term) => searchable.includes(term))
   })
 
-  const clearSearch = useCallback(() => setSearch(''), [])
+  const clearSearch = useCallback(() => { setSearch(''); setStudentIdFilter(null) }, [])
 
   return (
     <div>
@@ -270,28 +269,37 @@ export default function UnpaidStudentsTable({
           <div className="relative min-w-[220px] flex-1">
             <label htmlFor="unpaid-student-search" className="sr-only">Search unpaid students</label>
             <Search aria-hidden="true" size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input id="unpaid-student-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search student or branch" className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-10 text-sm font-medium text-gray-950 placeholder:font-medium placeholder:text-gray-500 outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100" />
+            <input id="unpaid-student-search" value={search} onChange={(event) => { setSearch(event.target.value); setStudentIdFilter(null) }} placeholder="Search student or branch" className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-10 text-sm font-medium text-gray-950 placeholder:font-medium placeholder:text-gray-500 outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100" />
             {search && <button type="button" aria-label="Clear search" onClick={clearSearch} className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-gray-400 hover:bg-gray-100"><X size={15} aria-hidden="true" /></button>}
           </div>
           <label className="sr-only" htmlFor="unpaid-branch-filter">Branch</label>
-          <select id="unpaid-branch-filter" value={branchFilter} onChange={(event) => setBranchFilter(event.target.value)} className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-950">
-            <option value="all">All branches</option>
-            {branches.filter((branch) => branch.key !== 'all').map((branch) => <option key={branch.key} value={branch.key}>{branch.name}</option>)}
-          </select>
+          <span className="relative inline-block">
+            <select id="unpaid-branch-filter" value={branchFilter} onChange={(event) => setBranchFilter(event.target.value)} className="h-10 appearance-none rounded-lg border border-gray-200 bg-white py-0 pl-3 pr-12 text-sm font-medium text-gray-950">
+              <option value="all">All branches</option>
+              {branches.filter((branch) => branch.key !== 'all').map((branch) => <option key={branch.key} value={branch.key}>{branch.name}</option>)}
+            </select>
+            <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-700" />
+          </span>
           <label className="sr-only" htmlFor="unpaid-plan-filter">Billing plan</label>
-          <select id="unpaid-plan-filter" value={planFilter} onChange={(event) => setPlanFilter(event.target.value as typeof planFilter)} className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-950">
-            <option value="all">All billing plans</option>
-            <option value="Monthly">Monthly</option>
-            <option value="Per session">Per session</option>
-          </select>
+          <span className="relative inline-block">
+            <select id="unpaid-plan-filter" value={planFilter} onChange={(event) => setPlanFilter(event.target.value as typeof planFilter)} className="h-10 appearance-none rounded-lg border border-gray-200 bg-white py-0 pl-3 pr-12 text-sm font-medium text-gray-950">
+              <option value="all">All billing plans</option>
+              <option value="Monthly">Monthly</option>
+              <option value="Per session">Per session</option>
+            </select>
+            <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-700" />
+          </span>
           <label className="sr-only" htmlFor="unpaid-status-filter">Payment status</label>
-          <select id="unpaid-status-filter" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-950">
-            <option value="all">All unpaid</option>
-            <option value="overdue">Overdue</option>
-            <option value="due-soon">Due soon</option>
-            <option value="unpaid">Not due soon</option>
-            <option value="bill-needed">Bill needed</option>
-          </select>
+          <span className="relative inline-block">
+            <select id="unpaid-status-filter" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} className="h-10 appearance-none rounded-lg border border-gray-200 bg-white py-0 pl-3 pr-12 text-sm font-medium text-gray-950">
+              <option value="all">All unpaid</option>
+              <option value="overdue">Overdue</option>
+              <option value="due-soon">Due soon</option>
+              <option value="unpaid">Not due soon</option>
+              <option value="bill-needed">Bill needed</option>
+            </select>
+            <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-700" />
+          </span>
         </div>
         <p className="text-sm font-medium text-gray-950" aria-live="polite">{visibleRows.length} of {rows.length} students need payment</p>
       </div>

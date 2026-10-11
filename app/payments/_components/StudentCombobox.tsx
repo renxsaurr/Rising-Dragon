@@ -1,13 +1,20 @@
 'use client'
 
 import { useId, useMemo, useState, type KeyboardEvent } from 'react'
+import { beltTextColorClass } from '@/utils/belts'
 import { INPUT } from './ModalShell'
 
 export type StudentChoice = { id: number; name: string; belt: string; branch: string; billingPlan: 'Monthly' | 'Per session' }
 
 const MAX_RESULTS = 8
 
-const details = (student: StudentChoice) => [student.billingPlan === 'Per session' ? 'Pay per session' : 'Monthly', student.belt, student.branch].filter(Boolean).join(' · ')
+function StudentDetails({ student }: { student: StudentChoice }) {
+  return <>
+    {student.billingPlan === 'Per session' ? 'Pay per session' : 'Monthly'}
+    {student.belt && <> · <span className={`font-medium ${beltTextColorClass(student.belt)}`}>{student.belt}</span></>}
+    {student.branch && <> · {student.branch}</>}
+  </>
+}
 
 /** Every typed word must appear somewhere in the name, ignoring case: "juan cruz" finds "Juan Dela Cruz". */
 function matchesName(name: string, query: string) {
@@ -22,12 +29,14 @@ export default function StudentCombobox({
   selectedId,
   onSelect,
   disabled,
+  showSelectedDetails = true,
 }: {
   inputId: string
   students: StudentChoice[]
   selectedId: number | null
   onSelect: (id: number | null) => void
   disabled: boolean
+  showSelectedDetails?: boolean
 }) {
   const selected = students.find((student) => student.id === selectedId) ?? null
   const [query, setQuery] = useState(selected?.name ?? '')
@@ -99,7 +108,7 @@ export default function StudentCombobox({
         className={INPUT}
       />
 
-      {selected && !showList && <p className="mt-1 text-xs text-gray-500">{details(selected)}</p>}
+      {showSelectedDetails && selected && !showList && <p className="mt-1 text-xs text-gray-500"><StudentDetails student={selected} /></p>}
 
       {showList &&
         (matches.length ? (
@@ -123,7 +132,7 @@ export default function StudentCombobox({
                   className={`cursor-pointer px-3 py-2 text-sm ${index === activeIndex ? 'bg-gray-100 text-black' : 'text-gray-700'}`}
                 >
                   <span className="font-medium">{student.name}</span>
-                  {details(student) && <span className="text-gray-500"> · {details(student)}</span>}
+                  <span className="text-gray-500"> · <StudentDetails student={student} /></span>
                 </li>
               ))}
             </ul>
