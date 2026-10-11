@@ -3,10 +3,11 @@
 import { MouseEvent, ReactNode, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname, useRouter } from "next/navigation";
-import { createClient } from "@/utils/supabase/client";
+import { usePathname } from "next/navigation";
 import GlobalSearch from "@/components/GlobalSearch";
 import NotificationsMenu from "@/components/NotificationsMenu";
+import { ActionFeedbackProvider } from "@/components/ActionFeedback";
+import LogoutButton from "@/components/LogoutButton";
 
 const GridIcon = () => (
   <svg
@@ -122,21 +123,6 @@ const SettingsIcon = () => (
     />
   </svg>
 );
-const LogoutIcon = () => (
-  <svg
-    className="w-5 h-5"
-    fill="none"
-    viewBox="0 0 24 24"
-    stroke="currentColor"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={1.75}
-      d="M17 16l4-4m0 0l-4-4m4 4H7m6 5v1a3 3 0 01-3 3H6a3 3 0 01-3-3V6a3 3 0 013-3h4a3 3 0 013 3v1"
-    />
-  </svg>
-);
 const IdCardIcon = () => (
   <svg
     className="w-5 h-5"
@@ -173,9 +159,6 @@ export default function DashboardShell({
   children: ReactNode;
 }) {
   const pathname = usePathname();
-  const router = useRouter();
-  const supabase = createClient();
-
   const isHeadCoach = currentUser?.role === "head_coach";
 
   const workspaceItems = [
@@ -242,11 +225,6 @@ export default function DashboardShell({
       soon: false,
     },
   ];
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
-  };
 
   // Highlight the clicked link immediately instead of waiting for the server render to finish.
   const [pendingHref, setPendingHref] = useState<string | null>(null);
@@ -344,6 +322,7 @@ export default function DashboardShell({
     ) : null;
 
   return (
+    <ActionFeedbackProvider>
     <div data-shell="root" className="flex h-dvh w-full overflow-hidden bg-white">
       <aside data-shell="sidebar" className={`flex h-full shrink-0 flex-col border-r border-gray-200 bg-white transition-[width] duration-200 ${sidebarOpen ? "w-64" : "w-[72px]"}`}>
         <Link
@@ -401,15 +380,7 @@ export default function DashboardShell({
         </nav>
 
         <div className="p-4">
-          <button
-            onClick={handleLogout}
-            title={!sidebarOpen ? "Logout" : undefined}
-            aria-label="Logout"
-            className={`flex w-full items-center justify-center rounded-lg border border-gray-200 bg-white py-2.5 text-[14px] font-medium text-gray-700 transition-colors hover:bg-gray-100 hover:text-gray-950 ${sidebarOpen ? "gap-2.5 px-4" : "px-2"}`}
-          >
-            <LogoutIcon />
-            {sidebarOpen && "Logout"}
-          </button>
+          <LogoutButton sidebarOpen={sidebarOpen} />
         </div>
       </aside>
 
@@ -444,5 +415,6 @@ export default function DashboardShell({
         </main>
       </div>
     </div>
+    </ActionFeedbackProvider>
   );
 }

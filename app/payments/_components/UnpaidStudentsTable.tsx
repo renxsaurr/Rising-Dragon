@@ -11,7 +11,6 @@ import RowActionItem, { ROW_ACTION_CLASS } from '@/components/RowActionItem'
 import RowActionsMenu from '@/components/RowActionsMenu'
 import PaginatedTableRows from '@/components/PaginatedTableRows'
 import PaginatedListItems from '@/components/PaginatedListItems'
-import { Toast } from '@/components/Toast'
 import { formatBeltLabel } from '@/utils/belts'
 import { formatAmount } from '@/utils/payment-display'
 import { formatPeso } from '@/utils/payment-fees'
@@ -72,7 +71,6 @@ function RowActions({ row, studentChoices, month, today, monthlyFee, perSessionF
   const router = useRouter()
   const [billOpen, setBillOpen] = useState(false)
   const [reviewId, setReviewId] = useState<number | null>(null)
-  const [notice, setNotice] = useState('')
   const choice: StudentChoice = {
     id: row.studentId,
     name: row.studentName,
@@ -89,7 +87,6 @@ function RowActions({ row, studentChoices, month, today, monthlyFee, perSessionF
     setBillOpen(false)
     router.refresh()
     if (timing.open) setReviewId(paymentId)
-    else setNotice(`Bill created. The ${timing.nextType} reminder opens on ${formatDate(timing.opensOn)}.`)
   }
 
   return (
@@ -155,7 +152,6 @@ function RowActions({ row, studentChoices, month, today, monthlyFee, perSessionF
         />
       )}
       {reviewId !== null && <ReminderReviewModal target={{ kind: 'payment', id: reviewId }} onClose={() => setReviewId(null)} />}
-      {notice && <Toast message={notice} onDismiss={() => setNotice('')} />}
     </>
   )
 }

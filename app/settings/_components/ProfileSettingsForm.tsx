@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { updateOwnProfile } from '@/app/settings/actions'
+import { useActionFeedback } from '@/components/ActionFeedback'
 
 const INPUT = 'h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-950 outline-none focus:border-gray-500 focus-visible:ring-2 focus-visible:ring-black/10'
 const LABEL = 'mb-1.5 block text-[13px] font-medium text-gray-800'
@@ -19,25 +20,24 @@ export default function ProfileSettingsForm({
   contact: string
 }) {
   const router = useRouter()
+  const { showSuccess } = useActionFeedback()
   const [first, setFirst] = useState(firstName)
   const [middle, setMiddle] = useState(middleName)
   const [last, setLast] = useState(lastName)
   const [phone, setPhone] = useState(contact)
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
   const [saving, setSaving] = useState(false)
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setSaving(true)
     setError('')
-    setNotice('')
     try {
       const result = await updateOwnProfile({ firstName: first, middleName: middle, lastName: last, contact: phone })
       if ('error' in result) setError(result.error)
       else {
-        setNotice('Your name and phone number were saved.')
         router.refresh()
+        showSuccess('Your name and phone number were saved.')
       }
     } catch {
       setError('Could not save your account details. Please try again.')
@@ -71,7 +71,6 @@ export default function ProfileSettingsForm({
           {saving ? 'Saving…' : 'Save account details'}
         </button>
       </div>
-      {notice && <p role="status" className="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
       {error && <p role="alert" className="break-words rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
     </form>
   )

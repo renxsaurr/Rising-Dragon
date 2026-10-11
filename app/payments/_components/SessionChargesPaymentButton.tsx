@@ -6,7 +6,7 @@ import { markPerSessionChargesPaid } from '@/app/payments/actions'
 import { PAYMENT_METHODS } from '@/utils/payment-methods'
 import { formatAmount } from '@/utils/payment-display'
 import type { PaymentRecord } from '@/utils/payment-records'
-import { Toast } from '@/components/Toast'
+import { useActionFeedback } from '@/components/ActionFeedback'
 import ModalShell, { BUTTON_PRIMARY, BUTTON_SECONDARY, INPUT, LABEL } from './ModalShell'
 
 const formatDate = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', {
@@ -27,13 +27,13 @@ export default function SessionChargesPaymentButton({
   trigger: ReactNode
 }) {
   const router = useRouter()
+  const { showSuccess, confirmAction } = useActionFeedback()
   const [open, setOpen] = useState(false)
   const [selected, setSelected] = useState<number[]>(charges.map((charge) => charge.id))
   const [paidDate, setPaidDate] = useState(today)
   const [method, setMethod] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
   const paidDateId = useId()
   const methodId = useId()
   const selectedCharges = useMemo(() => charges.filter((charge) => selected.includes(charge.id)), [charges, selected])
@@ -42,6 +42,12 @@ export default function SessionChargesPaymentButton({
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (saving || selected.length === 0 || !method) return
+    const confirmed = await confirmAction({
+      title: 'Record this session payment?',
+      description: `Mark ${selected.length} session charge${selected.length === 1 ? '' : 's'} for ${studentName} as paid for ${formatAmount(selectedTotal)}?`,
+      confirmLabel: 'Record payment',
+    })
+    if (!confirmed) return
     setSaving(true)
     setError('')
     try {
@@ -53,9 +59,9 @@ export default function SessionChargesPaymentButton({
       const message = result.updatedCount === selected.length
         ? `${result.updatedCount} session charge${result.updatedCount === 1 ? '' : 's'} marked paid for ${studentName}.`
         : `${result.updatedCount} of ${selected.length} selected charges were still unpaid and marked paid.`
-      setNotice(message)
       setOpen(false)
       router.refresh()
+      showSuccess(message)
     } catch {
       setError('Could not reach the server. Please try again.')
     } finally {
@@ -123,7 +129,6 @@ export default function SessionChargesPaymentButton({
           </form>
         </ModalShell>
       )}
-      {notice && <Toast message={notice} onDismiss={() => setNotice('')} />}
     </>
   )
 }

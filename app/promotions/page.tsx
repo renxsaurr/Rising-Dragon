@@ -1,6 +1,5 @@
 import { cookies } from "next/headers";
 import Link from "next/link";
-import { ChevronDown } from "lucide-react";
 import { redirect } from "next/navigation";
 import DashboardShell from "@/components/DashboardShell";
 import { createClient } from "@/utils/supabase/server";
@@ -12,6 +11,7 @@ import PromoteStudentModal from "@/components/PromoteStudentModal";
 import RowActionsMenu from "@/components/RowActionsMenu";
 import RowActionItem from "@/components/RowActionItem";
 import PaginatedTableRows from "@/components/PaginatedTableRows";
+import PromotionFilters from "./_components/PromotionFilters";
 
 export const dynamic = "force-dynamic";
 
@@ -180,38 +180,13 @@ export default async function PromotionsPage({
         </p>
       </div>
 
-      <form action="/promotions" method="get" className="mb-5 flex flex-wrap items-center gap-2.5">
-        {activeView === "history" && <input type="hidden" name="view" value="history" />}
-        <label htmlFor="promotion-search" className="sr-only">Search promotions</label>
-        <input
-          id="promotion-search"
-          type="search"
-          name="q"
-          defaultValue={searchQuery}
-          placeholder="Search student, branch, or belt"
-          className="h-11 min-w-[220px] flex-1 rounded-lg border border-gray-200 bg-white px-4 text-sm text-gray-950 outline-none placeholder:text-gray-500 focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
-        />
-        <label htmlFor="promotion-branch-filter" className="sr-only">Branch</label>
-        <div className="relative">
-          <select id="promotion-branch-filter" name="branch" defaultValue={branchFilter} className="h-11 min-w-[170px] appearance-none rounded-lg border border-gray-200 bg-white py-2 pl-3 pr-12 text-sm font-medium text-gray-950 outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100">
-            <option value="all">All branches</option>
-            {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
-          </select>
-          <ChevronDown aria-hidden="true" size={16} className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-700" />
-        </div>
-        <label htmlFor="promotion-belt-filter" className="sr-only">Belt level</label>
-        <div className="relative">
-          <select id="promotion-belt-filter" name="belt" defaultValue={beltFilter} className={`h-11 min-w-[170px] appearance-none rounded-lg border border-gray-200 bg-white py-2 pl-3 pr-12 text-sm font-medium outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100 ${beltFilter === "all" ? "text-gray-950" : beltTextColorClass(beltFilter)}`}>
-            <option value="all">All belt levels</option>
-            {Object.entries(BELT_LABELS).map(([value, label]) => <option key={value} value={value} className={beltTextColorClass(value)}>{label}</option>)}
-          </select>
-          <ChevronDown aria-hidden="true" size={16} className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-700" />
-        </div>
-        <button type="submit" className="h-11 rounded-lg bg-black px-5 text-sm font-semibold text-white transition-colors hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2">Search</button>
-        {(searchQuery || branchFilter !== "all" || beltFilter !== "all") && (
-          <Link href={activeView === "history" ? "/promotions?view=history" : "/promotions"} className="rounded-lg px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100">Clear filters</Link>
-        )}
-      </form>
+      <PromotionFilters
+        initialQuery={searchQuery}
+        initialBranch={branchFilter}
+        initialBelt={beltFilter}
+        activeView={activeView}
+        branches={branches}
+      />
 
       {activeView === "promotions" ? <section aria-labelledby="active-students-title">
         <h2 id="active-students-title" className="sr-only">Active students</h2>

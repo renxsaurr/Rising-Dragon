@@ -19,6 +19,7 @@ import type { StudentPaymentSummary } from '@/utils/payment-records'
 import ModalShell, { BUTTON_PRIMARY, BUTTON_SECONDARY, FOCUS_RING, INPUT, LABEL } from './ModalShell'
 import StudentCombobox, { type StudentChoice } from './StudentCombobox'
 import StudentInfoCard from './StudentInfoCard'
+import { useActionFeedback } from '@/components/ActionFeedback'
 
 const LABEL_INLINE = 'text-[13px] font-medium text-gray-700'
 
@@ -63,6 +64,7 @@ export default function AddPaymentModal({
   initialStudentId?: number
   onClose: () => void
 }) {
+  const { showSuccess, confirmAction } = useActionFeedback()
   const [studentId, setStudentId] = useState<number | null>(initialStudentId ?? null)
   const [paymentType, setPaymentType] = useState<PaymentType>(() => students.find((choice) => choice.id === (initialStudentId ?? null))?.billingPlan ?? 'Monthly')
   const [startMonth, setStartMonth] = useState(month)
@@ -187,6 +189,12 @@ export default function AddPaymentModal({
       return
     }
     if (blockedByOverlap) return
+    const confirmed = await confirmAction({
+      title: paidNow ? 'Record this payment?' : 'Create this bill?',
+      description: summaryLine,
+      confirmLabel: paidNow ? 'Record payment' : 'Create bill',
+    })
+    if (!confirmed) return
     savingRef.current = true
     setSaving(true)
     setError('')
@@ -217,6 +225,7 @@ export default function AddPaymentModal({
       }
       // revalidatePath in the action refreshes the list.
       onClose()
+      showSuccess(paidNow ? 'Payment recorded successfully.' : 'Bill created successfully.')
     } catch {
       setError('Could not reach the server. Please try again.')
     } finally {

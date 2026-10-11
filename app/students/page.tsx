@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Form from "next/form";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { cookies } from "next/headers";
@@ -7,6 +6,7 @@ import DashboardShell from "@/components/DashboardShell";
 import StudentModal from "@/components/StudentModal";
 import StudentStatusButton from "@/components/StudentStatusButton";
 import StudentFilters from "@/components/StudentFilters";
+import LiveSearchInput from "@/components/LiveSearchInput";
 import { getCurrentUser } from "@/utils/getCurrentUser";
 import { getCoachBranchIdsForDate } from "@/utils/coach-access";
 import { dateInTimeZone } from "@/utils/dates";
@@ -16,7 +16,6 @@ import RowActionsMenu from "@/components/RowActionsMenu";
 import RowActionItem, { ROW_ACTION_CLASS } from "@/components/RowActionItem";
 import PaginatedTableRows from "@/components/PaginatedTableRows";
 import PaginatedListItems from "@/components/PaginatedListItems";
-import { Search } from "lucide-react";
 
 type StudentRow = {
   id: number;
@@ -197,18 +196,6 @@ export default async function StudentsPage({
   const assistantHasNoSchedule =
     currentUser.role === "assistant_coach" &&
     (assignedBranchIds?.length ?? 0) === 0;
-  const clearSearchParams = new URLSearchParams();
-  if (isHeadCoach && statusFilter !== "active")
-    clearSearchParams.set("status", statusFilter);
-  selectedBranchIds.forEach((id) => clearSearchParams.append("branch", id));
-  selectedBelts.forEach((belt) => clearSearchParams.append("belt", belt));
-  if (selectedBillingPlan !== "all")
-    clearSearchParams.set("plan", selectedBillingPlan);
-  const clearSearchQuery = clearSearchParams.toString();
-  const clearSearchHref = clearSearchQuery
-    ? `/students?${clearSearchQuery}`
-    : "/students";
-
   return (
     <DashboardShell title="Students" currentUser={currentUser}>
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4 border-b border-gray-200 pb-4">
@@ -229,56 +216,12 @@ export default async function StudentsPage({
       </div>
 
       <div className="mb-3 flex w-full flex-wrap items-center gap-2">
-        <Form
-          action="/students"
-          scroll={false}
+        <LiveSearchInput
           className="min-w-[220px] flex-1"
-        >
-          {isHeadCoach && statusFilter !== "active" && (
-            <input type="hidden" name="status" value={statusFilter} />
-          )}
-          {selectedBranchIds.map((id) => (
-            <input key={id} type="hidden" name="branch" value={id} />
-          ))}
-          {selectedBelts.map((belt) => (
-            <input key={belt} type="hidden" name="belt" value={belt} />
-          ))}
-          {selectedBillingPlan !== "all" && (
-            <input type="hidden" name="plan" value={selectedBillingPlan} />
-          )}
-          <label htmlFor="student-search" className="sr-only">
-            Search students
-          </label>
-          <div className="relative w-full">
-            <Search
-              aria-hidden="true"
-              size={17}
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-            />
-            <input
-              id="student-search"
-              name="q"
-              type="search"
-              maxLength={80}
-              defaultValue={searchQuery}
-              placeholder="Search student or branch"
-              className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-10 text-sm font-medium text-gray-950 outline-none transition placeholder:font-normal placeholder:text-gray-500 focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
-            />
-            {searchQuery && (
-              <Link
-                href={clearSearchHref}
-                scroll={false}
-                aria-label="Clear student search"
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-gray-500 hover:text-gray-950"
-              >
-                Clear
-              </Link>
-            )}
-          </div>
-          <button type="submit" className="sr-only">
-            Search students
-          </button>
-        </Form>
+          initialValue={searchQuery}
+          label="Search students"
+          placeholder="Search student or branch"
+        />
 
         <StudentFilters
           branches={filterBranches.map((branch) => ({

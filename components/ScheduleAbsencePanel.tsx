@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { formatTimeRange } from '@/utils/dates'
+import { useActionFeedback } from '@/components/ActionFeedback'
 import {
   getAbsenceCoverageOptions,
   reportScheduleAbsence,
@@ -81,6 +82,7 @@ export default function ScheduleAbsencePanel({
   today: string
 }) {
   const router = useRouter()
+  const { showSuccess, confirmAction } = useActionFeedback()
   const [reports, setReports] = useState(initialReports)
   const [startsOn, setStartsOn] = useState(today)
   const [endsOn, setEndsOn] = useState(today)
@@ -92,7 +94,6 @@ export default function ScheduleAbsencePanel({
   const [reviewErrors, setReviewErrors] = useState<Record<number, string>>({})
   const [busyReportId, setBusyReportId] = useState<number | null>(null)
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
 
   useEffect(() => setReports(initialReports), [initialReports])
 
@@ -100,16 +101,15 @@ export default function ScheduleAbsencePanel({
     event.preventDefault()
     setBusyReportId(0)
     setError('')
-    setNotice('')
     const result = await reportScheduleAbsence({ starts_on: startsOn, ends_on: endsOn, reason })
     setBusyReportId(null)
     if (!('message' in result) || !result.message) {
       setError(('error' in result && result.error) || 'Could not submit the time-away report.')
       return
     }
-    setNotice(result.message)
     setReason('')
     router.refresh()
+    showSuccess(result.message)
   }
 
   const handleReviewReport = async (reportId: number) => {
@@ -136,13 +136,22 @@ export default function ScheduleAbsencePanel({
       setReviewErrors((current) => ({ ...current, [reportId]: 'Choose an available coach for each class before continuing.' }))
       return
     }
-    setBusyReportId(reportId)
     setReviewErrors((current) => ({ ...current, [reportId]: '' }))
-    setNotice('')
     const decisions = sessions.map((session) => ({
       session_id: session.id,
       coach_id: typeof choices[session.id] === 'number' ? choices[session.id] as number : null,
     }))
+    const cancellationCount = decisions.filter((decision) => decision.coach_id === null).length
+    if (cancellationCount > 0) {
+      const confirmed = await confirmAction({
+        title: 'Confirm uncovered classes?',
+        description: `${cancellationCount} class${cancellationCount === 1 ? '' : 'es'} will be cancelled because no coach is available.`,
+        confirmLabel: 'Confirm coverage and cancellation',
+        danger: true,
+      })
+      if (!confirmed) return
+    }
+    setBusyReportId(reportId)
     const result = await resolveAbsenceReport(reportId, decisions)
     setBusyReportId(null)
     if (!('message' in result) || !result.message) {
@@ -150,8 +159,8 @@ export default function ScheduleAbsencePanel({
       setReviewErrors((current) => ({ ...current, [reportId]: message }))
       return
     }
-    setNotice(result.message)
     router.refresh()
+    showSuccess(result.message)
   }
 
   const inputClass = 'mt-1 h-10 w-full min-w-0 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-black focus:outline-none focus:ring-2 focus:ring-black/10'
@@ -187,7 +196,6 @@ export default function ScheduleAbsencePanel({
       )}
 
       {error && <p role="alert" className="mx-4 mt-4 shrink-0 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 sm:mx-5">{error}</p>}
-      {notice && <p role="status" className="mx-4 mt-4 shrink-0 rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-800 sm:mx-5">{notice}</p>}
 
       <div className={`${isAssistantCoach ? 'min-h-0 flex-1 overflow-y-auto' : ''} space-y-3 p-4 sm:p-5`}>
         {pendingReports.length === 0 ? (
@@ -228,11 +236,11 @@ export default function ScheduleAbsencePanel({
                         <select value={typeof selected === 'number' ? selected : ''} onChange={(event) => setCoverageChoices((current) => ({
                           ...current,
                           [report.id]: normalizeCoverageChoices(coverageOptions[report.id] ?? [], { ...(current[report.id] ?? {}), [session.id]: event.target.value ? Number(event.target.value) : '' }),
-                        }))} className={`${inputClass} appearance-none pr-10`}>
+                        }))} className={`${inputClass} appearance-none pr-12`}>
                           {freeOptions.assistants.length > 1 && <option value="">Choose an available coach</option>}
                           {freeOptions.assistants.map((coach) => <option key={coach.id} value={coach.id}>{coach.name}</option>)}
                         </select>
-                        <svg className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-700" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                        <svg className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-700" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
                       </span>
                     </label> : freeOptions.headCoach
                       ? <p className="rounded-lg bg-gray-50 px-3 py-2 text-sm font-medium text-gray-900">No assistant is free for this class. {freeOptions.headCoach.name} will cover.</p>

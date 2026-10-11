@@ -2,22 +2,22 @@
 
 import { useState, type FormEvent } from 'react'
 import { changeOwnPassword } from '@/app/settings/actions'
+import { useActionFeedback } from '@/components/ActionFeedback'
 
 const INPUT = 'h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-950 outline-none focus:border-gray-500 focus-visible:ring-2 focus-visible:ring-black/10'
 const LABEL = 'mb-1.5 block text-[13px] font-medium text-gray-800'
 
 export default function PasswordChangeForm() {
+  const { showSuccess } = useActionFeedback()
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
   const [saving, setSaving] = useState(false)
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError('')
-    setNotice('')
     if (newPassword !== confirmPassword) {
       setError('The new passwords do not match.')
       return
@@ -30,7 +30,7 @@ export default function PasswordChangeForm() {
         setCurrentPassword('')
         setNewPassword('')
         setConfirmPassword('')
-        setNotice('Your password has been changed.')
+        showSuccess('Your password has been changed.')
       }
     } catch {
       setError('Could not change your password. Please try again.')
@@ -61,7 +61,6 @@ export default function PasswordChangeForm() {
           {saving ? 'Updating…' : 'Change password'}
         </button>
       </div>
-      {notice && <p role="status" className="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
       {error && <p role="alert" className="break-words rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
     </form>
   )

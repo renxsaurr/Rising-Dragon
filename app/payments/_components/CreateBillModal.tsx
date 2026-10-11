@@ -8,6 +8,7 @@ import type { NotPaidStudent, StudentPaymentSummary } from '@/utils/payment-reco
 import { reminderWindowFor, type ReminderSchedule, type ReminderWindow } from '@/utils/reminder-timing'
 import ModalShell, { BUTTON_PRIMARY, BUTTON_SECONDARY, INPUT, LABEL } from './ModalShell'
 import StudentInfoCard from './StudentInfoCard'
+import { useActionFeedback } from '@/components/ActionFeedback'
 
 const moneyText = (amount: number) => (Math.round(amount * 100) / 100).toFixed(2)
 
@@ -47,6 +48,7 @@ export default function CreateBillModal({
   onCreated: (paymentId: number, timing: ReminderWindow) => void
   onClose: () => void
 }) {
+  const { showSuccess, confirmAction } = useActionFeedback()
   const amount = monthlyFee === null ? '' : moneyText(monthlyFee)
   const [coverage, setCoverage] = useState<MonthlyCoverage[] | null>(null)
   const [overlapConfirmed, setOverlapConfirmed] = useState(false)
@@ -70,6 +72,12 @@ export default function CreateBillModal({
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (savingRef.current || blocked) return
+    const confirmed = await confirmAction({
+      title: 'Create this bill?',
+      description: `${student.name} · ${formatPeso(Number(amount) || 0)} · due ${formatDate(dueDate)}`,
+      confirmLabel: 'Create bill',
+    })
+    if (!confirmed) return
     savingRef.current = true
     setSaving(true)
     setError('')
@@ -95,7 +103,14 @@ export default function CreateBillModal({
         setOverlapConfirmed(false)
         return
       }
-      onCreated(result.paymentId, reminderWindowFor(dueDate, today, reminderSchedule))
+      const reminderTiming = reminderWindowFor(dueDate, today, reminderSchedule)
+      showSuccess(
+        reminderTiming.open
+          ? 'Bill created. You can review and send its reminder now.'
+          : `Bill created. The ${reminderTiming.nextType} reminder will be available on ${formatDate(reminderTiming.opensOn)}.`,
+        'Bill created',
+      )
+      onCreated(result.paymentId, reminderTiming)
     } catch {
       setError('Could not reach the server. Please try again.')
     } finally {

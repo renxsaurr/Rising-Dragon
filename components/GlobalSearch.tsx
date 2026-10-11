@@ -19,8 +19,11 @@ export default function GlobalSearch({ canSearchStaff }: { canSearchStaff: boole
   const router = useRouter()
   const wrapperRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const pendingEnter = useRef(false)
+  const selectResultRef = useRef<((result: SearchResult) => void) | null>(null)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
+  const [resultsForQuery, setResultsForQuery] = useState('')
   const [isOpen, setIsOpen] = useState(false)
   const [loading, setLoading] = useState(false)
 
@@ -48,6 +51,7 @@ export default function GlobalSearch({ canSearchStaff }: { canSearchStaff: boole
     const term = query.trim()
     if (term.length < 2) {
       setResults([])
+      setResultsForQuery('')
       setLoading(false)
       return
     }
@@ -57,9 +61,21 @@ export default function GlobalSearch({ canSearchStaff }: { canSearchStaff: boole
     const timeout = window.setTimeout(async () => {
       try {
         const matches = await searchDirectory(term)
-        if (!ignore) setResults(matches as SearchResult[])
+        if (!ignore) {
+          const nextResults = matches as SearchResult[]
+          setResults(nextResults)
+          setResultsForQuery(term)
+          if (pendingEnter.current) {
+            pendingEnter.current = false
+            if (nextResults[0]) selectResultRef.current?.(nextResults[0])
+          }
+        }
       } catch {
-        if (!ignore) setResults([])
+        if (!ignore) {
+          setResults([])
+          setResultsForQuery('')
+          pendingEnter.current = false
+        }
       } finally {
         if (!ignore) setLoading(false)
       }
@@ -72,12 +88,14 @@ export default function GlobalSearch({ canSearchStaff }: { canSearchStaff: boole
   }, [query])
 
   const selectResult = (result: SearchResult) => {
+    pendingEnter.current = false
     setIsOpen(false)
     setQuery('')
     const layout = window.matchMedia('(min-width: 1280px)').matches ? 'desktop' : 'mobile'
     const anchor = result.type === 'student' ? `student-${result.id}-${layout}` : `user-${result.id}-${layout}`
     router.push(`${result.href}#${anchor}`)
   }
+  selectResultRef.current = selectResult
 
   return (
     <div ref={wrapperRef} className="relative w-52 shrink-0 sm:w-64 xl:w-72">
@@ -87,7 +105,14 @@ export default function GlobalSearch({ canSearchStaff }: { canSearchStaff: boole
           ref={inputRef}
           type="search"
           value={query}
-          onChange={(event) => { setQuery(event.target.value); setIsOpen(true) }}
+          onChange={(event) => { pendingEnter.current = false; setQuery(event.target.value); setIsOpen(true) }}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter') return
+            event.preventDefault()
+            if (query.trim().length < 2) return
+            if (loading || resultsForQuery !== query.trim()) pendingEnter.current = true
+            else if (results[0]) selectResult(results[0])
+          }}
           onFocus={() => setIsOpen(true)}
           placeholder={canSearchStaff ? 'Search students or staff' : 'Search students'}
           aria-label={canSearchStaff ? 'Search students and staff' : 'Search students'}

@@ -1,8 +1,10 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { ChevronDown } from 'lucide-react'
 import type { Schedule } from './WeeklyScheduleBoard'
 import { deleteSchedule, saveSchedule } from '@/app/scheduling/actions'
+import { useActionFeedback } from '@/components/ActionFeedback'
 
 function toDateISO(d: Date) {
   const year = d.getFullYear()
@@ -45,8 +47,8 @@ export default function AddScheduleModal({
   const [timeEnd, setTimeEnd] = useState(editingSchedule?.time_end.slice(0, 5) ?? '')
   const [status, setStatus] = useState<Schedule['status']>(editingSchedule?.status === 'Cancelled' || editingSchedule?.status === 'Completed' ? editingSchedule.status : 'Scheduled')
   const [error, setError] = useState('')
+  const { confirmAction } = useActionFeedback()
   const [saving, setSaving] = useState(false)
-  const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [visible, setVisible] = useState(false)
 
@@ -57,13 +59,19 @@ export default function AddScheduleModal({
 
   const handleDelete = async () => {
     if (!editingSchedule) return
+    const confirmed = await confirmAction({
+      title: 'Delete this schedule?',
+      description: 'This removes the class session from the schedule. Attendance history may prevent deletion.',
+      confirmLabel: 'Delete schedule',
+      danger: true,
+    })
+    if (!confirmed) return
     setError('')
     setDeleting(true)
     const result = await deleteSchedule(editingSchedule.id)
     setDeleting(false)
     if (result.error) {
       setError(result.error)
-      setConfirmingDelete(false)
       return
     }
     onDeleted?.(editingSchedule.id)
@@ -71,7 +79,7 @@ export default function AddScheduleModal({
   }
 
   const handleSubmit = async () => {
-    if (saving || deleting || confirmingDelete) return
+    if (saving || deleting) return
     setError('')
 
     if (!timeStart || !timeEnd) {
@@ -81,6 +89,17 @@ export default function AddScheduleModal({
     if (timeStart >= timeEnd) {
       setError('End time must be after start time.')
       return
+    }
+    if (editingSchedule && status !== editingSchedule.status && (status === 'Cancelled' || status === 'Completed')) {
+      const confirmed = await confirmAction({
+        title: status === 'Cancelled' ? 'Cancel this class session?' : 'Mark this session completed?',
+        description: status === 'Cancelled'
+          ? 'The session will no longer be treated as an upcoming class.'
+          : 'This session will be recorded as completed.',
+        confirmLabel: status === 'Cancelled' ? 'Cancel session' : 'Mark completed',
+        danger: status === 'Cancelled',
+      })
+      if (!confirmed) return
     }
     setSaving(true)
     const result = await saveSchedule(editingSchedule?.id ?? null, {
@@ -168,27 +187,33 @@ export default function AddScheduleModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelClass}>Branch</label>
-              <select
-                value={branchId}
-                onChange={(e) => setBranchId(Number(e.target.value))}
-                className={inputClass}
-              >
-                {branches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={branchId}
+                  onChange={(e) => setBranchId(Number(e.target.value))}
+                  className={`${inputClass} appearance-none pr-12`}
+                >
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown aria-hidden="true" size={16} className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-gray-500" />
+              </div>
             </div>
             <div>
               <label className={labelClass}>Coach</label>
-              <select value={coachId} onChange={(e) => setCoachId(Number(e.target.value))} className={inputClass}>
-                {coaches.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}{c.role === 'head_coach' ? ' · Head Coach' : ''}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select value={coachId} onChange={(e) => setCoachId(Number(e.target.value))} className={`${inputClass} appearance-none pr-12`}>
+                  {coaches.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown aria-hidden="true" size={16} className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-gray-500" />
+              </div>
             </div>
           </div>
 
@@ -213,11 +238,14 @@ export default function AddScheduleModal({
 
           <div>
             <label className={labelClass}>Status</label>
-            <select value={status} onChange={(event) => setStatus(event.target.value as Schedule['status'])} className={inputClass}>
-              <option value="Scheduled">Scheduled</option>
-              <option value="Completed">Completed</option>
-              <option value="Cancelled">Cancelled</option>
-            </select>
+            <div className="relative">
+              <select value={status} onChange={(event) => setStatus(event.target.value as Schedule['status'])} className={`${inputClass} appearance-none pr-12`}>
+                <option value="Scheduled">Scheduled</option>
+                <option value="Completed">Completed</option>
+                <option value="Cancelled">Cancelled</option>
+              </select>
+              <ChevronDown aria-hidden="true" size={16} className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-gray-500" />
+            </div>
           </div>
 
           {error && (
@@ -229,35 +257,13 @@ export default function AddScheduleModal({
 
         {isEditing && (
           <div className="mt-5 pt-4 border-t border-gray-100">
-            {confirmingDelete ? (
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-[12px] text-gray-600">Delete this schedule?</p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setConfirmingDelete(false)}
-                    disabled={deleting}
-                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-[12px] font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    Keep
-                  </button>
-                  <button
-                    onClick={handleDelete}
-                    disabled={deleting}
-                    className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-[12px] font-semibold hover:bg-red-700 transition-colors disabled:opacity-50"
-                  >
-                    {deleting ? 'Deleting…' : 'Delete'}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button
-                onClick={() => setConfirmingDelete(true)}
-                disabled={saving}
-                className="text-[12px] font-medium text-red-600 hover:text-red-700 transition-colors"
-              >
-                Delete schedule
-              </button>
-            )}
+            <button
+              onClick={handleDelete}
+              disabled={saving || deleting}
+              className="text-[12px] font-medium text-red-600 hover:text-red-700 transition-colors disabled:opacity-50"
+            >
+              {deleting ? 'Deleting…' : 'Delete schedule'}
+            </button>
           </div>
         )}
 

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ChevronRight, X } from 'lucide-react'
 import { removeWeeklyAvailability, saveWeeklyAvailability } from '@/app/scheduling/actions'
 import { formatTimeRange } from '@/utils/dates'
+import { useActionFeedback } from '@/components/ActionFeedback'
 
 export type WeeklyAvailabilityEntry = {
   id: number
@@ -17,7 +18,7 @@ export type WeeklyAvailabilityEntry = {
 
 const weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 const inputClass = 'mt-1 block h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900'
-const selectClass = 'block h-10 w-full appearance-none rounded-lg border border-gray-200 bg-white pl-3 pr-10 text-sm text-gray-900 focus:border-black focus:outline-none focus:ring-2 focus:ring-black/10'
+const selectClass = 'block h-10 w-full appearance-none rounded-lg border border-gray-200 bg-white pl-3 pr-12 text-sm text-gray-900 focus:border-black focus:outline-none focus:ring-2 focus:ring-black/10'
 const labelClass = 'text-xs font-medium text-gray-600'
 
 type AssistantCoach = { id: number; name: string }
@@ -98,9 +99,10 @@ function WeeklyAvailabilityModal({
   onClose,
 }: {
   entry: Pick<WeeklyAvailabilityEntry, 'id' | 'weekday' | 'time_start' | 'time_end'> | null
-  onClose: (message?: string) => void
+  onClose: () => void
 }) {
   const router = useRouter()
+  const { showSuccess } = useActionFeedback()
   const [weekday, setWeekday] = useState(String(entry?.weekday ?? 1))
   const [weeklyStart, setWeeklyStart] = useState(entry?.time_start.slice(0, 5) ?? '')
   const [weeklyEnd, setWeeklyEnd] = useState(entry?.time_end.slice(0, 5) ?? '')
@@ -131,7 +133,8 @@ function WeeklyAvailabilityModal({
       return
     }
     router.refresh()
-    onClose(result.message)
+    onClose()
+    showSuccess(result.message ?? (editing ? 'Availability updated.' : 'Availability saved.'))
   }
 
   return (
@@ -146,7 +149,7 @@ function WeeklyAvailabilityModal({
         </div>
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className={`${labelClass} sm:col-span-2`}>Weekday<div className="relative mt-1"><select value={weekday} onChange={(event) => setWeekday(event.target.value)} className={selectClass}>{weekdays.map((day, index) => <option key={day} value={index + 1}>{day}</option>)}</select><svg className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg></div></label>
+            <label className={`${labelClass} sm:col-span-2`}>Weekday<div className="relative mt-1"><select value={weekday} onChange={(event) => setWeekday(event.target.value)} className={selectClass}>{weekdays.map((day, index) => <option key={day} value={index + 1}>{day}</option>)}</select><svg className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg></div></label>
             <label className={labelClass}>From<input type="time" value={weeklyStart} onChange={(event) => setWeeklyStart(event.target.value)} required className={inputClass} /></label>
             <label className={labelClass}>Until<input type="time" value={weeklyEnd} onChange={(event) => setWeeklyEnd(event.target.value)} required className={inputClass} /></label>
           </div>
@@ -163,19 +166,14 @@ function WeeklyAvailabilityModal({
 
 export function AddAvailabilityButton() {
   const [open, setOpen] = useState(false)
-  const [notice, setNotice] = useState('')
-  const close = (message?: string) => {
-    setOpen(false)
-    setNotice(message ?? '')
-  }
+  const close = () => setOpen(false)
 
   return (
     <div className="flex flex-col items-end gap-2">
-      <button type="button" onClick={() => { setNotice(''); setOpen(true) }} className="inline-flex h-10 items-center gap-2 rounded-lg bg-black px-4 text-sm font-semibold text-white transition-colors hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2">
+      <button type="button" onClick={() => setOpen(true)} className="inline-flex h-10 items-center gap-2 rounded-lg bg-black px-4 text-sm font-semibold text-white transition-colors hover:bg-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2">
         <span aria-hidden="true" className="text-lg leading-none">+</span>
         Add availability
       </button>
-      {notice && <p role="status" className="max-w-md text-right text-xs text-gray-600">{notice}</p>}
       {open && <WeeklyAvailabilityModal key="new-availability" entry={null} onClose={close} />}
     </div>
   )
@@ -191,18 +189,24 @@ export default function AvailabilityPanel({
   assistantCoaches?: AssistantCoach[]
 }) {
   const router = useRouter()
+  const { showSuccess, confirmAction } = useActionFeedback()
   const [editingEntry, setEditingEntry] = useState<WeeklyAvailabilityEntry | null>(null)
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
   const [viewingCoach, setViewingCoach] = useState<AssistantCoach | null>(null)
 
   const removeWeekly = async (id: number) => {
+    const confirmed = await confirmAction({
+      title: 'Remove availability?',
+      description: 'Upcoming classes that depend on this time slot may need to be cancelled or reassigned.',
+      confirmLabel: 'Remove availability',
+      danger: true,
+    })
+    if (!confirmed) return
     setError('')
-    setNotice('')
     const result = await removeWeeklyAvailability(id)
     if (result.error) { setError(result.error); return }
-    if (result.message) setNotice(result.message)
     router.refresh()
+    showSuccess(result.message ?? 'Availability removed.')
   }
 
   return (
@@ -251,11 +255,10 @@ export default function AvailabilityPanel({
           </div>
         )}
         {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
-        {notice && <p role="status" className="mt-3 rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-700">{notice}</p>}
       </div>
 
       {editingEntry && isAssistantCoach && (
-        <WeeklyAvailabilityModal key={editingEntry.id} entry={editingEntry} onClose={(message) => { setEditingEntry(null); setNotice(message ?? '') }} />
+        <WeeklyAvailabilityModal key={editingEntry.id} entry={editingEntry} onClose={() => setEditingEntry(null)} />
       )}
       {viewingCoach && !isAssistantCoach && (
         <CoachAvailabilityModal

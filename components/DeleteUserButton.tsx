@@ -4,6 +4,7 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { setUserActive } from '@/app/users/actions'
+import { useActionFeedback } from '@/components/ActionFeedback'
 
 export default function DeleteUserButton({
   userId,
@@ -22,6 +23,7 @@ export default function DeleteUserButton({
   const [isConfirmOpen, setIsConfirmOpen] = useState(false)
   const [error, setError] = useState('')
   const router = useRouter()
+  const { showSuccess } = useActionFeedback()
 
   const handleToggle = async () => {
     const nextActive = !active
@@ -35,6 +37,7 @@ export default function DeleteUserButton({
     }
     setIsConfirmOpen(false)
     router.refresh()
+    showSuccess(active ? `${userName}'s account was deactivated.` : `${userName}'s account was reactivated.`)
   }
 
   const closeConfirmation = () => {

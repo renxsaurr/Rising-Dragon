@@ -4,15 +4,16 @@ import { useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { updateAcademyMonthlyFee } from '@/app/payments/actions'
 import ModalShell, { BUTTON_PRIMARY, BUTTON_SECONDARY, FOCUS_RING, INPUT, LABEL } from './ModalShell'
+import { useActionFeedback } from '@/components/ActionFeedback'
 
 const money = (value: number) => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(value)
 
 export default function MonthlyFeeSettingsButton({ monthlyFee }: { monthlyFee: number | null }) {
   const router = useRouter()
+  const { showSuccess, confirmAction } = useActionFeedback()
   const [open, setOpen] = useState(false)
   const [value, setValue] = useState(monthlyFee == null ? '' : monthlyFee.toFixed(2))
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
   const [saving, setSaving] = useState(false)
 
   const close = () => {
@@ -32,17 +33,23 @@ export default function MonthlyFeeSettingsButton({ monthlyFee }: { monthlyFee: n
       return
     }
 
+    const confirmed = await confirmAction({
+      title: 'Update the monthly fee?',
+      description: 'All unpaid monthly bills will be recalculated using this rate. Paid records will stay unchanged.',
+      confirmLabel: 'Update monthly fee',
+    })
+    if (!confirmed) return
     setSaving(true)
     setError('')
-    setNotice('')
     try {
       const result = await updateAcademyMonthlyFee(amount)
       if ('error' in result) {
         setError(result.error)
       } else {
         setValue(amount.toFixed(2))
-        setNotice(`Rate updated. ${result.updatedBills} unpaid monthly bill${result.updatedBills === 1 ? '' : 's'} updated. Paid records were kept unchanged.`)
         router.refresh()
+        setOpen(false)
+        showSuccess(`Rate updated. ${result.updatedBills} unpaid monthly bill${result.updatedBills === 1 ? '' : 's'} updated. Paid records were kept unchanged.`)
       }
     } catch {
       setError('Could not save the monthly fee. Please try again.')
@@ -55,7 +62,7 @@ export default function MonthlyFeeSettingsButton({ monthlyFee }: { monthlyFee: n
     <>
       <button
         type="button"
-        onClick={() => { setError(''); setNotice(''); setOpen(true) }}
+        onClick={() => { setError(''); setOpen(true) }}
         className={`inline-flex h-9 items-center justify-center whitespace-nowrap rounded-lg border border-gray-300 bg-white px-3.5 text-sm font-semibold text-gray-950 hover:bg-gray-50 ${FOCUS_RING}`}
       >
         {monthlyFee == null ? 'Set monthly fee' : 'Monthly fee settings'}
@@ -77,7 +84,7 @@ export default function MonthlyFeeSettingsButton({ monthlyFee }: { monthlyFee: n
                   inputMode="decimal"
                   autoComplete="off"
                   value={value}
-                  onChange={(event) => { setValue(event.target.value); setError(''); setNotice('') }}
+                  onChange={(event) => { setValue(event.target.value); setError('') }}
                   placeholder="e.g. 1500.00"
                   required
                   disabled={saving}
@@ -91,7 +98,6 @@ export default function MonthlyFeeSettingsButton({ monthlyFee }: { monthlyFee: n
               {monthlyFee !== null && (
                 <p className="text-sm text-gray-800">Current rate: <span className="font-semibold text-gray-950">{money(monthlyFee)}</span> per month</p>
               )}
-              {notice && <p role="status" className="break-words rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
               {error && <p role="alert" className="break-words rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
             </div>
             <div className="shrink-0 flex flex-wrap justify-end gap-2 border-t border-gray-200 px-4 py-3 sm:px-6 sm:py-4">

@@ -152,7 +152,8 @@ export default function StudentFilters({
     setStatus(nextStatus)
 
     const params = new URLSearchParams()
-    if (searchQuery) params.set('q', searchQuery)
+    const currentSearch = (document.getElementById('live-search-q') as HTMLInputElement | null)?.value.trim() ?? searchQuery
+    if (currentSearch) params.set('q', currentSearch)
     if (canFilterStatus && nextStatus !== 'active') params.set('status', nextStatus)
     if (nextBillingPlan !== 'all') params.set('plan', nextBillingPlan)
     nextBranchIds.forEach((id) => params.append('branch', id))

@@ -4,6 +4,7 @@ import { useId, useRef, useState, type FormEvent } from 'react'
 import { markPaymentPaid } from '@/app/payments/actions'
 import { PAYMENT_METHODS } from '@/utils/payment-methods'
 import ModalShell, { BUTTON_PRIMARY, BUTTON_SECONDARY, INPUT, LABEL } from './ModalShell'
+import { useActionFeedback } from '@/components/ActionFeedback'
 
 /** Already formatted for display by the server. */
 export type PaymentToMark = { id: number; studentName: string; amount: string; dueDate: string }
@@ -27,6 +28,7 @@ export default function MarkPaidModal({
   today: string
   onClose: () => void
 }) {
+  const { showSuccess, confirmAction } = useActionFeedback()
   const [paidDate, setPaidDate] = useState(today)
   const [method, setMethod] = useState('')
   const [saving, setSaving] = useState(false)
@@ -38,6 +40,12 @@ export default function MarkPaidModal({
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (savingRef.current) return
+    const confirmed = await confirmAction({
+      title: 'Mark this bill as paid?',
+      description: `${payment.studentName} · ${payment.amount} · due ${payment.dueDate}. This will add a paid record to payment history.`,
+      confirmLabel: 'Mark as paid',
+    })
+    if (!confirmed) return
     savingRef.current = true
     setSaving(true)
     setError('')
@@ -49,6 +57,7 @@ export default function MarkPaidModal({
         return
       }
       onClose()
+      showSuccess('Payment recorded successfully.')
     } catch {
       setError('Could not reach the server. Please try again.')
     } finally {

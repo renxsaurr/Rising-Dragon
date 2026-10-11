@@ -6,6 +6,7 @@ import { uploadBranchPhoto } from '@/utils/uploadBranchPhoto'
 import { archiveBranch, deleteUnusedBranch, reactivateBranch, updateBranch } from '@/app/branches/actions'
 import BranchOperatingHoursFields from '@/components/BranchOperatingHoursFields'
 import { type BranchOperatingWindow } from '@/utils/branch-operating-hours'
+import { useActionFeedback } from '@/components/ActionFeedback'
 
 type Branch = {
   id: number
@@ -38,11 +39,18 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
 
   const [deleting, setDeleting] = useState(false)
   const [changingStatus, setChangingStatus] = useState(false)
-  const [confirmDelete, setConfirmDelete] = useState(false)
 
   const router = useRouter()
+  const { showSuccess, confirmAction } = useActionFeedback()
 
   const handleDelete = async () => {
+    const confirmed = await confirmAction({
+      title: 'Delete this branch?',
+      description: 'This permanently removes the branch if it has no linked students, staff, schedules, or report history.',
+      confirmLabel: 'Delete branch',
+      danger: true,
+    })
+    if (!confirmed) return
     setError('')
     setDeleting(true)
     const result = await deleteUnusedBranch(branch.id)
@@ -56,11 +64,20 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
 
     router.push('/branches')
     router.refresh()
+    showSuccess('Branch deleted successfully.')
   }
 
   const handleStatusChange = async () => {
     setError('')
-    if (branch.is_active && !window.confirm('Archive this branch after moving its active students and ending or reassigning upcoming schedules? Historical reports will remain available.')) return
+    const confirmed = await confirmAction({
+      title: branch.is_active ? 'Archive this branch?' : 'Reactivate this branch?',
+      description: branch.is_active
+        ? 'Active students must be moved and upcoming schedules may be ended or reassigned. Historical reports will remain.'
+        : 'This branch will be available for new students and schedules again.',
+      confirmLabel: branch.is_active ? 'Archive branch' : 'Reactivate branch',
+      danger: branch.is_active,
+    })
+    if (!confirmed) return
     setChangingStatus(true)
     const result = branch.is_active ? await archiveBranch(branch.id) : await reactivateBranch(branch.id)
     setChangingStatus(false)
@@ -70,6 +87,7 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
     }
     setIsOpen(false)
     router.refresh()
+    showSuccess(branch.is_active ? 'Branch archived successfully.' : 'Branch reactivated successfully.')
   }
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -128,6 +146,7 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
     setOperatingHoursChanged(false)
     setIsOpen(false)
     router.refresh()
+    showSuccess('Branch details updated successfully.')
   }
 
   return (
@@ -266,51 +285,10 @@ export default function EditBranchModal({ branch }: { branch: Branch }) {
                 {changingStatus ? 'Updating…' : branch.is_active ? 'Archive branch' : 'Reactivate branch'}
               </button>
               <button
-                onClick={() => setConfirmDelete(true)}
+                onClick={handleDelete}
                 className="h-9 px-4 rounded-lg border border-red-200 bg-white text-[13px] font-semibold text-red-600 transition-colors hover:bg-red-50"
               >Delete unused branch</button>
             </div>
-
-            {/* --- delete confirmation popup --- */}
-            {confirmDelete && (
-              <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 px-4">
-                <div className="bg-white rounded-2xl w-full max-w-sm p-6">
-                  <p className="text-[12px] font-bold text-red-700 uppercase tracking-wide mb-1">
-                    Danger Zone
-                  </p>
-                  <h3 className="text-[17px] font-semibold text-black mb-2">
-                    Delete &quot;{branch.name}&quot;?
-                  </h3>
-                  <p className="mb-5 text-[13px] text-gray-500">
-                    This permanently removes the branch. Any student, staff, schedule, or report history reference will block deletion. Archive branches that have records.
-                  </p>
-
-                  {error && (
-                    <p className="text-[13px] text-red-600 mb-4">{error}</p>
-                  )}
-
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        setConfirmDelete(false)
-                        setError('')
-                      }}
-                      className="flex-1 h-10 border border-gray-200 rounded-lg text-[13px] font-medium"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleDelete}
-                      disabled={deleting}
-                      className="flex-1 h-10 bg-red-600 hover:bg-red-700 disabled:opacity-60 text-white rounded-lg text-[13px] font-semibold"
-                    >
-                      {deleting ? 'Deleting…' : 'Yes, Delete'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-            {/* --- end delete confirmation popup --- */}
 
           </div>
         </div>

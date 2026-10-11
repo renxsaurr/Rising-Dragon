@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { BELT_LABELS, beltTextColorClass, formatBeltLabel } from "@/utils/belts";
 import { useRouter } from "next/navigation";
 import { promoteStudent } from "@/app/promotions/actions";
+import { useActionFeedback } from "@/components/ActionFeedback";
 
 function todayISO() {
   return new Intl.DateTimeFormat("en-CA", {
@@ -38,6 +39,7 @@ export default function PromoteStudentModal({
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const router = useRouter();
+  const { showSuccess } = useActionFeedback();
 
   const today = todayISO();
   const beltOrder = Object.keys(BELT_LABELS);
@@ -87,6 +89,7 @@ export default function PromoteStudentModal({
       }
       closeModal();
       router.refresh();
+      showSuccess(`${studentName} was promoted to ${formatBeltLabel(nextBelt)}.`);
     } catch {
       setError("Could not save the promotion. Please try again.");
     } finally {

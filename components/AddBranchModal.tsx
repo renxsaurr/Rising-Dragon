@@ -6,6 +6,7 @@ import { uploadBranchPhoto } from '@/utils/uploadBranchPhoto'
 import { createBranch } from '@/app/branches/actions'
 import BranchOperatingHoursFields from '@/components/BranchOperatingHoursFields'
 import type { BranchOperatingWindow } from '@/utils/branch-operating-hours'
+import { useActionFeedback } from '@/components/ActionFeedback'
 
 export default function AddBranchModal() {
   const [isOpen, setIsOpen] = useState(false)
@@ -21,6 +22,7 @@ export default function AddBranchModal() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
 
   const router = useRouter()
+  const { showSuccess } = useActionFeedback()
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -69,6 +71,7 @@ export default function AddBranchModal() {
     setPhotoPreview(null)
     setIsOpen(false)
     router.refresh()
+    showSuccess('Branch added successfully.')
   }
 
   return (

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { setStudentActive } from '@/app/students/actions'
+import { useActionFeedback } from '@/components/ActionFeedback'
 
 export default function StudentStatusButton({
   studentId,
@@ -19,6 +20,7 @@ export default function StudentStatusButton({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const router = useRouter()
+  const { showSuccess } = useActionFeedback()
 
   const nextIsActive = !isActive
   const actionLabel = isActive ? 'Archive' : 'Restore'
@@ -37,6 +39,7 @@ export default function StudentStatusButton({
 
       setIsConfirming(false)
       router.refresh()
+      showSuccess(isActive ? `${studentName} was archived.` : `${studentName} was restored.`)
     } catch {
       setError(`Could not ${isActive ? 'archive' : 'restore'} this student. Please try again.`)
     } finally {

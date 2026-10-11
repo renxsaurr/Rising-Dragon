@@ -7,6 +7,7 @@ import ScheduleBoard, { type ScheduleBoardProps } from '@/components/ScheduleBoa
 import SchedulingPageTabs from '@/components/SchedulingPageTabs'
 import { deleteWeeklyTemplate, saveWeeklyTemplate } from '@/app/scheduling/actions'
 import { BRANCH_WEEKDAYS, branchOperatingHoursConflict, branchOperatingWindowsForDay, formatBranchOperatingHours, parseBranchOperatingHours } from '@/utils/branch-operating-hours'
+import { useActionFeedback } from '@/components/ActionFeedback'
 
 export type WeeklyClassTemplate = {
   id: number
@@ -83,6 +84,7 @@ export default function SchedulePlanningPanel({
   closuresPanel: ReactNode
 }) {
   const router = useRouter()
+  const { showSuccess, confirmAction } = useActionFeedback()
   const [branchId, setBranchId] = useState(String(branches[0]?.id ?? ''))
   const [editingId, setEditingId] = useState<number | null>(null)
   const [formDay, setFormDay] = useState<number | null>(null)
@@ -90,18 +92,33 @@ export default function SchedulePlanningPanel({
   const [timeStart, setTimeStart] = useState('')
   const [timeEnd, setTimeEnd] = useState('')
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
   const [weeklyScheduleOpen, setWeeklyScheduleOpen] = useState(false)
   const branch = branches.find((item) => item.id === Number(branchId))
   const operatingHours = parseBranchOperatingHours(branch?.operating_hours)
   const assistantCoaches = coaches.filter((coach) => coach.role === 'assistant_coach')
+  const headCoach = coaches.find((coach) => coach.role === 'head_coach')
 
   const selectedDayAvailability = weeklyAvailability.filter((window) => window.weekday === formDay)
-  const eligibleCoaches = assistantCoaches.filter((coach) => selectedDayAvailability.some((window) =>
+  const overlapsTemplate = (coachId: number) => templates.some((template) =>
+    template.id !== editingId
+    && template.is_active !== false
+    && template.coach_id === coachId
+    && template.weekday === formDay
+    && timeStart < time(template.time_end)
+    && timeEnd > time(template.time_start),
+  )
+  const eligibleAssistants = assistantCoaches.filter((coach) => !overlapsTemplate(coach.id) && selectedDayAvailability.some((window) =>
     window.coach_id === coach.id
     && (!timeStart || !timeEnd || (time(window.time_start) <= timeStart && time(window.time_end) >= timeEnd)),
   ))
+  const editingHeadCoachClass = Boolean(headCoach && templates.some((template) =>
+    template.id === editingId && template.coach_id === headCoach.id,
+  ))
+  const eligibleCoaches = [
+    ...eligibleAssistants,
+    ...(headCoach && timeStart && timeEnd && !overlapsTemplate(headCoach.id) && (eligibleAssistants.length === 0 || editingHeadCoachClass) ? [headCoach] : []),
+  ]
 
   const days = useMemo(() => BRANCH_WEEKDAYS.map((day) => {
     const open = branchOperatingWindowsForDay(operatingHours, day.value)
@@ -127,7 +144,6 @@ export default function SchedulePlanningPanel({
 
   const openForm = (weekday: number, gap?: TimeWindow, template?: WeeklyClassTemplate) => {
     setError('')
-    setNotice('')
     setFormDay(weekday)
     setEditingId(template?.id ?? null)
     setTimeStart(template ? time(template.time_start) : gap?.time_start ?? '')
@@ -140,7 +156,6 @@ export default function SchedulePlanningPanel({
     if (formDay === null) return
     setBusy(true)
     setError('')
-    setNotice('')
     const result = await saveWeeklyTemplate(editingId, {
       weekday: formDay,
       branch_id: Number(branchId),
@@ -150,34 +165,45 @@ export default function SchedulePlanningPanel({
     })
     setBusy(false)
     if (result.error) { setError(result.error); return }
-    setNotice(result.message ?? 'Recurring class saved.')
     resetForm()
     router.refresh()
+    showSuccess(result.message ?? 'Weekly class saved. Upcoming sessions have been updated automatically.')
   }
 
   const handleDelete = async (id: number) => {
+    const confirmed = await confirmAction({
+      title: 'Remove recurring class?',
+      description: 'Future scheduled sessions for this weekly class may be cancelled. Sessions with attendance records will be kept.',
+      confirmLabel: 'Remove class',
+      danger: true,
+    })
+    if (!confirmed) return
     setBusy(true)
     setError('')
     const result = await deleteWeeklyTemplate(id)
     setBusy(false)
     if (result.error) { setError(result.error); return }
-    setNotice(result.message ?? 'Recurring class removed.')
     resetForm()
     router.refresh()
+    showSuccess(result.message ?? 'Recurring class removed.')
   }
 
   const inputClass = 'mt-1 h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 focus:border-black focus:outline-none focus:ring-2 focus:ring-black/10'
+  const selectClass = 'h-10 w-full appearance-none rounded-lg border border-gray-200 bg-white pl-3 pr-12 text-sm text-gray-900 focus:border-black focus:outline-none focus:ring-2 focus:ring-black/10'
   const weeklyBranchSchedulePanel = (
     <div className="overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-gray-100 px-1 pb-4">
         <div>
           <h3 className="text-sm font-semibold text-gray-950">Branch coverage</h3>
-          <p className="mt-0.5 text-sm text-gray-500">Assign recurring classes across the approved operating hours.</p>
+          <p className="mt-0.5 text-sm text-gray-500">Assign available assistant coaches, or the Head Coach as fallback, across branch hours.</p>
         </div>
         <label className="w-full text-xs font-medium text-gray-600 sm:w-64">Branch
-          <select className={inputClass} value={branchId} onChange={(event) => { setBranchId(event.target.value); resetForm() }}>
-            {branches.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </select>
+          <span className="relative mt-1 block">
+            <select className={selectClass} value={branchId} onChange={(event) => { setBranchId(event.target.value); resetForm() }}>
+              {branches.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+            <svg className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </span>
         </label>
       </div>
 
@@ -187,14 +213,18 @@ export default function SchedulePlanningPanel({
           <button type="button" onClick={resetForm} className="text-sm font-medium text-gray-500 hover:text-black">Close</button>
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <label className="text-xs font-medium text-gray-600">Available assistant coach
-            <select required className={inputClass} value={coachId} onChange={(event) => setCoachId(event.target.value)}><option value="">Choose coach</option>{eligibleCoaches.map((coach) => <option key={coach.id} value={coach.id}>{coach.name}</option>)}</select>
+          <label className="text-xs font-medium text-gray-600">Available coach
+            <span className="relative mt-1 block">
+              <select required className={selectClass} value={coachId} onChange={(event) => setCoachId(event.target.value)}><option value="">Choose coach</option>{eligibleCoaches.map((coach) => <option key={coach.id} value={coach.id}>{coach.name}</option>)}</select>
+              <svg className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </span>
           </label>
           <label className="text-xs font-medium text-gray-600">From<input required type="time" value={timeStart} onChange={(event) => setTimeStart(event.target.value)} className={inputClass} /></label>
           <label className="text-xs font-medium text-gray-600">Until<input required type="time" value={timeEnd} onChange={(event) => setTimeEnd(event.target.value)} className={inputClass} /></label>
-          <p className="self-center text-xs text-gray-500">Coach must be available for this whole block.</p>
+          <p className="self-center text-xs text-gray-500">Assistant coaches must be available for the full block. The Head Coach can cover as fallback.</p>
         </div>
-        {timeStart && timeEnd && eligibleCoaches.length === 0 && <p className="mt-2 text-xs text-amber-900">No assistant coach is available for this full time block. The gap will remain visible.</p>}
+        {timeStart && timeEnd && eligibleAssistants.length === 0 && headCoach && !overlapsTemplate(headCoach.id) && <p className="mt-2 text-xs text-blue-800">No assistant coach is available for this full time block. The Head Coach can cover as fallback.</p>}
+        {timeStart && timeEnd && eligibleCoaches.length === 0 && <p className="mt-2 text-xs text-amber-900">No coach is available for this full time block. The gap will remain visible.</p>}
         {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
         <div className="mt-4 flex justify-end gap-2"><button type="button" onClick={resetForm} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700">Cancel</button><button disabled={busy || !eligibleCoaches.some((coach) => coach.id === Number(coachId))} className="rounded-lg bg-black px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{busy ? 'Saving…' : editingId ? 'Save class' : 'Assign'}</button></div>
       </form>}
@@ -232,7 +262,6 @@ export default function SchedulePlanningPanel({
         </div>
       )}
 
-      {notice && <p role="status" className="mx-5 mb-4 rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-800 sm:mx-6">{notice}</p>}
       {error && !formDay && <p role="alert" className="mx-5 mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 sm:mx-6">{error}</p>}
 
     </div>
@@ -249,7 +278,7 @@ export default function SchedulePlanningPanel({
     {weeklyScheduleOpen && <div role="presentation" className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 p-3 backdrop-blur-[2px] sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) { setWeeklyScheduleOpen(false); resetForm() } }}>
       <div role="dialog" aria-modal="true" aria-labelledby="weekly-schedule-modal-title" className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
         <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-gray-100 bg-white/95 px-5 py-4 backdrop-blur sm:px-7">
-          <div><h2 id="weekly-schedule-modal-title" className="text-lg font-semibold text-gray-950">Weekly branch schedule</h2><p className="mt-1 text-sm text-gray-500">Assign available assistant coaches to cover each branch’s operating hours.</p></div>
+          <div><h2 id="weekly-schedule-modal-title" className="text-lg font-semibold text-gray-950">Weekly branch schedule</h2><p className="mt-1 text-sm text-gray-500">Assign available assistant coaches, or the Head Coach as fallback, to cover each branch’s operating hours.</p></div>
           <button type="button" aria-label="Close weekly schedule" onClick={() => { setWeeklyScheduleOpen(false); resetForm() }} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-xl text-gray-500 hover:bg-gray-100 hover:text-gray-950">×</button>
         </div>
         <div className="p-3 sm:p-5">{weeklyBranchSchedulePanel}</div>

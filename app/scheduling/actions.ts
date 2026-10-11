@@ -316,18 +316,22 @@ export async function saveWeeklyTemplate(id: number | null, input: WeeklyTemplat
     .select('id, auth_id, role, primary_branch_id')
     .eq('id', input.coach_id)
     .maybeSingle()
-  if (coachError || !coach || coach.role !== 'assistant_coach') return { error: 'Choose an active Assistant Coach for a recurring class.' }
+  if (coachError || !coach || !['assistant_coach', 'head_coach'].includes(coach.role)) return { error: 'Choose an active coach for a recurring class.' }
   if (!(await validateCoach(admin, input.coach_id))) return { error: 'The selected coach login is inactive.' }
 
-  const { data: availability, error: availabilityError } = await admin.from('coach_weekly_availability')
-    .select('time_start, time_end')
-    .eq('coach_id', input.coach_id)
-    .eq('weekday', input.weekday)
-  if (availabilityError) return { error: availabilityError.message }
-  const isWithinAvailability = (availability ?? []).some((slot) =>
-    slot.time_start.slice(0, 5) <= input.time_start && slot.time_end.slice(0, 5) >= input.time_end,
-  )
-  if (!isWithinAvailability) return { error: 'This assistant coach has not marked the full class time as available for that weekday.' }
+  // Assistant Coaches must have declared availability. Head Coach selection is
+  // an explicit fallback assignment made by the Head Coach in this planner.
+  if (coach.role === 'assistant_coach') {
+    const { data: availability, error: availabilityError } = await admin.from('coach_weekly_availability')
+      .select('time_start, time_end')
+      .eq('coach_id', input.coach_id)
+      .eq('weekday', input.weekday)
+    if (availabilityError) return { error: availabilityError.message }
+    const isWithinAvailability = (availability ?? []).some((slot) =>
+      slot.time_start.slice(0, 5) <= input.time_start && slot.time_end.slice(0, 5) >= input.time_end,
+    )
+    if (!isWithinAvailability) return { error: 'This assistant coach has not marked the full class time as available for that weekday.' }
+  }
 
   const { data: samePattern, error: patternError } = await admin.from('weekly_class_template')
     .select('id, time_start, time_end')

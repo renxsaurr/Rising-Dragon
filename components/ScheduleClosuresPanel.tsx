@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createScheduleClosure, removeScheduleClosure } from '@/app/scheduling/actions'
+import { useActionFeedback } from '@/components/ActionFeedback'
 
 export type ScheduleClosureView = {
   id: number
@@ -23,22 +24,28 @@ export default function ScheduleClosuresPanel({
   today: string
 }) {
   const router = useRouter()
+  const { showSuccess, confirmAction } = useActionFeedback()
   const [closures, setClosures] = useState(initialClosures)
   const [branchId, setBranchId] = useState('')
   const [startsOn, setStartsOn] = useState(today)
   const [endsOn, setEndsOn] = useState(today)
   const [reason, setReason] = useState('')
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => setClosures(initialClosures), [initialClosures])
 
   const handleCreate = async (event: React.FormEvent) => {
     event.preventDefault()
+    const confirmed = await confirmAction({
+      title: 'Mark these dates as no-class?',
+      description: 'Scheduled classes in this period will be cancelled for the selected branch scope.',
+      confirmLabel: 'Mark no classes',
+      danger: true,
+    })
+    if (!confirmed) return
     setBusy(true)
     setError('')
-    setNotice('')
     const result = await createScheduleClosure({
       branch_id: branchId ? Number(branchId) : null,
       starts_on: startsOn,
@@ -47,21 +54,27 @@ export default function ScheduleClosuresPanel({
     })
     setBusy(false)
     if ('error' in result) { setError(result.error ?? 'Could not save the closure.'); return }
-    setNotice(result.message ?? 'Closure saved.')
     setReason('')
     router.refresh()
+    showSuccess(result.message ?? 'Closure saved.')
   }
 
   const handleRemove = async (id: number) => {
+    const confirmed = await confirmAction({
+      title: 'Remove this closure?',
+      description: 'The branch will be shown as open for these dates again. Review any affected classes before removing it.',
+      confirmLabel: 'Remove closure',
+      danger: true,
+    })
+    if (!confirmed) return
     setBusy(true)
     setError('')
-    setNotice('')
     const result = await removeScheduleClosure(id)
     setBusy(false)
     if ('error' in result) { setError(result.error ?? 'Could not remove the closure.'); return }
-    setNotice(result.message ?? 'Closure removed.')
     setClosures((current) => current.filter((closure) => closure.id !== id))
     router.refresh()
+    showSuccess(result.message ?? 'Closure removed.')
   }
 
   const inputClass = 'mt-1 h-12 w-full rounded-xl border border-gray-200 bg-white px-4 text-sm text-gray-900 transition focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-200'
@@ -118,7 +131,6 @@ export default function ScheduleClosuresPanel({
           )}
         </div>
       </div>
-      {notice && <p role="status" className="border-t border-gray-100 bg-gray-50 px-5 py-3 text-sm text-gray-800">{notice}</p>}
     </section>
   )
 }

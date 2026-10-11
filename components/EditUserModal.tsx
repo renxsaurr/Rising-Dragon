@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { Pencil } from 'lucide-react'
 import { updateUser } from '@/app/users/actions'
+import { useActionFeedback } from '@/components/ActionFeedback'
 
 type User = {
   id: number
@@ -40,6 +41,7 @@ export default function EditUserModal({
   const [error, setError] = useState('')
 
   const router = useRouter()
+  const { showSuccess } = useActionFeedback()
   const inputClass = 'w-full h-10 px-3 border border-gray-200 rounded-lg text-[13px] text-gray-900 placeholder:text-gray-400 outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/10 disabled:bg-gray-50'
 
   const resetForm = () => {
@@ -89,6 +91,7 @@ export default function EditUserModal({
     setIsOpen(false)
 
     router.refresh()
+    showSuccess('Staff account updated successfully.')
   }
 
   return (

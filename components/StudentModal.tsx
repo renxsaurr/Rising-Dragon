@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { saveStudent } from "@/app/students/actions";
 import { BELT_LABELS, beltTextColorClass } from "@/utils/belts";
+import { useActionFeedback } from "@/components/ActionFeedback";
 
 type Branch = {
   id: number;
@@ -64,6 +65,7 @@ export default function StudentModal({
   );
 
   const router = useRouter();
+  const { showSuccess } = useActionFeedback();
 
   const resetForm = () => {
     if (!isEditMode) {
@@ -111,6 +113,7 @@ export default function StudentModal({
     resetForm();
     setIsOpen(false);
     router.refresh();
+    showSuccess(isEditMode ? "Student details updated successfully." : "Student enrolled successfully.");
   };
 
   return (

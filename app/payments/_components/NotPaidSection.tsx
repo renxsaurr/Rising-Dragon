@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import { Toast } from '@/components/Toast'
 import AddPaymentButton from './AddPaymentButton'
 import CreateBillModal from './CreateBillModal'
 import { FOCUS_RING } from './ModalShell'
@@ -55,16 +54,13 @@ export default function NotPaidSection({
   // when the list refreshes, and that must not close the popup that follows.
   const [billStudent, setBillStudent] = useState<NotPaidStudent | null>(null)
   const [reviewId, setReviewId] = useState<number | null>(null)
-  const [notice, setNotice] = useState('')
   const closeBill = useCallback(() => setBillStudent(null), [])
   const closeReview = useCallback(() => setReviewId(null), [])
-  const clearNotice = useCallback(() => setNotice(''), [])
   const visible = showAll ? students : students.slice(0, FIRST_ROWS)
 
   const handleCreated = (paymentId: number, timing: ReminderWindow) => {
     setBillStudent(null)
     if (timing.open) setReviewId(paymentId)
-    else setNotice(`Bill created. The ${timing.nextType} reminder opens on ${formatDate(timing.opensOn)}.`)
   }
 
   return (
@@ -159,7 +155,6 @@ export default function NotPaidSection({
         <CreateBillModal student={billStudent} month={month} today={today} monthlyFee={monthlyFee} reminderSchedule={reminderSchedule} onCreated={handleCreated} onClose={closeBill} />
       )}
       {reviewId !== null && <ReminderReviewModal target={{ kind: 'payment', id: reviewId }} onClose={closeReview} />}
-      {notice && <Toast message={notice} onDismiss={clearNotice} />}
     </div>
   )
 }

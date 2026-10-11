@@ -1,14 +1,13 @@
 'use client'
 
-import Link from 'next/link'
 import { useId, useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { getAdvanceBillOptions, recordAdvancePayment, type AdvanceBillOption } from '@/app/payments/actions'
 import { PAYMENT_METHODS } from '@/utils/payment-methods'
 import type { StudentChoice } from './StudentCombobox'
 import StudentCombobox from './StudentCombobox'
-import { paymentsHref } from './payments-url'
 import { BUTTON_PRIMARY, FOCUS_RING, INPUT, LABEL } from './ModalShell'
+import { useActionFeedback } from '@/components/ActionFeedback'
 
 const formatDate = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', {
   timeZone: 'UTC', month: 'long', day: 'numeric', year: 'numeric',
@@ -20,6 +19,7 @@ export default function AdvancePaymentsWorkspace({ students, today }: {
   today: string
 }) {
   const router = useRouter()
+  const { showSuccess, confirmAction } = useActionFeedback()
   const [studentId, setStudentId] = useState<number | null>(null)
   const [options, setOptions] = useState<AdvanceBillOption[]>([])
   const [selectedDate, setSelectedDate] = useState('')
@@ -28,7 +28,6 @@ export default function AdvancePaymentsWorkspace({ students, today }: {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
   const studentFieldId = useId()
   const paidDateFieldId = useId()
   const methodFieldId = useId()
@@ -38,7 +37,6 @@ export default function AdvancePaymentsWorkspace({ students, today }: {
     setOptions([])
     setSelectedDate('')
     setError('')
-    setNotice('')
     if (id === null) return
     setLoading(true)
     try {
@@ -55,17 +53,23 @@ export default function AdvancePaymentsWorkspace({ students, today }: {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (saving || studentId === null || !selectedDate) return
+    const confirmed = await confirmAction({
+      title: 'Record this advance payment?',
+      description: `This will mark the selected monthly bill due ${formatDate(selectedDate)} as paid and add it to payment history.`,
+      confirmLabel: 'Record payment',
+    })
+    if (!confirmed) return
     setSaving(true)
     setError('')
     try {
       const result = await recordAdvancePayment({ studentId, dueDate: selectedDate, paidDate, method })
       if ('error' in result) setError(result.error)
       else {
-        setNotice('Advance payment recorded and added to payment history.')
         setOptions((current) => current.map((option) => option.dueDate === selectedDate ? { ...option, status: 'Paid' } : option))
         setSelectedDate('')
         setMethod('')
         router.refresh()
+        showSuccess('Advance payment recorded and added to payment history.')
       }
     } catch {
       setError('Could not reach the server. Please try again.')
@@ -75,7 +79,6 @@ export default function AdvancePaymentsWorkspace({ students, today }: {
   }
 
   const selected = options.find((option) => option.dueDate === selectedDate)
-  const historyHref = paymentsHref({ month: paidDate.slice(0, 7), branch: 'all', filter: 'all', view: 'history', historyPage: 'payments' })
 
   return (
     <section aria-labelledby="advance-payments-title" className="max-w-4xl space-y-6">
@@ -98,7 +101,7 @@ export default function AdvancePaymentsWorkspace({ students, today }: {
             const unavailable = option.status === 'Paid' || option.amount === null || Boolean(option.blockedByDueDate)
             return <div key={option.dueDate}>
               <button type="button" disabled={unavailable || saving} aria-pressed={selectedDate === option.dueDate}
-                onClick={() => { setSelectedDate(option.dueDate); setError(''); setNotice('') }}
+                onClick={() => { setSelectedDate(option.dueDate); setError('') }}
                 className={`flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left ${FOCUS_RING} ${selectedDate === option.dueDate ? 'border-black bg-gray-50' : 'border-gray-200 bg-white'} disabled:cursor-not-allowed disabled:opacity-60`}>
                 <span className="min-w-0">
                   <span className="block text-sm font-medium text-gray-950">{option.coverage}</span>
@@ -116,7 +119,6 @@ export default function AdvancePaymentsWorkspace({ students, today }: {
           <div><label htmlFor={methodFieldId} className={LABEL}>Payment method</label><select id={methodFieldId} value={method} onChange={(event) => setMethod(event.target.value)} required disabled={saving} className={INPUT}><option value="" disabled>Choose a method</option>{PAYMENT_METHODS.map((value) => <option key={value} value={value}>{value}</option>)}</select></div>
         </div>}
 
-        {notice && <p role="status" className="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice} <Link href={historyHref} className="ml-1 font-semibold underline underline-offset-2">View payment history</Link></p>}
         {error && <p role="alert" className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
 
         {selected && <div className="flex justify-end border-t border-gray-100 pt-4">

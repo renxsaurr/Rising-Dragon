@@ -1,6 +1,6 @@
 'use client'
 
-import { useId, useState, useTransition, type FormEvent } from 'react'
+import { useCallback, useEffect, useId, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronDown } from 'lucide-react'
 import { FOCUS_RING } from './ModalShell'
@@ -31,27 +31,30 @@ export default function HistoryToolbar({
   const typeId = useId()
   const branchId = useId()
 
-  const go = (next: Partial<HistoryQuery>) => {
+  useEffect(() => setSearch(current.hq), [current.hq])
+
+  const go = useCallback((next: Partial<HistoryQuery>) => {
     const history: HistoryQuery = { ...current, ...next, hpage: 1 }
     startTransition(() => router.push(paymentsHref({ ...base, view: 'history', history }), { scroll: false }))
-  }
+  }, [base, current, router, startTransition])
 
-  const submitSearch = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    go({ hq: search.trim() })
-  }
+  useEffect(() => {
+    const query = search.trim()
+    if (query === current.hq) return
+    const timeout = window.setTimeout(() => go({ hq: query }), 250)
+    return () => window.clearTimeout(timeout)
+  }, [current.hq, go, search])
 
   return (
     <div className="flex flex-wrap items-center gap-2" aria-busy={pending}>
-      <form role="search" onSubmit={submitSearch} className="relative min-w-[300px] flex-1">
+      <div role="search" className="relative min-w-[300px] flex-1">
         <label htmlFor={searchId} className="sr-only">Search student or branch</label>
         <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" />
         </svg>
         <input
           id={searchId}
-          type="text"
-          enterKeyHint="search"
+          type="search"
           autoComplete="off"
           placeholder="Search student or branch"
           value={search}
@@ -73,11 +76,11 @@ export default function HistoryToolbar({
             </svg>
           </button>
         )}
-      </form>
+      </div>
 
       <label htmlFor={branchId} className="sr-only">Branch</label>
       <div className="relative w-[22%] min-w-[180px]">
-        <select id={branchId} defaultValue={current.hbranch} onChange={(event) => go({ hbranch: event.target.value })} className={`${CONTROL} w-full appearance-none`}>
+        <select id={branchId} value={current.hbranch} onChange={(event) => go({ hbranch: event.target.value, hq: search.trim() })} className={`${CONTROL} w-full cursor-pointer appearance-none`}>
           <option value="all">All branches</option>
           {branches.map((branch) => (
             <option key={branch.id} value={String(branch.id)}>{branch.name}</option>
@@ -88,7 +91,7 @@ export default function HistoryToolbar({
 
       <label htmlFor={typeId} className="sr-only">Reminder type</label>
       <div className="relative w-[15%] min-w-[150px]">
-        <select id={typeId} defaultValue={current.htype} onChange={(event) => go({ htype: event.target.value })} className={`${CONTROL} w-full appearance-none`}>
+        <select id={typeId} value={current.htype} onChange={(event) => go({ htype: event.target.value, hq: search.trim() })} className={`${CONTROL} w-full cursor-pointer appearance-none`}>
           <option value="all">All types</option>
           {types.map((type) => (
             <option key={type} value={type}>{type}</option>
@@ -99,7 +102,7 @@ export default function HistoryToolbar({
 
       <label htmlFor={statusId} className="sr-only">Status</label>
       <div className="relative w-[14%] min-w-[140px]">
-        <select id={statusId} defaultValue={current.hstatus} onChange={(event) => go({ hstatus: event.target.value })} className={`${CONTROL} w-full appearance-none`}>
+        <select id={statusId} value={current.hstatus} onChange={(event) => go({ hstatus: event.target.value, hq: search.trim() })} className={`${CONTROL} w-full cursor-pointer appearance-none`}>
           <option value="all">All statuses</option>
           {statuses.map((status) => (
             <option key={status} value={status}>{status === 'Scheduled' ? 'Sending' : status}</option>

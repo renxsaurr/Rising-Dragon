@@ -9,6 +9,7 @@ import {
   sendPaymentReminder,
 } from '@/app/payments/actions'
 import type { ReminderPreview } from '@/utils/payment-reminders'
+import { useActionFeedback } from '@/components/ActionFeedback'
 
 // payment = "Send reminder" on a payment row; retry = "Retry" on a failed history row.
 export type ReminderTarget = { kind: 'payment' | 'retry'; id: number }
@@ -40,6 +41,7 @@ function Detail({ label, value, className = '' }: { label: string; value: string
 
 /** The Head Coach checks the student, recipient, amount, due date and email before anything is sent. */
 export default function ReminderReviewModal({ target, onClose }: { target: ReminderTarget; onClose: () => void }) {
+  const { showSuccess, confirmAction } = useActionFeedback()
   const [preview, setPreview] = useState<ReminderPreview | null>(null)
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
@@ -92,6 +94,15 @@ export default function ReminderReviewModal({ target, onClose }: { target: Remin
   const handleSend = async () => {
     if (!preview || attempted.current) return
     attempted.current = true
+    const confirmed = await confirmAction({
+      title: 'Send this payment reminder?',
+      description: `Send the reminder to ${preview.recipient}?`,
+      confirmLabel: 'Send email',
+    })
+    if (!confirmed) {
+      attempted.current = false
+      return
+    }
     setSending(true)
     setNotice(null)
 
@@ -101,7 +112,12 @@ export default function ReminderReviewModal({ target, onClose }: { target: Remin
         target.kind === 'payment'
           ? await sendPaymentReminder(target.id, reviewed)
           : await retryReminder(target.id, reviewed)
-      setNotice('success' in result ? { tone: 'success', text: result.message } : toNotice(result))
+      if ('success' in result) {
+        onClose()
+        showSuccess(result.message, 'Email sent')
+      } else {
+        setNotice(toNotice(result))
+      }
     } catch {
       setNotice({
         tone: 'error',

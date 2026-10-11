@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { updateReminderSchedule } from '@/app/payments/actions'
+import { useActionFeedback } from '@/components/ActionFeedback'
 
 const INPUT = 'h-10 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-950 outline-none focus:border-gray-500 focus-visible:ring-2 focus-visible:ring-black/10'
 const LABEL = 'mb-1.5 block text-[13px] font-medium text-gray-800'
@@ -15,10 +16,10 @@ export default function ReminderScheduleSettings({
   afterDueDays: number
 }) {
   const router = useRouter()
+  const { showSuccess } = useActionFeedback()
   const [before, setBefore] = useState(String(beforeDueDays))
   const [after, setAfter] = useState(String(afterDueDays))
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
   const [saving, setSaving] = useState(false)
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -31,13 +32,12 @@ export default function ReminderScheduleSettings({
     }
     setSaving(true)
     setError('')
-    setNotice('')
     try {
       const result = await updateReminderSchedule({ beforeDueDays, afterDueDays })
       if ('error' in result) setError(result.error)
       else {
-        setNotice(`Reminder schedule saved: ${beforeDueDays} day${beforeDueDays === 1 ? '' : 's'} before and ${afterDueDays} day${afterDueDays === 1 ? '' : 's'} after the due date.`)
         router.refresh()
+        showSuccess(`Reminder schedule saved: ${beforeDueDays} day${beforeDueDays === 1 ? '' : 's'} before and ${afterDueDays} day${afterDueDays === 1 ? '' : 's'} after the due date.`)
       }
     } catch {
       setError('Could not save the reminder schedule. Please try again.')
@@ -71,7 +71,6 @@ export default function ReminderScheduleSettings({
           {saving ? 'Saving…' : 'Save reminder schedule'}
         </button>
       </div>
-      {notice && <p role="status" className="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
       {error && <p role="alert" className="break-words rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
     </form>
   )

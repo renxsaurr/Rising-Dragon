@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { addPerSessionWalkIn, saveAttendance } from '@/app/attendance/actions'
 import { Toast } from '@/components/Toast'
+import { useActionFeedback } from '@/components/ActionFeedback'
 import { beltTextColorClass, formatBeltLabel } from '@/utils/belts'
 
 type Student = { id: number; first_name: string; middle_name: string | null; last_name: string; belt_level: string; billing_plan: 'Monthly' | 'Per session' }
@@ -39,6 +40,7 @@ export default function AttendanceRoster({
   availableWalkIns: { id: number; name: string; belt: string }[]
 }) {
   const router = useRouter()
+  const { confirmAction } = useActionFeedback()
   const [saved, setSaved] = useState<Record<number, Status>>(() => toStatusMap(initialAttendance))
   const [statuses, setStatuses] = useState<Record<number, Status>>(() => toStatusMap(initialAttendance))
   const [filter, setFilter] = useState<Filter>('all')
@@ -86,6 +88,12 @@ export default function AttendanceRoster({
       setError('Choose a per-session student first.')
       return
     }
+    const confirmed = await confirmAction({
+      title: 'Check in this walk-in student?',
+      description: 'The student will be added to this class and a per-session charge will be created.',
+      confirmLabel: 'Check in student',
+    })
+    if (!confirmed) return
     setAddingWalkIn(true)
     setError('')
     const result = await addPerSessionWalkIn(scheduleId, id)
@@ -101,6 +109,13 @@ export default function AttendanceRoster({
 
   const submit = async () => {
     const records = changedIds.map((id) => ({ student_id: id, status: statuses[id] }))
+    if (records.length === 0) return
+    const confirmed = await confirmAction({
+      title: 'Save attendance?',
+      description: `Save attendance status for ${records.length} student${records.length === 1 ? '' : 's'} in this class?`,
+      confirmLabel: 'Save attendance',
+    })
+    if (!confirmed) return
     setSaving(true)
     setError('')
     const result = await saveAttendance(scheduleId, records)
@@ -197,10 +212,16 @@ export default function AttendanceRoster({
                     <div className="flex min-w-0 flex-col justify-center px-5 py-3">
                       <Link
                         href={`/attendance/history?studentId=${student.id}`}
-                        onClick={(event) => {
-                          if (dirty && !window.confirm('Attendance changes are unsaved. Leave this class without saving?')) {
-                            event.preventDefault()
-                          }
+                        onClick={async (event) => {
+                          if (!dirty || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+                          event.preventDefault()
+                          const confirmed = await confirmAction({
+                            title: 'Leave without saving attendance?',
+                            description: 'Your attendance changes for this class will be discarded.',
+                            confirmLabel: 'Leave class',
+                            danger: true,
+                          })
+                          if (confirmed) router.push(`/attendance/history?studentId=${student.id}`)
                         }}
                         className="break-words text-sm font-medium text-gray-900 hover:underline"
                       >

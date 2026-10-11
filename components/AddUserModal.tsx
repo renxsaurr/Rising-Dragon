@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createUser } from '@/app/users/actions'
+import { useActionFeedback } from '@/components/ActionFeedback'
 
 type Branch = { id: number; name: string }
 
@@ -19,6 +20,7 @@ export default function AddUserModal({ branches }: { branches: Branch[] }) {
   const [contact, setContact] = useState('')
   const [branchId, setBranchId] = useState('')
   const router = useRouter()
+  const { showSuccess } = useActionFeedback()
 
   const resetForm = () => {
     setFirstName('')
@@ -61,6 +63,7 @@ export default function AddUserModal({ branches }: { branches: Branch[] }) {
       setTemporaryPassword(result.temporaryPassword)
     }
     router.refresh()
+    showSuccess('Assistant Coach account created. A temporary password is ready to copy.')
   }
 
   const copyTemporaryPassword = async () => {
